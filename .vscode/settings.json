@@ -1,0 +1,13 @@
+{
+    "python.analysis.extraPaths": [
+        "./_isaac_sim/exts/omni.isaac.core",
+        "./_isaac_sim/exts/omni.replicator.isaac",
+        "./_isaac_sim/kit/exts/omni.timeline",
+        "./_isaac_sim/extsPhysics/omni.physics.tensors",
+        "./_isaac_sim/extscache/omni.replicator.core-1.11.8+106.0.0.lx64.r.cp310",
+        "./_isaac_sim/exts/omni.isaac.cloner",
+        "./_isaac_sim/python_packages",
+        "./_isaac_sim/exts/omni.isaac.ml_archive/pip_prebundle/torch/nn/modules",
+        "./_isaac_sim/kit/exts/omni.usd.libs",
+    ]
+}

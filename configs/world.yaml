@@ -1,0 +1,5 @@
+physics_dt: 0.02000
+stage_units_in_meters: 1.0
+rendering_dt: 0.01667
+backend: torch
+device: cuda

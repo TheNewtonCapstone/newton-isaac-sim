@@ -1,0 +1,14 @@
+# Python files
+**/__pycache__/
+
+# Isaac Sim files
+_isaac_sim
+
+# Model Outputs
+runs/**
+outputs/**
+*.pth
+*.onnx
+
+# Logs
+*.csv
