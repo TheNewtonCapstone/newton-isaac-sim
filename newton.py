@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from core.envs.generic_env import GenericEnv
 from core.envs.procedural_env import ProceduralEnv
+from core.newton.newton_agent import NewtonAgent
 from core.pid.pid import PidController
 from core.terrain.flat_terrain import FlatTerrainBuilder
 from core.terrain.perlin_terrain import PerlinTerrainBuilder
@@ -26,19 +27,19 @@ from isaacsim import SimulationApp
 from stable_baselines3 import PPO
 from stable_baselines3.common.policies import BasePolicy
 
-twip_settings = {
-    "twip_urdf_path": os.path.join(
-        get_current_path(__file__), "core/twip/assets/twip.urdf"
+newton_settings = {
+    "newton_urdf_path": os.path.join(
+        get_current_path(__file__), "assets/newton/newton.urdf"
     ),
-    "twip_usd_path": os.path.join(
-        get_current_path(__file__), "core/twip/assets/twip.usd"
+    "newton_usd_path": os.path.join(
+        get_current_path(__file__), "assets/newton/newton.usd"
     ),
 }
 
 
 def setup_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="twip.py", description="Entrypoint for any TWIP-related actions."
+        prog="newton.py", description="Entrypoint for any Newton-related actions."
     )
     parser.add_argument(
         "--headless", action="store_true", help="Run in headless mode.", default=False
@@ -146,7 +147,7 @@ if __name__ == "__main__":
     )
 
     sim_app = SimulationApp(
-        {"headless": headless}, experience="./apps/omni.isaac.sim.twip.kit"
+        {"headless": headless}, experience="./apps/omni.isaac.sim.newton.kit"
     )
 
     # ----------- #
@@ -173,9 +174,9 @@ if __name__ == "__main__":
             randomization_settings=randomization_config,
         )
 
-        twip = TwipAgent(twip_settings)
+        newton = NewtonAgent(newton_settings)
 
-        env.construct(twip)
+        env.construct(newton)
         env.reset()
 
         actions = torch.zeros(env.num_envs, 2)
@@ -183,19 +184,18 @@ if __name__ == "__main__":
         print("time,dt,roll,action1,action2", file=log_file)
 
         while sim_app.is_running():
-            if env.world.is_playing():
-                imu_data = env.step(actions, render=not headless)
-                roll = roll_from_quat(imu_data[:, 6:10]).item()
+            imu_data = env.step(actions, render=not headless)
+            roll = roll_from_quat(imu_data[:, 6:10]).item()
 
-                dt = env.world.get_physics_dt()
-                actions = controller.predict(roll, dt)
+            dt = env.world.get_physics_dt()
+            actions = controller.predict(roll, dt)
 
-                actions = actions_to_torque(actions)
+            actions = actions_to_torque(actions)
 
-                print(
-                    f"{env.world.current_time},{dt},{roll},{actions[0]},{actions[1]}",
-                    file=log_file,
-                )
+            print(
+                f"{env.world.current_time},{dt},{roll},{actions[0]},{actions[1]}",
+                file=log_file,
+            )
 
         exit(1)
 
@@ -211,9 +211,9 @@ if __name__ == "__main__":
             randomization_settings=randomization_config,
         )
 
-        twip = TwipAgent(twip_settings)
+        newton = NewtonAgent(newton_settings)
 
-        env.construct(twip)
+        env.construct(newton)
         env.reset()
 
         while sim_app.is_running():
@@ -268,8 +268,8 @@ if __name__ == "__main__":
             randomization_settings=randomization_config,
         )
 
-    def twip_agent_factory() -> TwipAgent:
-        return TwipAgent(twip_settings)
+    def newton_agent_factory() -> NewtonAgent:
+        return NewtonAgent(newton_settings)
 
     task_runs_directory = "runs"
     task_name = build_child_path_with_prefix(
@@ -285,7 +285,7 @@ if __name__ == "__main__":
         max_episode_length=rl_config["ppo"]["n_steps"],
         training_env_factory=procedural_env_factory,
         playing_env_factory=generic_env_factory,
-        agent_factory=twip_agent_factory,
+        agent_factory=newton_agent_factory,
     )
     callback = BalancingTwipCallback()
 
