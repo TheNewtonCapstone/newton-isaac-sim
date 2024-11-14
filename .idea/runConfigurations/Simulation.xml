@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="TWIP Export ONNX" type="PythonConfigurationType" factoryName="Python">
-    <module name="twip-isaac-sim" />
+  <configuration default="false" name="Simulation" type="PythonConfigurationType" factoryName="Python">
+    <module name="newton-isaac-sim" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -14,8 +14,8 @@
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$ProjectFileDir$/twip.py" />
-    <option name="PARAMETERS" value="--checkpoint runs/twip_balancing_014_0/model_11345920.zip --export-onnx" />
+    <option name="SCRIPT_NAME" value="$ProjectFileDir$/newton.py" />
+    <option name="PARAMETERS" value="--sim-only" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
