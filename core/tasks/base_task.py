@@ -1,4 +1,5 @@
-from typing import Dict, Any, Callable, List, Optional, Sequence, Type
+from abc import abstractmethod
+from typing import Dict, Any, List, Optional, Sequence, Type
 
 from stable_baselines3.common.vec_env import VecEnv
 from stable_baselines3.common.vec_env.base_vec_env import (
@@ -10,37 +11,31 @@ from stable_baselines3.common.vec_env.base_vec_env import (
 import gymnasium
 import numpy as np
 import torch
-from core.base.base_agent import BaseAgent
-from core.base.base_env import BaseEnv
+from core.agents import BaseAgent
+from core.envs import BaseEnv
 
 
 class BaseTask(VecEnv):
     def __init__(
         self,
-        headless: bool,
-        device: str,
+        training_env: BaseEnv,
+        playing_env: BaseEnv,
+        agent: BaseAgent,
         num_envs: int,
+        device: str,
+        headless: bool,
         playing: bool,
         max_episode_length: int,
         observation_space: gymnasium.spaces.Space,
         action_space: gymnasium.spaces.Box,
         reward_space: gymnasium.spaces.Box,
-        training_env_factory: Callable[..., BaseEnv],
-        playing_env_factory: Callable[..., BaseEnv],
-        agent_factory: Callable[..., BaseAgent],
     ):
-        self.render_mode = "human"
-
-        self.training_env_factory = training_env_factory
-        self.playing_env_factory = playing_env_factory
-        self.agent_factory = agent_factory
-
-        self.agent: BaseAgent | None = None
-        self.env: BaseEnv | None = None  # TODO: is this necessary?
-
         self.headless: bool = headless
         self.device: str = device
         self.playing: bool = playing
+
+        self.agent: BaseAgent = agent
+        self.env: BaseEnv = playing_env if self.playing else training_env
 
         self.observation_space: gymnasium.spaces.Space = observation_space
         self.action_space: gymnasium.spaces.Box = action_space
@@ -68,22 +63,27 @@ class BaseTask(VecEnv):
             action_space=action_space,
         )
 
-    def construct(self) -> bool:
-        pass
-
+    @property
     def __str__(self):
-        return f"{self.__class__.__name__} with {self.num_envs} environments, {self.num_observations} observations, {self.num_actions} actions, {self.num_states} states."
+        return f"BaseTask: {self.num_envs} environments, {self.num_observations} observations, {self.num_actions} actions"
+
+    @abstractmethod
+    def construct(self) -> None:
+        pass
 
     # Gymnasium methods (required from VecEnv)
 
-    def reset(self) -> VecEnvObs:
-        pass
-
     def step_async(self, actions: np.ndarray) -> None:
-        self.actions_buf = torch.from_numpy(actions)
+        actions = np.clip(actions, self.action_space.low, self.action_space.high)
+        self.actions_buf = torch.from_numpy(actions).to(self.device)
         return
 
+    @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:
+        pass
+
+    @abstractmethod
+    def reset(self) -> VecEnvObs:
         pass
 
     def close(self) -> None:
@@ -92,7 +92,7 @@ class BaseTask(VecEnv):
     def seed(self, seed: Optional[int] = None) -> Sequence[None | int]:
         pass
 
-    # Helper methods (shouldn't need to be overridden)
+    # Helper methods (shouldn't need to be overridden and most likely won't be called directly)
 
     def get_attr(self, attr_name: str, indices: VecEnvIndices = None) -> List[Any]:
         """Return attribute from vectorized environment (see base class)."""
