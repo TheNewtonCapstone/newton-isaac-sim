@@ -27,11 +27,11 @@ class PerlinTerrainBuilder(TerrainBuilder):
         size: list[float] = None,
         resolution: list[int] = None,
         height: float = 0.05,
-        base_path: str = None,
+        root_path: str = None,
         octave: int = 12,
         noise_scale: float = 4,
     ):
-        super().__init__(size, resolution, height, base_path)
+        super().__init__(size, resolution, height, root_path)
 
         self.octaves = octave
         self.noise_scale = noise_scale
@@ -57,7 +57,7 @@ class PerlinTerrainBuilder(TerrainBuilder):
         position=None,
         path="/World/terrains",
         octaves: int = 12,
-        noise_scale: float = 4
+        noise_scale: float = 4,
     ) -> PerlinTerrainBuild:
         if size is None:
             size = [20, 20]
@@ -75,21 +75,19 @@ class PerlinTerrainBuilder(TerrainBuilder):
 
         for i in range(num_rows):
             for j in range(num_cols):
-                heightmap[i, j] = noise([i / num_rows * noise_scale, j / num_cols * noise_scale])
+                heightmap[i, j] = noise(
+                    [i / num_rows * noise_scale, j / num_cols * noise_scale]
+                )
 
         terrain_path = TerrainBuilder._add_heightmap_to_world(
-            heightmap,
-            size,
-            num_cols,
-            num_rows,
-            height,
-            path,
-            "perlin",
-            position
+            heightmap, size, num_cols, num_rows, height, path, "perlin", position
         )
 
         from core.utils.physics import set_physics_properties
-        set_physics_properties(terrain_path,static_friction=1, dynamic_friction=1, restitution=0)
+
+        set_physics_properties(
+            terrain_path, static_friction=1, dynamic_friction=1, restitution=0
+        )
 
         return PerlinTerrainBuild(
             stage,
@@ -99,5 +97,5 @@ class PerlinTerrainBuilder(TerrainBuilder):
             position,
             terrain_path,
             octaves,
-            noise_scale
+            noise_scale,
         )

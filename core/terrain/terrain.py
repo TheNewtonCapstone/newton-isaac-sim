@@ -11,7 +11,7 @@ class TerrainBuild:
         resolution: list[int],
         height: float,
         position: list[float],
-        path: str
+        path: str,
     ):
         self.stage = stage
         self.path = path
@@ -28,38 +28,28 @@ class TerrainBuilder:
         size: list[float] = None,
         resolution: list[int] = None,
         height: float = 1,
-        base_path: str = None,
+        root_path: str = None,
     ):
         if size is None:
             size = [5, 5]
         if resolution is None:
             resolution = [10, 10]
-        if base_path is None:
-            base_path = "/World/terrains"
+        if root_path is None:
+            root_path = "/Terrains"
 
         self.size = size
         self.resolution = resolution
         self.height = height
-        self.base_path = base_path
+        self.base_path = root_path
 
-    def build_from_self(self, stage, position: list[float]) -> TerrainBuild:
-        return self.build(
-            stage,
-            self.size,
-            self.resolution,
-            self.height,
-            position,
-            self.base_path
-        )
-
-    @staticmethod
     def build(
+        self,
         stage,
-        size: list[float],
-        resolution: list[int],
+        size: torch.FloatTensor,
+        resolution: torch.FloatTensor,
         height: float,
-        position: list[float],
-        path="/World/terrains",
+        position: torch.FloatTensor,
+        path="/Terrains",
     ) -> TerrainBuild:
         """
         Builds a terrain in the stage, according to the class's implementation.
@@ -74,6 +64,16 @@ class TerrainBuilder:
         """
         pass
 
+    def build_from_self(self, stage, position: list[float]) -> TerrainBuild:
+        return self.build(
+            stage,
+            self.size,
+            self.resolution,
+            self.height,
+            position,
+            self.root_path,
+        )
+
     @staticmethod
     def _add_heightmap_to_world(
         heightmap: torch.Tensor,
@@ -83,11 +83,15 @@ class TerrainBuilder:
         height: float,
         base_path: str,
         builder_name: str,
-        position: list[float]
+        position: list[float],
     ) -> str:
-        vertices, triangles = TerrainBuilder._heightmap_to_mesh(heightmap, size, num_cols, num_rows, height)
+        vertices, triangles = TerrainBuilder._heightmap_to_mesh(
+            heightmap, size, num_cols, num_rows, height
+        )
 
-        return TerrainBuilder._add_mesh_to_world(vertices, triangles, base_path, builder_name, size, position)
+        return TerrainBuilder._add_mesh_to_world(
+            vertices, triangles, base_path, builder_name, size, position
+        )
 
     @staticmethod
     def _heightmap_to_mesh(
@@ -95,7 +99,7 @@ class TerrainBuilder:
         size: list[float],
         num_cols: int,
         num_rows: int,
-        height: float
+        height: float,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # from https://github.com/isaac-sim/OmniIsaacGymEnvs/blob/main/omniisaacgymenvs/utils/terrain_utils/terrain_utils.py
 
@@ -128,9 +132,9 @@ class TerrainBuilder:
             triangles[start:end:2, 2] = ind1
 
             # second set of triangles (bottom right)
-            triangles[start + 1: end: 2, 0] = ind0
-            triangles[start + 1: end: 2, 1] = ind2
-            triangles[start + 1: end: 2, 2] = ind3
+            triangles[start + 1 : end : 2, 0] = ind0
+            triangles[start + 1 : end : 2, 1] = ind2
+            triangles[start + 1 : end : 2, 2] = ind3
 
         return vertices, triangles
 

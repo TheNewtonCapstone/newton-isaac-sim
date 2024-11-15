@@ -20,9 +20,9 @@ class FlatTerrainBuilder(TerrainBuilder):
         size: list[int] = None,
         resolution: list[int] = None,
         height: float = 0,
-        base_path: str = None,
+        root_path: str = None,
     ):
-        super().__init__(size, resolution, height, base_path)
+        super().__init__(size, resolution, height, root_path)
 
     def build_from_self(self, stage, position: list[float]) -> FlatTerrainBuild:
         """
@@ -61,7 +61,9 @@ class FlatTerrainBuilder(TerrainBuilder):
 
         from core.utils.physics import set_physics_properties
 
-        set_physics_properties(terrain_path,static_friction=1, dynamic_friction=1, restitution=0)
+        set_physics_properties(
+            terrain_path, static_friction=1, dynamic_friction=1, restitution=0
+        )
 
         return FlatTerrainBuild(
             stage,
