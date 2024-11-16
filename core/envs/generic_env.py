@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from core.agents.base_agent import BaseAgent
-from core.base.base_env import BaseEnv
+from core.envs import BaseEnv
 from core.domain_randomizer.domain_randomizer import DomainRandomizer
 from core.newton.newton_agent import NewtonAgent
 from core.sensors.imu.imu import IMU

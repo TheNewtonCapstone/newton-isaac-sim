@@ -3,12 +3,7 @@ import os
 
 import numpy as np
 import torch
-from core.envs.generic_env import GenericEnv
-from core.envs.procedural_env import ProceduralEnv
-from core.newton.newton_agent import NewtonAgent
 from core.pid.pid import PidController
-from core.terrain.flat_terrain import FlatTerrainBuilder
-from core.terrain.perlin_terrain import PerlinTerrainBuilder
 from core.twip.balancing_twip_task import (
     BalancingTwipTask,
     BalancingTwipCallback,
@@ -16,7 +11,6 @@ from core.twip.balancing_twip_task import (
     roll_from_quat,
 )
 from core.wrappers.tasks import RandomDelayVecWrapper
-from core.twip.twip_agent import TwipAgent
 from core.utils.config import load_config
 from core.utils.path import (
     get_current_path,
@@ -149,6 +143,13 @@ if __name__ == "__main__":
     sim_app = SimulationApp(
         {"headless": headless}, experience="./apps/omni.isaac.sim.newton.kit"
     )
+
+    from core.envs.generic_env import GenericEnv
+    from core.envs.procedural_env import ProceduralEnv
+    from core.newton.newton_agent import NewtonAgent
+
+    from core.terrain.flat_terrain import FlatTerrainBuilder
+    from core.terrain.perlin_terrain import PerlinTerrainBuilder
 
     # ----------- #
     # PID CONTROL #

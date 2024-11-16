@@ -1,3 +1,6 @@
+from omni.isaac.core.materials import PhysicsMaterial
+from torch import Tensor
+
 import torch
 from core.terrain.terrain import TerrainBuild, TerrainBuilder
 from perlin_noise import PerlinNoise
@@ -6,16 +9,16 @@ from perlin_noise import PerlinNoise
 class PerlinTerrainBuild(TerrainBuild):
     def __init__(
         self,
-        stage,
-        size: list[float],
-        resolution: list[int],
+        size: Tensor,
+        resolution: Tensor,
         height: float,
-        position: list[float],
+        position: Tensor,
         path: str,
+        physics_mat: PhysicsMaterial,
         octaves: float,
         noise_scale: float,
     ):
-        super().__init__(stage, size, resolution, height, position, path)
+        super().__init__(size, resolution, height, position, path, physics_mat)
 
         self.octaves = octaves
         self.noise_scale = noise_scale
@@ -24,10 +27,10 @@ class PerlinTerrainBuild(TerrainBuild):
 class PerlinTerrainBuilder(TerrainBuilder):
     def __init__(
         self,
-        size: list[float] = None,
-        resolution: list[int] = None,
+        size: Tensor = None,
+        resolution: Tensor = None,
         height: float = 0.05,
-        root_path: str = None,
+        root_path: str = "/Terrains",
         octave: int = 12,
         noise_scale: float = 4,
     ):
@@ -36,21 +39,19 @@ class PerlinTerrainBuilder(TerrainBuilder):
         self.octaves = octave
         self.noise_scale = noise_scale
 
-    def build_from_self(self, stage, position: list[float]) -> PerlinTerrainBuild:
+    def build_from_self(self, position: Tensor) -> PerlinTerrainBuild:
         return self.build(
-            stage,
             self.size,
             self.resolution,
             self.height,
             position,
-            self.base_path,
+            self.root_path,
             self.octaves,
             self.noise_scale,
         )
 
     @staticmethod
     def build(
-        stage,
         size=None,
         resolution=None,
         height=0.05,
@@ -60,9 +61,9 @@ class PerlinTerrainBuilder(TerrainBuilder):
         noise_scale: float = 4,
     ) -> PerlinTerrainBuild:
         if size is None:
-            size = [20, 20]
+            size = [10, 10]
         if resolution is None:
-            resolution = [40, 40]
+            resolution = [20, 20]
         if position is None:
             position = [0, 0, 0]
 
@@ -83,19 +84,15 @@ class PerlinTerrainBuilder(TerrainBuilder):
             heightmap, size, num_cols, num_rows, height, path, "perlin", position
         )
 
-        from core.utils.physics import set_physics_properties
-
-        set_physics_properties(
-            terrain_path, static_friction=1, dynamic_friction=1, restitution=0
-        )
+        physics_material = PhysicsMaterial(terrain_path)
 
         return PerlinTerrainBuild(
-            stage,
             size,
             resolution,
             height,
             position,
             terrain_path,
+            physics_material,
             octaves,
             noise_scale,
         )

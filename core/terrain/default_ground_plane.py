@@ -1,44 +1,47 @@
+from torch import Tensor, tensor
+
 from core.terrain.terrain import TerrainBuilder, TerrainBuild
 
 
 class DefaultGroundPlaneBuild(TerrainBuild):
     def __init__(
         self,
-        stage,
         path: str,
     ):
-        super().__init__(stage, [], [], 0, [], path)
+        super().__init__(tensor([]), tensor([]), 0, tensor([]), path, None)
 
 
 class DefaultGroundPlaneBuilder(TerrainBuilder):
-    def build_from_self(self, stage, position: list[float]) -> DefaultGroundPlaneBuild:
+    def build_from_self(self, position: Tensor) -> DefaultGroundPlaneBuild:
         """
         Notes:
             None of the parameters are used for the default ground plane.
         """
 
         return self.build(
-            stage,
             self.size,
             self.resolution,
             self.height,
             position,
-            self.base_path
+            self.root_path,
         )
 
-    @staticmethod
-    def build(stage, size=None, resolution=None, height=None, position=None, path="/World/terrains/groundPlane") -> DefaultGroundPlaneBuild:
+    def build(
+        self,
+        size=None,
+        resolution=None,
+        height=0,
+        position=None,
+        path="/Terrains",
+    ) -> DefaultGroundPlaneBuild:
         """
         Notes:
             None of the parameters are used for the default ground plane.
         """
 
-        import omni.isaac.core
-
         # add a ground plane
-        stage.scene.add_default_ground_plane()
+        from omni.isaac.core.utils.stage import get_current_stage
 
-        return DefaultGroundPlaneBuild(
-            stage,
-            path,
-        )
+        get_current_stage().scene.add_default_ground_plane()
+
+        return DefaultGroundPlaneBuild(path)
