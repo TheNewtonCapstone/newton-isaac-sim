@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/twip-isaac-sim.iml" filepath="$PROJECT_DIR$/.idea/twip-isaac-sim.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/newton-isaac-sim.iml" filepath="$PROJECT_DIR$/.idea/newton-isaac-sim.iml" />
     </modules>
   </component>
 </project>

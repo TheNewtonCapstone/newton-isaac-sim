@@ -3,6 +3,7 @@ import torch
 from core.agents.base_agent import BaseAgent
 from core.base.base_env import BaseEnv
 from core.domain_randomizer.domain_randomizer import DomainRandomizer
+from core.newton.newton_agent import NewtonAgent
 from core.sensors.imu.imu import IMU
 
 
@@ -15,7 +16,11 @@ class GenericEnv(BaseEnv):
             world_settings, num_envs, terrain_builders, randomization_settings
         )
 
-    def construct(self, agent: BaseAgent) -> bool:
+        self.base_agent_path: str = ""
+
+        self.agents_art_view = None
+
+    def construct(self, agent: NewtonAgent) -> bool:
         super().construct(agent)
 
         from omni.isaac.cloner import GridCloner
@@ -35,7 +40,7 @@ class GenericEnv(BaseEnv):
         self.agent.construct(self.base_agent_path, self.world)
 
         self.agent_paths = cloner.generate_paths("/World/envs/e", self.num_envs)
-        self.agent_imu_paths = [f"{path}/twip/body/imu" for path in self.agent_paths]
+        self.agent_imu_paths = [f"{path}/newton/BASE/imu" for path in self.agent_paths]
 
         cloner.filter_collisions(
             physicsscene_path="/physicsScene",
@@ -48,18 +53,18 @@ class GenericEnv(BaseEnv):
             prim_paths=self.agent_paths,
         )
 
-        self.twip_art_view = ArticulationView(
-            prim_paths_expr="/World/envs/e.*/twip/body",
-            name="twip_art_view",
+        self.agents_art_view = ArticulationView(
+            prim_paths_expr="/World/envs/e.*/newton/base",
+            name="newton_art_view",
         )
 
-        self.world.scene.add(self.twip_art_view)
+        self.world.scene.add(self.agents_art_view)
 
         self.world.reset()
 
         self.imu = IMU(
             {
-                "prim_path": "/World/envs/e.*/twip/body",
+                "prim_path": "/World/envs/e.*/newton/base",
                 "history_length": 0,
                 "update_period": 0,
                 "offset": {"pos": (0, 0, 0), "rot": (1.0, 0.0, 0.0, 0.0)},
@@ -68,7 +73,10 @@ class GenericEnv(BaseEnv):
 
         if self.randomize:
             self.domain_randomizer = DomainRandomizer(
-                self.world, self.num_envs, self.twip_art_view, self.randomization_params
+                self.world,
+                self.num_envs,
+                self.agents_art_view,
+                self.randomization_params,
             )
             print("Domain randomizer initialized")
             self.domain_randomizer.apply_randomization()
@@ -105,15 +113,17 @@ class GenericEnv(BaseEnv):
 
         num_to_reset = len(indices)
 
-        self.twip_art_view.set_joint_velocity_targets(
+        self.agents_art_view.set_joint_velocity_targets(
             torch.zeros(num_to_reset, 2), indices=indices
         )
         # using set_velocities instead of individual methods (lin & ang), because it's the only method supported in the GPU pipeline
-        self.twip_art_view.set_velocities(torch.zeros(num_to_reset, 6), indices=indices)
-        self.twip_art_view.set_joint_positions(
+        self.agents_art_view.set_velocities(
+            torch.zeros(num_to_reset, 6), indices=indices
+        )
+        self.agents_art_view.set_joint_positions(
             torch.zeros(num_to_reset, 2), indices=indices
         )
-        self.twip_art_view.set_joint_efforts(
+        self.agents_art_view.set_joint_efforts(
             torch.zeros(num_to_reset, 2), indices=indices
         )
 
@@ -145,7 +155,7 @@ class GenericEnv(BaseEnv):
             translations[i, 1] = y
             translations[i, 2] = 0.115
 
-        self.twip_art_view.set_local_poses(
+        self.agents_art_view.set_local_poses(
             translations=translations,
             orientations=orientations,
             indices=indices,
@@ -154,7 +164,7 @@ class GenericEnv(BaseEnv):
         return
 
     def _apply_actions(self, torques: torch.Tensor) -> None:
-        self.twip_art_view.set_joint_efforts(torques)
+        self.agents_art_view.set_joint_efforts(torques)
 
     def _gather_imus_frame(self) -> torch.Tensor:
         imu_data = self.imu.data
