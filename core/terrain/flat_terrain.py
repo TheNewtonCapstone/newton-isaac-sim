@@ -1,47 +1,60 @@
-from core.terrain.terrain import TerrainBuild, TerrainBuilder
+from omni.isaac.core.materials import PhysicsMaterial
+from torch import Tensor
+
 import torch
+from core.terrain.terrain import TerrainBuild, TerrainBuilder
 
 
 class FlatTerrainBuild(TerrainBuild):
     def __init__(
         self,
-        stage,
-        size: list[int],
-        position: list[float],
+        size: Tensor,
+        position: Tensor,
         path: str,
+        physics_mat: PhysicsMaterial,
     ):
-        super().__init__(stage, size, [2, 2], 0, position, path)
+        super().__init__(
+            size,
+            torch.tensor([2, 2], dtype=torch.int32),
+            0,
+            position,
+            path,
+            physics_mat,
+        )
 
 
 # detail does not affect the flat terrain, the number of vertices is determined by the size
 class FlatTerrainBuilder(TerrainBuilder):
     def __init__(
         self,
-        size: list[int] = None,
-        resolution: list[int] = None,
+        size: Tensor = None,
+        resolution: Tensor = None,
         height: float = 0,
-        root_path: str = None,
+        root_path: str = "/Terrains",
     ):
         super().__init__(size, resolution, height, root_path)
 
-    def build_from_self(self, stage, position: list[float]) -> FlatTerrainBuild:
+    def build_from_self(self, position: Tensor) -> FlatTerrainBuild:
         """
         Notes:
             Resolution and height are not used for flat terrain.
         """
 
         return self.build(
-            stage, self.size, self.resolution, self.height, position, self.base_path
+            self.size,
+            self.resolution,
+            self.height,
+            position,
+            self.root_path,
         )
 
-    @staticmethod
     def build(
-        stage,
+        self,
         size=None,
         resolution=None,
         height=0,
         position=None,
-        path="/World/terrains",
+        path="/Terrains",
     ) -> FlatTerrainBuild:
         """
         Notes:
@@ -59,15 +72,11 @@ class FlatTerrainBuilder(TerrainBuilder):
             heightmap, size, 2, 2, height, path, "flat", position
         )
 
-        from core.utils.physics import set_physics_properties
-
-        set_physics_properties(
-            terrain_path, static_friction=1, dynamic_friction=1, restitution=0
-        )
+        physics_mat = PhysicsMaterial(terrain_path)
 
         return FlatTerrainBuild(
-            stage,
             size,
             position,
             terrain_path,
+            physics_mat,
         )

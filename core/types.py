@@ -22,4 +22,4 @@ Observations = Dict[str, torch.Tensor]
 Settings = Dict[str, Any]
 
 # Math
-NoiseFunction = Callable[[torch.FloatTensor], torch.Float]
+NoiseFunction = Callable[[torch.FloatTensor], torch.FloatTensor]

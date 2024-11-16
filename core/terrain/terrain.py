@@ -1,61 +1,70 @@
-from abc import abstractmethod
+from abc import abstractmethod, ABC
+from typing import Optional
 
 import torch
+from omni.isaac.core.materials import PhysicsMaterial
+from torch import Tensor
 
 
 class TerrainBuild:
     def __init__(
         self,
-        stage,
-        size: list[float],
-        resolution: list[int],
+        size: Tensor,
+        resolution: Tensor,
         height: float,
-        position: list[float],
+        position: Tensor,
         path: str,
+        physics_mat: Optional[PhysicsMaterial],
     ):
-        self.stage = stage
-        self.path = path
-
         self.size = size
         self.position = position
         self.resolution = resolution
         self.height = height
 
+        self.path = path
+        self.physics_mat = physics_mat
 
-class TerrainBuilder:
+
+class TerrainBuilder(ABC):
     def __init__(
         self,
-        size: list[float] = None,
-        resolution: list[int] = None,
+        size: Tensor = None,
+        resolution: Tensor = None,
         height: float = 1,
-        root_path: str = None,
+        root_path: str = "/Terrains",
     ):
         if size is None:
-            size = [5, 5]
+            size = torch.tensor([10, 10])
         if resolution is None:
-            resolution = [10, 10]
-        if root_path is None:
-            root_path = "/Terrains"
+            resolution = torch.tensor([20, 20])
 
         self.size = size
         self.resolution = resolution
         self.height = height
-        self.base_path = root_path
+        self.root_path = root_path
 
+    def build_from_self(self, position: Tensor) -> TerrainBuild:
+        return self.build(
+            self.size,
+            self.resolution,
+            self.height,
+            position,
+            self.root_path,
+        )
+
+    @abstractmethod
     def build(
         self,
-        stage,
-        size: torch.FloatTensor,
-        resolution: torch.FloatTensor,
-        height: float,
-        position: torch.FloatTensor,
-        path="/Terrains",
+        size: Optional[Tensor] = None,
+        resolution: Optional[Tensor] = None,
+        height: float = 1,
+        position: Optional[Tensor] = None,
+        path: str = "/Terrains",
     ) -> TerrainBuild:
         """
         Builds a terrain in the stage, according to the class's implementation.
 
         Args:
-            stage: USD stage to build the terrain in.
             size: Size of the terrain in the stage's units.
             resolution: Number of vertices per terrain.
             height: Height of the terrain in the stage's units.
@@ -64,26 +73,16 @@ class TerrainBuilder:
         """
         pass
 
-    def build_from_self(self, stage, position: list[float]) -> TerrainBuild:
-        return self.build(
-            stage,
-            self.size,
-            self.resolution,
-            self.height,
-            position,
-            self.root_path,
-        )
-
     @staticmethod
     def _add_heightmap_to_world(
-        heightmap: torch.Tensor,
-        size: list[float],
+        heightmap: Tensor,
+        size: Tensor,
         num_cols: int,
         num_rows: int,
         height: float,
         base_path: str,
         builder_name: str,
-        position: list[float],
+        position: Tensor,
     ) -> str:
         vertices, triangles = TerrainBuilder._heightmap_to_mesh(
             heightmap, size, num_cols, num_rows, height
@@ -95,12 +94,12 @@ class TerrainBuilder:
 
     @staticmethod
     def _heightmap_to_mesh(
-        heightmap: torch.Tensor,
-        size: list[float],
+        heightmap: Tensor,
+        size: Tensor,
         num_cols: int,
         num_rows: int,
         height: float,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         # from https://github.com/isaac-sim/OmniIsaacGymEnvs/blob/main/omniisaacgymenvs/utils/terrain_utils/terrain_utils.py
 
         x = torch.linspace(0, (size[0]), num_cols)
@@ -140,12 +139,12 @@ class TerrainBuilder:
 
     @staticmethod
     def _add_mesh_to_world(
-        vertices: torch.Tensor,
-        triangles: torch.Tensor,
+        vertices: Tensor,
+        triangles: Tensor,
         base_path: str,
         builder_name: str,
-        size: list[float],
-        position: list[float],
+        size: Tensor,
+        position: Tensor,
     ) -> str:
         from core.utils.usd import find_matching_prims
         from omni.isaac.core.prims.xform_prim import XFormPrim
@@ -164,9 +163,9 @@ class TerrainBuilder:
         mesh.GetAttribute("faceVertexCounts").Set([3] * num_faces)
 
         centered_position = [
-            position[0] - size[0] / 2,
-            position[1] - size[1] / 2,
-            position[2],
+            position[0].item() - size[0].item() / 2,
+            position[1].item() - size[1].item() / 2,
+            position[2].item(),
         ]
 
         terrain = XFormPrim(
