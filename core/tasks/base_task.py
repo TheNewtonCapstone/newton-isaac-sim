@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from typing import Dict, Any, List, Optional, Sequence, Type
 
+from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecEnv
 from stable_baselines3.common.vec_env.base_vec_env import (
     VecEnvIndices,
@@ -13,6 +14,22 @@ import numpy as np
 import torch
 from core.agents import BaseAgent
 from core.envs import BaseEnv
+
+
+class BaseTaskCallback(BaseCallback):
+    def __init__(self):
+        super().__init__()
+
+        self.training_env: BaseTask
+
+    def _on_step(self) -> bool:
+        task: BaseTask = self.training_env
+
+        self.logger.record("rewards/mean", task.rewards_buf.mean().item())
+        self.logger.record("rewards/median", torch.median(task.rewards_buf).item())
+        self.logger.record("rewards/sum", task.rewards_buf.sum().item())
+
+        return True
 
 
 class BaseTask(VecEnv):
@@ -73,11 +90,6 @@ class BaseTask(VecEnv):
 
     # Gymnasium methods (required from VecEnv)
 
-    def step_async(self, actions: np.ndarray) -> None:
-        actions = np.clip(actions, self.action_space.low, self.action_space.high)
-        self.actions_buf = torch.from_numpy(actions).to(self.device)
-        return
-
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:
         pass
@@ -91,6 +103,11 @@ class BaseTask(VecEnv):
 
     def seed(self, seed: Optional[int] = None) -> Sequence[None | int]:
         pass
+
+    def step_async(self, actions: np.ndarray) -> None:
+        actions = np.clip(actions, self.action_space.low, self.action_space.high)
+        self.actions_buf = torch.from_numpy(actions).to(self.device)
+        return
 
     # Helper methods (shouldn't need to be overridden and most likely won't be called directly)
 

@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict
 
-import torch
-from core.types import Observations
+from core.types import Observations, Actions
 
 
 class BaseAgent(ABC):
@@ -20,7 +18,7 @@ class BaseAgent(ABC):
         pass
 
     @abstractmethod
-    def step(self, actions: torch.Tensor) -> Observations:
+    def step(self, actions: Actions) -> Observations:
         pass
 
     @abstractmethod
