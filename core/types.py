@@ -1,25 +1,26 @@
 from typing import Dict, Any, Callable
 
+import numpy as np
 import torch
 
 # Sensory
-IMUData = Dict[str, torch.FloatTensor]
+IMUData = Dict[str, torch.Tensor]
 
 # Motors
-JointsPositions = torch.FloatTensor
+JointsPositions = torch.Tensor
 
 # RL
-Actions = torch.FloatTensor
-Rewards = torch.FloatTensor
-Dones = torch.BoolTensor
-Progress = torch.FloatTensor
+Actions = np.ndarray
+Rewards = np.ndarray
+Dones = np.ndarray
+Progress = np.ndarray
 
-Infos = Dict[str, torch.Tensor]
+Infos = Dict[str, np.ndarray]
 
-Observations = Dict[str, torch.Tensor]
+Observations = Dict[str, np.ndarray]
 
 # Meta
 Settings = Dict[str, Any]
 
 # Math
-NoiseFunction = Callable[[torch.FloatTensor], torch.FloatTensor]
+NoiseFunction = Callable[[torch.Tensor], torch.Tensor]

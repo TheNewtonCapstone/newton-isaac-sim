@@ -31,9 +31,6 @@ class NewtonBaseEnv(BaseEnv):
     def construct(self) -> None:
         super().construct()
 
-        agent_root_path = f"{self.path}/agents"
-        self.agent.construct(agent_root_path)
-
     @abstractmethod
     def step(self, actions: torch.Tensor, render: bool) -> Observations:
         super().step(actions, render)  # advances the simulation by one step
@@ -48,4 +45,4 @@ class NewtonBaseEnv(BaseEnv):
 
     @abstractmethod
     def get_observations(self) -> Observations:
-        pass
+        return super().get_observations()

@@ -1,11 +1,13 @@
 import torch
 from core.types import IMUData, NoiseFunction
+from omni.isaac.core import World
 
 
 class VecIMU:
     def __init__(
         self,
         path_expr: str,
+        world: World,
         local_position: torch.Tensor,
         local_rotation: torch.Tensor,
         noise_function: NoiseFunction,
@@ -14,6 +16,8 @@ class VecIMU:
         self.local_position: torch.Tensor = local_position
         self.local_rotation: torch.Tensor = local_rotation
         self.num_imus: int = 0
+
+        self.world: World = world
 
         self._noise_function: NoiseFunction = noise_function
         self._is_constructed: bool = False

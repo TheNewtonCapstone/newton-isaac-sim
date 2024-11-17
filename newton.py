@@ -151,55 +151,6 @@ if __name__ == "__main__":
     from core.terrain.flat_terrain import FlatTerrainBuilder
     from core.terrain.perlin_terrain import PerlinTerrainBuilder
 
-    # ----------- #
-    # PID CONTROL #
-    # ----------- #
-
-    if pidding:
-        controller = PidController(
-            kp=1.55,
-            kd=0.1,
-            ki=0.15,
-            min_output=-1.0,
-            max_output=1.0,
-            max_integral=2.0,
-            setpoint=0.0,
-        )
-
-        randomization_config["randomize"] = False
-
-        env = GenericEnv(
-            world_settings=world_config,
-            num_envs=rl_config["n_envs"],
-            terrain_builders=[FlatTerrainBuilder()],
-            randomization_settings=randomization_config,
-        )
-
-        newton = NewtonAgent(newton_settings)
-
-        env.construct(newton)
-        env.reset()
-
-        actions = torch.zeros(env.num_envs, 2)
-        log_file = open("pidding.csv", "w")
-        print("time,dt,roll,action1,action2", file=log_file)
-
-        while sim_app.is_running():
-            imu_data = env.step(actions, render=not headless)
-            roll = roll_from_quat(imu_data[:, 6:10]).item()
-
-            dt = env.world.get_physics_dt()
-            actions = controller.predict(roll, dt)
-
-            actions = actions_to_torque(actions)
-
-            print(
-                f"{env.world.current_time},{dt},{roll},{actions[0]},{actions[1]}",
-                file=log_file,
-            )
-
-        exit(1)
-
     # ---------- #
     # SIMULATION #
     # ---------- #
