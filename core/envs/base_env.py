@@ -1,9 +1,12 @@
+import weakref
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
+import omni.timeline
 import torch
 from core.agents import BaseAgent
 from core.domain_randomizer.domain_randomizer import DomainRandomizer
+from core.globals import PHYSICS_SCENE_PATH, TERRAINS_PATH, LIGHTS_PATH
 from core.terrain import TerrainBuilder, TerrainBuild
 from core.types import Settings, Observations
 
@@ -19,14 +22,13 @@ class BaseEnv(ABC):
     ) -> None:
         from omni.isaac.core import World
 
-        self.path: str = ""
         self.num_envs = num_envs
         self.agent: BaseAgent = agent
         self.world: Optional[World] = None
         self.world_settings = world_settings
 
         self.terrain_builders: List[TerrainBuilder] = terrain_builders
-        self.terrain_paths: List[TerrainBuild] = []
+        self.terrain_builds: List[TerrainBuild] = []
 
         self.domain_randomizer: DomainRandomizer = None  # TODO
         self.randomizer_settings: Settings = randomizer_settings
@@ -39,31 +41,41 @@ class BaseEnv(ABC):
 
     @abstractmethod
     def construct(self) -> None:
-        from omni.isaac.core import World
-
-        self.world: World = World(
-            physics_dt=self.world_settings["physics_dt"],
-            rendering_dt=self.world_settings["rendering_dt"],
-            stage_units_in_meters=self.world_settings["stage_units_in_meters"],
-            backend=self.world_settings["backend"],
-            device=self.world_settings["device"],
-        )
-
         from core.utils.gpu import get_free_gpu_memory
 
         free_device_memory = get_free_gpu_memory()
         assert free_device_memory > 0, "No free GPU memory found"
 
-        # Adjust physics scene settings (mainly for GPU memory allocation)
-        phys_context = self.world.get_physics_context()
-        phys_context.set_gpu_found_lost_aggregate_pairs_capacity(
-            free_device_memory // 5 * 3
-        )  # there should be more contacts than overall pairs
-        phys_context.set_gpu_total_aggregate_pairs_capacity(free_device_memory // 5 * 2)
+        sim_params = self.world_settings["sim_params"]
+        # TODO: check if going above free memory is okay
+        sim_params["gpu_found_lost_aggregate_pairs_capacity"] = free_device_memory * 4
+        sim_params["gpu_total_aggregate_pairs_capacity"] = free_device_memory
 
-        self.path = f"/{self.__class__.__name__.capitalize()}"
+        from omni.isaac.core import World
 
-        return self.path
+        self.world: World = World(
+            physics_prim_path=PHYSICS_SCENE_PATH,
+            physics_dt=self.world_settings["physics_dt"],
+            rendering_dt=self.world_settings["rendering_dt"],
+            stage_units_in_meters=self.world_settings["stage_units_in_meters"],
+            backend=self.world_settings["backend"],
+            device=self.world_settings["device"],
+            sim_params=sim_params,
+        )
+
+        # ensures some base prims exist
+
+        from omni.isaac.core.utils.prims import create_prim
+
+        create_prim(
+            prim_path=LIGHTS_PATH,
+            prim_type="Scope",
+        )
+
+        create_prim(
+            prim_path=TERRAINS_PATH,
+            prim_type="Scope",
+        )
 
     @abstractmethod
     def step(

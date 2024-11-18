@@ -1,34 +1,14 @@
 import argparse
-import os
 
 import numpy as np
 import torch
-from core.pid.pid import PidController
-from core.twip.balancing_twip_task import (
-    BalancingTwipTask,
-    BalancingTwipCallback,
-    actions_to_torque,
-    roll_from_quat,
-)
-from core.wrappers.tasks import RandomDelayVecWrapper
 from core.utils.config import load_config
 from core.utils.path import (
-    get_current_path,
     build_child_path_with_prefix,
     get_folder_from_path,
 )
-from isaacsim import SimulationApp
 from stable_baselines3 import PPO
 from stable_baselines3.common.policies import BasePolicy
-
-newton_settings = {
-    "newton_urdf_path": os.path.join(
-        get_current_path(__file__), "assets/newton/newton.urdf"
-    ),
-    "newton_usd_path": os.path.join(
-        get_current_path(__file__), "assets/newton/newton.usd"
-    ),
-}
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -39,7 +19,7 @@ def setup_argparser() -> argparse.ArgumentParser:
         "--headless", action="store_true", help="Run in headless mode.", default=False
     )
     parser.add_argument(
-        "--sim-only",
+        "--physics",
         action="store_true",
         help="Run the simulation only (no RL).",
         default=False,
@@ -104,7 +84,7 @@ if __name__ == "__main__":
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
 
-    simulating = cli_args.sim_only
+    physics_only = cli_args.physics
     exporting = cli_args.export_onnx
     pidding = not exporting and cli_args.pid_control
     playing = not exporting and not pidding and cli_args.play
@@ -140,13 +120,14 @@ if __name__ == "__main__":
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
+    from isaacsim import SimulationApp
+
     sim_app = SimulationApp(
         {"headless": headless}, experience="./apps/omni.isaac.sim.newton.kit"
     )
 
-    from core.envs.generic_env import GenericEnv
-    from core.envs.procedural_env import ProceduralEnv
-    from core.newton.newton_agent import NewtonAgent
+    from core.envs import NewtonMultiTerrainEnv
+    from core.agents import NewtonVecAgent
 
     from core.terrain.flat_terrain import FlatTerrainBuilder
     from core.terrain.perlin_terrain import PerlinTerrainBuilder
@@ -155,28 +136,33 @@ if __name__ == "__main__":
     # SIMULATION #
     # ---------- #
 
-    if simulating:
-        env = ProceduralEnv(
-            world_settings=world_config,
+    if physics_only:
+        newton = NewtonVecAgent(num_agents=rl_config["n_envs"])
+
+        env = NewtonMultiTerrainEnv(
+            agent=newton,
             num_envs=rl_config["n_envs"],
             terrain_builders=[PerlinTerrainBuilder(), FlatTerrainBuilder()],
-            randomization_settings=randomization_config,
+            world_settings=world_config,
+            randomizer_settings=randomization_config,
         )
 
-        newton = NewtonAgent(newton_settings)
-
-        env.construct(newton)
+        env.construct()
         env.reset()
 
-        while sim_app.is_running():
-            if env.world.is_playing():
-                env.step(torch.zeros(env.num_envs, 2), render=not headless)
+        while sim_app.is_running() and env.world.is_playing():
+            env.step(torch.zeros(env.num_envs, 2), render=not headless)
 
         exit(1)
 
     # ----------- #
     #     RL      #
     # ----------- #
+
+    from core.envs.generic_env import GenericEnv
+    from core.envs.procedural_env import ProceduralEnv
+
+    from core.wrappers import RandomDelayWrapper
 
     def generic_env_factory() -> GenericEnv:
         return GenericEnv(
@@ -220,8 +206,8 @@ if __name__ == "__main__":
             randomization_settings=randomization_config,
         )
 
-    def newton_agent_factory() -> NewtonAgent:
-        return NewtonAgent(newton_settings)
+    def newton_agent_factory() -> NewtonVecAgent:
+        return NewtonVecAgent()
 
     task_runs_directory = "runs"
     task_name = build_child_path_with_prefix(
@@ -253,7 +239,7 @@ if __name__ == "__main__":
             obs_delay_range = range(list_obs_delay_range[0], list_obs_delay_range[1])
             act_delay_range = range(list_act_delay_range[0], list_act_delay_range[1])
 
-            task = RandomDelayVecWrapper(
+            task = RandomDelayWrapper(
                 task,
                 obs_delay_range=obs_delay_range,
                 act_delay_range=act_delay_range,

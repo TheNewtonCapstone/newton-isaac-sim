@@ -1,16 +1,22 @@
+import torch
+
+from torch import Tensor
+
 from core.agents import NewtonBaseAgent
 from core.globals import TERRAINS_PATH, PHYSICS_SCENE_PATH, COLLISION_GROUPS_PATH
 from core.types import Observations, Actions
+from omni.isaac.core import World
 
 
 class NewtonVecAgent(NewtonBaseAgent):
-    def construct(self, root_path: str) -> str:
+    def construct(self, world: World) -> None:
         if self._is_constructed:
-            return self.path
+            return
 
-        super().construct(root_path)
+        super().construct(world)
 
-        self.path = root_path + "/newton_0"
+        self.base_path_expr = self.path + "/Newton_*/base"
+        self.path = self.path + "/Newton_0"
 
         import omni.isaac.core.utils.stage as stage_utils
 
@@ -26,7 +32,7 @@ class NewtonVecAgent(NewtonBaseAgent):
         cloner = Cloner()
         cloner.define_base_env(self.path)
 
-        agent_paths = cloner.generate_paths(self.path[:-1], self.num_agents)
+        agent_paths = cloner.generate_paths(self.path[:-2], self.num_agents)
 
         cloner.filter_collisions(
             physicsscene_path=PHYSICS_SCENE_PATH,
@@ -41,20 +47,18 @@ class NewtonVecAgent(NewtonBaseAgent):
 
         from omni.isaac.core.articulations import ArticulationView
 
-        newton_art_view = ArticulationView(
-            prim_paths_expr=self.path + "*/newton/base",
+        self.newton_art_view = ArticulationView(
+            prim_paths_expr=self.base_path_expr,
             name="newton_art_view",
         )
-        self.world.scene.add(newton_art_view)
+        self.world.scene.add(self.newton_art_view)
 
-        self._construct_imu(self.path + "*/newton/base")
-        self._construct_joints_controller(self.path + "*/newton/base")
+        self._construct_imu(self.base_path_expr)
+        self._construct_joints_controller(self.base_path_expr)
 
         self.world.reset()
 
         self._is_constructed = True
-
-        return self.path
 
     def step(self, actions: Actions) -> Observations:
         super().step(actions)
@@ -62,13 +66,11 @@ class NewtonVecAgent(NewtonBaseAgent):
         # TODO: self.joints_controller.update(actions)
 
         self.joints_controller.step()
+        self.imu.step()
 
-        return self.get_observations()
+        return self._get_observations()
 
-    def reset(self) -> Observations:
-        super().reset()
+    def _get_observations(self) -> Observations:
+        # TODO: self.imu
 
-        return self.get_observations()
-
-    def get_observations(self) -> Observations:
-        return super().get_observations()
+        return super()._get_observations()

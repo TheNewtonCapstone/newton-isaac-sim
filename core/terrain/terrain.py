@@ -163,9 +163,9 @@ class TerrainBuilder(ABC):
         mesh.GetAttribute("faceVertexCounts").Set([3] * num_faces)
 
         centered_position = [
-            position[0].item() - size[0].item() / 2,
-            position[1].item() - size[1].item() / 2,
-            position[2].item(),
+            position[0] - size[0] / 2,
+            position[1] - size[1] / 2,
+            position[2],
         ]
 
         terrain = XFormPrim(
