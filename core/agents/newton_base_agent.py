@@ -5,36 +5,34 @@ import torch
 from core.agents import BaseAgent
 from core.sensors import VecIMU
 from core.controllers import VecJointsController
-from core.types import IMUData, Actions, Observations
+from core.types import Actions, Observations
+from omni.isaac.core import World
+from omni.isaac.core.articulations import ArticulationView
 
 
 class NewtonBaseAgent(BaseAgent):
-    def __init__(self, num_agents: int, world):
-        super().__init__(num_agents, world)
+    def __init__(self, num_agents: int):
+        super().__init__(num_agents)
+
+        self.base_path_expr: str = ""
 
         self.imu: Optional[VecIMU] = None
         self.joints_controller: Optional[VecJointsController] = None
 
-        self._is_constructed: bool = False
+        self.newton_art_view: Optional[ArticulationView] = None
 
     @abstractmethod
-    def construct(self, root_path: str) -> str:
-        return super().construct(root_path)
+    def construct(self, world: World) -> None:
+        super().construct(world)
 
     @abstractmethod
     def step(self, actions: Actions) -> Observations:
         super().step(actions)
 
-        return self.get_observations()
+        return self._get_observations()
 
     @abstractmethod
-    def reset(self) -> Observations:
-        super().reset()
-
-        return self.get_observations()
-
-    @abstractmethod
-    def get_observations(self) -> Observations:
+    def _get_observations(self) -> Observations:
         pass
 
     def _construct_imu(self, path_expr: str):

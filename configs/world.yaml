@@ -3,3 +3,6 @@ stage_units_in_meters: 1.0
 rendering_dt: 0.01667
 backend: torch
 device: cuda
+sim_params:
+  substeps: 1
+  solver_type: 0 # 0: PGS, 1: TGS
