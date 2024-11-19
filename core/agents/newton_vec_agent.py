@@ -49,7 +49,7 @@ class NewtonVecAgent(NewtonBaseAgent):
 
         self.newton_art_view = ArticulationView(
             prim_paths_expr=self.base_path_expr,
-            name="newton_art_view",
+            name="newton_agent_art_view",
         )
         self.world.scene.add(self.newton_art_view)
 
@@ -59,18 +59,3 @@ class NewtonVecAgent(NewtonBaseAgent):
         self.world.reset()
 
         self._is_constructed = True
-
-    def step(self, actions: Actions) -> Observations:
-        super().step(actions)
-
-        # TODO: self.joints_controller.update(actions)
-
-        self.joints_controller.step()
-        self.imu.step()
-
-        return self._get_observations()
-
-    def _get_observations(self) -> Observations:
-        # TODO: self.imu
-
-        return super()._get_observations()

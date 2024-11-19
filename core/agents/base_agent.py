@@ -31,5 +31,5 @@ class BaseAgent(ABC):
         pass
 
     @abstractmethod
-    def _get_observations(self) -> Observations:
+    def get_observations(self) -> Observations:
         pass

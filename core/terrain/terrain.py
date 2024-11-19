@@ -158,6 +158,7 @@ class TerrainBuilder(ABC):
 
         num_faces = triangles.shape[0]
         mesh = define_prim(prim_path, "Mesh")
+        # TODO: switch this to the NVIDIA utils API
         mesh.GetAttribute("points").Set(vertices.numpy())
         mesh.GetAttribute("faceVertexIndices").Set(triangles.flatten().numpy())
         mesh.GetAttribute("faceVertexCounts").Set([3] * num_faces)
