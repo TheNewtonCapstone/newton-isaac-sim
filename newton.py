@@ -151,7 +151,7 @@ if __name__ == "__main__":
         env.reset()
 
         while sim_app.is_running() and env.world.is_playing():
-            env.step(torch.zeros(env.num_envs, 2), render=not headless)
+            env.step(np.zeros((rl_config["n_envs"], 12)), render=not headless)
 
         exit(1)
 

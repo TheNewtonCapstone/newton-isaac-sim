@@ -25,24 +25,28 @@ class NewtonBaseAgent(BaseAgent):
     def construct(self, world: World) -> None:
         super().construct(world)
 
-    @abstractmethod
-    def step(self, actions: Actions) -> Observations:
+    def step(self, actions: Actions) -> None:
         super().step(actions)
 
-        return self._get_observations()
+        self.joints_controller.update(torch.from_numpy(actions))
 
-    @abstractmethod
-    def _get_observations(self) -> Observations:
-        pass
+    def get_observations(self) -> Observations:
+        imu_data_tensor = self.imu.get_data(recalculate=True)
+        imu_data_numpy = {}
+
+        for key, value in imu_data_tensor.items():
+            imu_data_numpy[key] = value.cpu().numpy()
+
+        return imu_data_numpy
 
     def _construct_imu(self, path_expr: str):
+        from core.utils.math import IDENTITY_QUAT
+
         self.imu = VecIMU(
             path_expr=path_expr,
             world=self.world,
             local_position=torch.zeros((self.num_agents, 3)),
-            local_rotation=torch.tile(
-                torch.tensor([0.0, 0.0, 0.0, 1.0]), (self.num_agents, 1)
-            ),
+            local_rotation=IDENTITY_QUAT.repeat(self.num_agents, 1),
             noise_function=lambda x: x,
         )
         self.imu.construct()

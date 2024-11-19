@@ -9,7 +9,7 @@ import torch
 from core.agents import NewtonBaseAgent
 from core.envs import BaseEnv
 from core.terrain import TerrainBuilder
-from core.types import Observations, Settings
+from core.types import Observations, Settings, Actions
 
 
 class NewtonBaseEnv(BaseEnv):
@@ -65,7 +65,7 @@ class NewtonBaseEnv(BaseEnv):
         )
 
     @abstractmethod
-    def step(self, actions: torch.Tensor, render: bool) -> Observations:
+    def step(self, actions: Actions, render: bool) -> Observations:
         super().step(actions, render)  # advances the simulation by one step
 
         return self.get_observations()
@@ -78,4 +78,4 @@ class NewtonBaseEnv(BaseEnv):
 
     @abstractmethod
     def get_observations(self) -> Observations:
-        return super().get_observations()
+        return self.agent.get_observations()

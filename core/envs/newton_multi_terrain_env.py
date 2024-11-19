@@ -1,11 +1,12 @@
 from abc import abstractmethod
 from typing import List
 
+import numpy as np
 import torch
 from core.agents import NewtonBaseAgent
 from core.envs import BaseEnv, NewtonBaseEnv
 from core.terrain import TerrainBuilder
-from core.types import Observations, Settings
+from core.types import Observations, Settings, Actions
 
 
 class NewtonMultiTerrainEnv(NewtonBaseEnv):
@@ -116,10 +117,14 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
 
         # TODO: self.domain_randomizer.construct()
 
-    def step(self, actions: torch.Tensor, render: bool) -> Observations:
+    def step(self, actions: Actions, render: bool) -> Observations:
+        self.agent.step(actions)
+
         super().step(actions, render)  # advances the simulation by one step
 
-        return self.get_observations()
+        observations = self.get_observations()
+        print(observations)
+        return observations
 
     def reset(self) -> Observations:
         super().reset()

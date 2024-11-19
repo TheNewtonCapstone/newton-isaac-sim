@@ -1,5 +1,7 @@
 from typing import Callable, Optional
 
+from torch import Tensor
+
 import torch
 from core.types import NoiseFunction
 from omni.isaac.core import World
@@ -11,7 +13,7 @@ class VecJointsController:
         self,
         path_expr: str,
         world: World,
-        noise_function: Callable[[torch.Tensor], torch.Tensor],
+        noise_function: Callable[[Tensor], Tensor],
     ):
         self.path_expr: str = path_expr
 
@@ -19,7 +21,7 @@ class VecJointsController:
         self.articulation_view: Optional[ArticulationView] = None
 
         self._noise_function: NoiseFunction = noise_function
-        self._target_joint_positions: torch.Tensor = torch.zeros(0)
+        self._target_joint_positions: Tensor = torch.zeros(0)
         self._is_constructed: bool = False
 
     @property
@@ -30,7 +32,7 @@ class VecJointsController:
         return self.articulation_view
 
     @property
-    def target_joint_positions(self) -> torch.Tensor:
+    def target_joint_positions(self) -> Tensor:
         return self._target_joint_positions
 
     def construct(self) -> None:
@@ -39,12 +41,15 @@ class VecJointsController:
 
         from omni.isaac.core.articulations import ArticulationView
 
-        self.articulation_view = ArticulationView(self.path_expr)
+        self.articulation_view = ArticulationView(
+            self.path_expr,
+            name="joints_controller_art_view",
+        )
         self.world.scene.add(self.articulation_view)
 
         self._is_constructed = True
 
-    def update(self, joint_positions: torch.Tensor) -> None:
+    def update(self, joint_positions: Tensor) -> None:
         self._target_joint_positions = self._noise_function(joint_positions)
 
     def step(self) -> None:

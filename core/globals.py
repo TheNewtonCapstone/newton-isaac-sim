@@ -1,3 +1,6 @@
+import torch
+from torch import Tensor
+
 # Paths
 LIGHTS_PATH: str = "/Lights"
 TERRAINS_PATH: str = "/Terrains"

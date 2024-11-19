@@ -8,7 +8,7 @@ from core.agents import BaseAgent
 from core.domain_randomizer.domain_randomizer import DomainRandomizer
 from core.globals import PHYSICS_SCENE_PATH, TERRAINS_PATH, LIGHTS_PATH
 from core.terrain import TerrainBuilder, TerrainBuild
-from core.types import Settings, Observations
+from core.types import Settings, Observations, Actions
 
 
 class BaseEnv(ABC):
@@ -80,7 +80,7 @@ class BaseEnv(ABC):
     @abstractmethod
     def step(
         self,
-        actions: torch.Tensor,
+        actions: Actions,
         render: bool,
     ) -> Observations:
 
@@ -95,9 +95,7 @@ class BaseEnv(ABC):
         return self.get_observations()
 
     @abstractmethod
-    def reset(
-        self,
-    ) -> Observations:
+    def reset(self) -> Observations:
         return self.get_observations()
 
     @abstractmethod
