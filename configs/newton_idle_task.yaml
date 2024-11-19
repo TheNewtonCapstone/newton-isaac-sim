@@ -1,9 +1,9 @@
-task_name: "twip_balancing"
+task_name: "newton_idle"
 device: "cuda"
 policy: "MlpPolicy"
 seed: 14321
 
-n_envs: 128
+n_envs: 8
 timesteps_per_env: 500_000
 base_lr: 3e-4
 
@@ -14,8 +14,8 @@ delay:
   instant_rewards: False # should the rewards be calculated on the brain or remote actor?
 
 ppo:
-  n_steps: 512
-  batch_size: 256
+  n_steps: 128
+  batch_size: 64
   n_epochs: 5
 
   gamma: 0.99

@@ -28,7 +28,8 @@ class NewtonBaseAgent(BaseAgent):
     def step(self, actions: Actions) -> None:
         super().step(actions)
 
-        self.joints_controller.update(torch.from_numpy(actions))
+        new_joint_positions = torch.from_numpy(actions).to(self.world.device)
+        self.joints_controller.step(new_joint_positions)
 
     def get_observations(self) -> Observations:
         imu_data_tensor = self.imu.get_data(recalculate=True)
