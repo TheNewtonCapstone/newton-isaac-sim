@@ -1,4 +1,4 @@
-from typing import Dict, Any, Callable
+from typing import Dict, Any, Callable, List
 
 import numpy as np
 import torch
@@ -15,7 +15,7 @@ Rewards = np.ndarray
 Dones = np.ndarray
 Progress = np.ndarray
 
-Infos = Dict[str, np.ndarray]
+Infos = List[Dict[str, Any]]
 
 Observations = Dict[str, np.ndarray]
 

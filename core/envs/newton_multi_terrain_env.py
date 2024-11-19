@@ -118,12 +118,11 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         # TODO: self.domain_randomizer.construct()
 
     def step(self, actions: Actions, render: bool) -> Observations:
-        self.agent.step(actions)
+        self.agent.step(actions)  # has to be before the simulation advances
 
         super().step(actions, render)  # advances the simulation by one step
 
         observations = self.get_observations()
-        print(observations)
         return observations
 
     def reset(self) -> Observations:

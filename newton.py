@@ -1,4 +1,5 @@
 import argparse
+import copy
 
 import numpy as np
 import torch
@@ -34,7 +35,7 @@ def setup_argparser() -> argparse.ArgumentParser:
         "--rl-config",
         type=str,
         help="Path to the configuration file for RL.",
-        default="configs/task_twip.yaml",
+        default="configs/newton_idle_task.yaml",
     )
     parser.add_argument(
         "--world-config",
@@ -159,55 +160,46 @@ if __name__ == "__main__":
     #     RL      #
     # ----------- #
 
-    from core.envs.generic_env import GenericEnv
-    from core.envs.procedural_env import ProceduralEnv
-
+    from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
+    from core.envs import NewtonMultiTerrainEnv
     from core.wrappers import RandomDelayWrapper
 
-    def generic_env_factory() -> GenericEnv:
-        return GenericEnv(
-            world_settings=world_config,
-            num_envs=rl_config["n_envs"],
-            terrain_builders=[FlatTerrainBuilder(size=[10, 10])],
-            randomization_settings=randomization_config,
-        )
+    newton_agent = NewtonVecAgent(num_agents=rl_config["n_envs"])
 
-    def procedural_env_factory() -> ProceduralEnv:
-        terrains_size = [10, 10]
-        terrains_resolution = [20, 20]
+    terrains_size = torch.tensor([10, 10])
+    terrains_resolution = torch.tensor([20, 20])
 
-        return ProceduralEnv(
-            world_settings=world_config,
-            num_envs=rl_config["n_envs"],
-            terrain_builders=[
-                FlatTerrainBuilder(size=terrains_size),
-                PerlinTerrainBuilder(
-                    size=terrains_size,
-                    resolution=terrains_resolution,
-                    height=0.05,
-                    octave=4,
-                    noise_scale=2,
-                ),
-                PerlinTerrainBuilder(
-                    size=terrains_size,
-                    resolution=terrains_resolution,
-                    height=0.03,
-                    octave=8,
-                    noise_scale=4,
-                ),
-                PerlinTerrainBuilder(
-                    size=terrains_size,
-                    resolution=terrains_resolution,
-                    height=0.02,
-                    octave=16,
-                    noise_scale=8,
-                ),
-            ],
-            randomization_settings=randomization_config,
-        )
-
-    def newton_agent_factory() -> NewtonVecAgent:
-        return NewtonVecAgent()
+    training_env = NewtonMultiTerrainEnv(
+        agent=newton_agent,
+        num_envs=rl_config["n_envs"],
+        world_settings=world_config,
+        terrain_builders=[
+            FlatTerrainBuilder(size=terrains_size),
+            PerlinTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.05,
+                octave=4,
+                noise_scale=2,
+            ),
+            PerlinTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.03,
+                octave=8,
+                noise_scale=4,
+            ),
+            PerlinTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.02,
+                octave=16,
+                noise_scale=8,
+            ),
+        ],
+        randomizer_settings=randomization_config,
+    )
+    playing_env = copy.deepcopy(training_env)
 
     task_runs_directory = "runs"
     task_name = build_child_path_with_prefix(
@@ -215,17 +207,20 @@ if __name__ == "__main__":
     )
 
     # task used for either training or playing
-    task = BalancingTwipTask(
+    task = NewtonIdleTask(
+        training_env=training_env,
+        playing_env=playing_env,
+        agent=newton_agent,
         headless=cli_args.headless,
         device=rl_config["device"],
         num_envs=rl_config["n_envs"],
         playing=playing,
         max_episode_length=rl_config["ppo"]["n_steps"],
-        training_env_factory=procedural_env_factory,
-        playing_env_factory=generic_env_factory,
-        agent_factory=newton_agent_factory,
     )
-    callback = BalancingTwipCallback()
+    callback = NewtonBaseTaskCallback(
+        start_check=32 * rl_config["n_envs"],
+        save_path=task_name,
+    )
 
     task.construct()
 

@@ -49,16 +49,15 @@ class VecJointsController:
 
         self._is_constructed = True
 
-    def update(self, joint_positions: Tensor) -> None:
+    def step(self, joint_positions: Tensor) -> None:
         self._target_joint_positions = self._noise_function(joint_positions)
 
-    def step(self) -> None:
         # TODO
         current_joint_positions = self.articulation_view.get_joint_positions()
         target_joint_positions = self._target_joint_positions
 
         delta_joint_positions = target_joint_positions - current_joint_positions
-        delta_joint_positions = delta_joint_positions.clamp(-5.0, 5.0)
+        delta_joint_positions = delta_joint_positions.clamp(-0.1, 0.1)
 
         self.articulation_view.set_joint_positions(
             current_joint_positions + delta_joint_positions

@@ -14,20 +14,20 @@ import numpy as np
 import torch
 from core.agents import BaseAgent
 from core.envs import BaseEnv
+from core.types import Progress, Rewards, Dones, Actions, Infos
 
 
 class BaseTaskCallback(BaseCallback):
-    def __init__(self):
-        super().__init__()
-
-        self.training_env: BaseTask
-
     def _on_step(self) -> bool:
         task: BaseTask = self.training_env
 
         self.logger.record("rewards/mean", task.rewards_buf.mean().item())
-        self.logger.record("rewards/median", torch.median(task.rewards_buf).item())
+        self.logger.record("rewards/median", np.median(task.rewards_buf).item())
         self.logger.record("rewards/sum", task.rewards_buf.sum().item())
+
+        self.logger.record("progress/mean", task.progress_buf.mean().item())
+
+        self.logger.record("actions/mean", task.actions_buf.mean().item())
 
         return True
 
@@ -64,15 +64,15 @@ class BaseTask(VecEnv):
         self.num_observations: int = self.observation_space.shape[0]
         self.num_actions: int = self.action_space.shape[0]
 
-        self.actions_buf: torch.Tensor = torch.zeros(
-            (self.num_envs, self.num_actions), dtype=torch.float32
+        self.actions_buf: Actions = np.zeros(
+            (self.num_envs, self.num_actions), dtype=np.float32
         )
-        self.rewards_buf: torch.Tensor = torch.zeros(self.num_envs, dtype=torch.float32)
-        self.dones_buf: torch.Tensor = torch.zeros(self.num_envs, dtype=torch.bool)
-        self.progress_buf: torch.Tensor = torch.zeros(
-            self.num_envs, dtype=torch.float32
-        )
-        self.infos_buf: List[Dict[str, Any]] = [{} for _ in range(self.num_envs)]
+        self.rewards_buf: Rewards = np.zeros(self.num_envs, dtype=np.float32)
+        self.dones_buf: Dones = np.zeros(self.num_envs, dtype=bool)
+        self.progress_buf: Progress = np.zeros(self.num_envs, dtype=np.float32)
+        self.infos_buf: Infos = [{} for _ in range(self.num_envs)]
+
+        self.render_mode: str = "human"
 
         super(BaseTask, self).__init__(
             num_envs=num_envs,
@@ -105,8 +105,7 @@ class BaseTask(VecEnv):
         pass
 
     def step_async(self, actions: np.ndarray) -> None:
-        actions = np.clip(actions, self.action_space.low, self.action_space.high)
-        self.actions_buf = torch.from_numpy(actions).to(self.device)
+        self.actions_buf = actions
         return
 
     # Helper methods (shouldn't need to be overridden and most likely won't be called directly)

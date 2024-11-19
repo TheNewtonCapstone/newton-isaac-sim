@@ -1,5 +1,6 @@
 from typing import Optional
 
+import numpy as np
 from torch import Tensor
 
 import torch
@@ -125,6 +126,8 @@ class VecIMU:
         # from: https://github.com/isaac-sim/IsaacLab/pull/619/files#diff-44fe42c247de7301a3ce18a10d2b8c9045d58d42fc8440a7221b458d0712e83d
 
         positions, rotations = self.rigid_view.get_world_poses()
+        positions = torch.nan_to_num(positions)
+        rotations = torch.nan_to_num(rotations)
 
         # get the offset from COM to local origin
         com_positions = self.rigid_view.get_coms()[0].squeeze(1)
