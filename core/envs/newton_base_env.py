@@ -49,7 +49,7 @@ class NewtonBaseEnv(BaseEnv):
             prim_type="DistantLight",
             orientation=euler_angles_to_quat(np.array([40, 0, 40]), True),
             attributes={
-                "inputs:intensity": 3e3,
+                "inputs:intensity": 1500,
                 "inputs:color": (0.93, 0.84, 0.62),
             },
         )
@@ -59,7 +59,7 @@ class NewtonBaseEnv(BaseEnv):
             prim_type="DistantLight",
             orientation=euler_angles_to_quat(np.array([40, 0, 140]), True),
             attributes={
-                "inputs:intensity": 3e3,
+                "inputs:intensity": 500,
                 "inputs:color": (0.63, 0.84, 0.92),
             },
         )

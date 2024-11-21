@@ -199,6 +199,8 @@ if __name__ == "__main__":
         ],
         randomizer_settings=randomization_config,
     )
+
+    # TODO: add a separate playing environment
     playing_env = copy.deepcopy(training_env)
 
     task_runs_directory = "runs"
@@ -218,7 +220,7 @@ if __name__ == "__main__":
         max_episode_length=rl_config["ppo"]["n_steps"],
     )
     callback = NewtonBaseTaskCallback(
-        start_check=32 * rl_config["n_envs"],
+        check_freq=64,
         save_path=task_name,
     )
 
