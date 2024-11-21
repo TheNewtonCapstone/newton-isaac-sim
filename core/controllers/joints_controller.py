@@ -24,6 +24,8 @@ class VecJointsController:
         self._target_joint_positions: Tensor = torch.zeros(0)
         self._is_constructed: bool = False
 
+        # TODO: add constraints and a per-drive class
+
     @property
     def art_view(self):
         if not self._is_constructed:
@@ -56,9 +58,9 @@ class VecJointsController:
         current_joint_positions = self.articulation_view.get_joint_positions()
         target_joint_positions = self._target_joint_positions
 
-        delta_joint_positions = target_joint_positions - current_joint_positions
-        delta_joint_positions = delta_joint_positions.clamp(-0.1, 0.1)
+        joint_positions_velocities = (
+            current_joint_positions - target_joint_positions
+        ) / self.world.get_physics_dt()
+        joint_positions_velocities = joint_positions_velocities.clamp(-2, 2)
 
-        self.articulation_view.set_joint_positions(
-            current_joint_positions + delta_joint_positions
-        )
+        self.articulation_view.set_joint_velocities(joint_positions_velocities)

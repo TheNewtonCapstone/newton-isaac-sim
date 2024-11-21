@@ -73,13 +73,16 @@ class NewtonIdleTask(NewtonBaseTask):
 
         obs = self._get_observations()
 
-        self._calculate_rewards(obs["projected_gravities"], obs["positions"])
+        obs_buf: np.ndarray = np.zeros(
+            (self.num_envs, self.num_observations), dtype=np.float32
+        )
+        obs_buf[:, :3] = obs["projected_gravities"]
+        obs_buf[:, 3] = obs["positions"][:, 2]
+
+        self._calculate_rewards()
 
         return (
-            np.concatenate(
-                [obs["projected_gravities"], obs["positions"][:, 2]],
-                axis=1,
-            ),
+            obs_buf.copy(),
             self.rewards_buf.copy(),
             self.dones_buf.copy(),
             self.infos_buf,
@@ -90,34 +93,44 @@ class NewtonIdleTask(NewtonBaseTask):
 
         obs = self._get_observations()
 
-        return np.concatenate(
-            [obs["projected_gravities"], obs["positions"][:, 2]],
-            axis=1,
+        reset_buf: np.ndarray = np.zeros(
+            (self.num_envs, self.num_observations), dtype=np.float32
         )
+
+        reset_buf[:, :3] = obs["projected_gravities"]
+        reset_buf[:, 3] = obs["positions"][:, 2]
+
+        return reset_buf
 
     def _get_observations(self) -> VecEnvObs:
         env_observations = self.env.get_observations()
 
         return env_observations
 
-    def _calculate_rewards(
-        self, projected_gravities: np.ndarray, positions: np.ndarray
-    ) -> None:
+    def _calculate_rewards(self) -> None:
+        obs = self._get_observations()
+        positions = obs["positions"]
+        projected_gravities = obs["projected_gravities"]
+
         heights = positions[:, 2]
 
-        gravities = np.tile(
-            self.env.world.physics_sim_view.get_gravity(),
-            (self.num_envs, 1),
+        # normalize gravity and projected gravity
+        gravity = np.array(self.env.world.physics_sim_view.get_gravity())
+        normalized_gravity = gravity / np.linalg.norm(gravity)
+        normalized_gravities = np.repeat(
+            normalized_gravity[np.newaxis, :], len(positions), axis=0
         )
-        gravities = gravities / np.linalg.norm(gravities)
 
-        normalized_projected_gravities = projected_gravities / np.linalg.norm(
-            projected_gravities, axis=1, keepdims=True
+        normalized_projected_gravities = (
+            projected_gravities
+            / np.linalg.norm(projected_gravities, axis=1)[:, np.newaxis]
         )
 
         self.rewards_buf = (
-            np.sum(gravities * normalized_projected_gravities, axis=1) * heights
+            np.sum(normalized_gravities * normalized_projected_gravities, axis=1)
+            * heights
         )
+
         # TODO: should this be here?
         self.rewards_buf = np.clip(
             self.rewards_buf,

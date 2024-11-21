@@ -46,11 +46,6 @@ class BaseEnv(ABC):
         free_device_memory = get_free_gpu_memory()
         assert free_device_memory > 0, "No free GPU memory found"
 
-        sim_params = self.world_settings["sim_params"]
-        # TODO: check if going above free memory is okay
-        sim_params["gpu_found_lost_aggregate_pairs_capacity"] = free_device_memory * 4
-        sim_params["gpu_total_aggregate_pairs_capacity"] = free_device_memory
-
         from omni.isaac.core import World
 
         self.world: World = World(
@@ -60,8 +55,11 @@ class BaseEnv(ABC):
             stage_units_in_meters=self.world_settings["stage_units_in_meters"],
             backend=self.world_settings["backend"],
             device=self.world_settings["device"],
-            sim_params=sim_params,
+            sim_params=self.world_settings["sim_params"],
         )
+
+        self.world.reset()
+        self.world.get_physics_context().enable_ccd(True)
 
         # ensures some base prims exist
 

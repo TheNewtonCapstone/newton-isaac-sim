@@ -14,17 +14,17 @@ from torch import Tensor
 
 
 class NewtonBaseTaskCallback(BaseTaskCallback):
-    def __init__(self, start_check: int, save_path: str):
+    def __init__(self, check_freq: int, save_path: str):
         super().__init__()
 
-        self.start_check: int = start_check
+        self.check_freq: int = check_freq
         self.save_path: str = save_path
         self.best_mean_reward: float = -np.inf
         self.cumulative_reward: Tensor = torch.zeros((1,))
 
     def _init_callback(self) -> None:
         if self.save_path is not None:
-            self.model.save(self.save_path)
+            self.model.save(f"{self.logger.dir}/{self.save_path}")
 
     def _on_step(self) -> bool:
         super()._on_step()
@@ -32,18 +32,21 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
         task: NewtonBaseTask = self.training_env
 
         # Saves best cumulative rewards
-        if self.n_calls > self.start_check:
+        if self.num_timesteps > self.check_freq:
             self.cumulative_reward = np.where(
                 task.dones_buf,
                 np.zeros_like(self.cumulative_reward),
                 self.cumulative_reward + task.rewards_buf.mean().item(),
             )
 
-            if self.cumulative_reward.mean().item() > self.best_mean_reward:
-                self.best_mean_reward = self.cumulative_reward.mean().item()
-                self.model.save(
-                    f"{self.logger.dir}/{self.save_path}_rew_{self.best_mean_reward:.2f}"
-                )
+        if (
+            self.n_calls % self.check_freq == 0
+            and self.cumulative_reward.mean().item() > self.best_mean_reward
+        ):
+            self.best_mean_reward = self.cumulative_reward.mean().item()
+            self.model.save(
+                f"{self.logger.dir}/{self.save_path}_rew_{self.best_mean_reward:.2f}"
+            )
 
         # TODO: metrics about the agent's state & the animation engine
         agent_observations = task.agent.get_observations()
@@ -98,6 +101,8 @@ class NewtonBaseTask(BaseTask):
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:
+        self.progress_buf += 1
+
         return super().step_wait()
 
     @abstractmethod
