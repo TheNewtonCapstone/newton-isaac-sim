@@ -145,7 +145,7 @@ class VecIMU:
             get_euler_xyz,
         )
 
-        # if an offset is present of the COM does not agree with the local origin, the linera velocity has to be
+        # if an offset is present of the COM does not agree with the local origin, the linear velocity has to be
         # transformed taking the angular velocity into account
         linear_velocities += torch.cross(
             angular_velocities,
@@ -154,6 +154,7 @@ class VecIMU:
         )
 
         # numerical derivations
+        # TODO: verify that this is correct
         linear_accelerations = (
             linear_velocities - self._last_linear_velocities
         ) / self.world.get_physics_dt()
@@ -192,4 +193,5 @@ class VecIMU:
         self._last_linear_velocities = linear_velocities.clone()
         self._last_angular_velocities = angular_velocities.clone()
 
+        # TODO: verify the behavior of the projected gravity
         self._projected_gravities = quat_rotate_inverse(rotations, projected_gravities)
