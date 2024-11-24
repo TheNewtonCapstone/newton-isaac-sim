@@ -1,15 +1,12 @@
 from abc import abstractmethod
 from typing import List
 
-from core.globals import LIGHTS_PATH
-from torch import Tensor
-
-import numpy as np
 import torch
 from core.agents import NewtonBaseAgent
 from core.envs import BaseEnv
 from core.terrain import TerrainBuilder
-from core.types import Observations, Settings, Actions
+from core.types import Observations, Settings, Actions, Indices
+from torch import Tensor
 
 
 class NewtonBaseEnv(BaseEnv):
@@ -20,6 +17,7 @@ class NewtonBaseEnv(BaseEnv):
         terrain_builders: List[TerrainBuilder],
         world_settings: Settings,
         randomizer_settings: Settings,
+        inverse_control_frequency: int,
     ):
         super().__init__(
             agent,
@@ -36,43 +34,26 @@ class NewtonBaseEnv(BaseEnv):
             torch.tensor([0.0, 0.0, 0.0, 1.0]), (self.num_envs, 1)
         )
 
+        self._inverse_control_frequency = inverse_control_frequency
+
     @abstractmethod
     def construct(self) -> None:
         super().construct()
 
-        # add light to the scene
-        from omni.isaac.core.utils.prims import create_prim
-        from omni.isaac.core.utils.rotations import euler_angles_to_quat
-
-        create_prim(
-            prim_path=f"{LIGHTS_PATH}/WorldLight",
-            prim_type="DistantLight",
-            orientation=euler_angles_to_quat(np.array([40, 0, 40]), True),
-            attributes={
-                "inputs:intensity": 1500,
-                "inputs:color": (0.93, 0.84, 0.62),
-            },
-        )
-
-        create_prim(
-            prim_path=f"{LIGHTS_PATH}/WorldAntiLight",
-            prim_type="DistantLight",
-            orientation=euler_angles_to_quat(np.array([40, 0, 140]), True),
-            attributes={
-                "inputs:intensity": 500,
-                "inputs:color": (0.63, 0.84, 0.92),
-            },
-        )
-
     @abstractmethod
     def step(self, actions: Actions, render: bool) -> Observations:
-        super().step(actions, render)  # advances the simulation by one step
+        # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
+        for _ in range(self._inverse_control_frequency):
+            super().step(actions, render)  # advances the simulation by one step
 
         return self.get_observations()
 
     @abstractmethod
-    def reset(self) -> Observations:
-        super().reset()
+    def reset(self, indices: Indices = None) -> Observations:
+        super().reset(indices)
+
+        if indices is None:
+            self.world.reset()
 
         return self.get_observations()
 

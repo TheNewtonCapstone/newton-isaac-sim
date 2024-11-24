@@ -114,7 +114,9 @@ class VecIMU:
         return {
             "positions": self._positions,
             "rotations": self._rotations,
+            "linear_velocities": self._linear_velocities,
             "linear_accelerations": self._linear_accelerations,
+            "angular_accelerations": self._angular_accelerations,
             "angular_velocities": self._angular_velocities,
             "projected_gravities": self._projected_gravities,
         }

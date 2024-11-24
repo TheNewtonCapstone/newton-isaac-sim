@@ -1,5 +1,6 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, List
 
+from gymnasium.spaces import Box
 from torch import Tensor
 
 import torch
@@ -14,14 +15,17 @@ class VecJointsController:
         path_expr: str,
         world: World,
         noise_function: Callable[[Tensor], Tensor],
+        joint_constraints: Box,
     ):
         self.path_expr: str = path_expr
 
         self.world: World = world
-        self.articulation_view: Optional[ArticulationView] = None
+        self._articulation_view: Optional[ArticulationView] = None
 
         self._noise_function: NoiseFunction = noise_function
         self._target_joint_positions: Tensor = torch.zeros(0)
+        self._joint_constraints: Box = joint_constraints
+
         self._is_constructed: bool = False
 
         # TODO: add constraints and a per-drive class
@@ -31,7 +35,7 @@ class VecJointsController:
         if not self._is_constructed:
             return 0
 
-        return self.articulation_view
+        return self._articulation_view
 
     @property
     def target_joint_positions(self) -> Tensor:
@@ -43,24 +47,68 @@ class VecJointsController:
 
         from omni.isaac.core.articulations import ArticulationView
 
-        self.articulation_view = ArticulationView(
+        self._articulation_view = ArticulationView(
             self.path_expr,
             name="joints_controller_art_view",
         )
-        self.world.scene.add(self.articulation_view)
+        self.world.scene.add(self._articulation_view)
+
+        self.world.reset()
+
+        assert self._joint_constraints.shape[0] == len(
+            self._articulation_view.joint_names
+        ), "Joint constraints must match the number of joints"
+
+        self._apply_joint_constraints(
+            self._joint_constraints,
+            self._articulation_view.prim_paths,
+            self._articulation_view.joint_names,
+        )
 
         self._is_constructed = True
 
     def step(self, joint_positions: Tensor) -> None:
-        self._target_joint_positions = self._noise_function(joint_positions)
+        assert self._is_constructed, "Joints controller must be constructed first"
+
+        self._target_joint_positions = self._process_joint_positions(
+            joint_positions,
+            self._joint_constraints,
+            self._noise_function,
+        )
 
         # TODO
-        current_joint_positions = self.articulation_view.get_joint_positions()
-        target_joint_positions = self._target_joint_positions
+        self._articulation_view.set_joint_position_targets(self._target_joint_positions)
 
-        joint_positions_velocities = (
-            current_joint_positions - target_joint_positions
-        ) / self.world.get_physics_dt()
-        joint_positions_velocities = joint_positions_velocities.clamp(-2, 2)
+    def _apply_joint_constraints(
+        self,
+        joint_constraints: Box,
+        prim_paths: List[str],
+        joint_names: List[str],
+    ) -> None:
+        from omni.isaac.core.utils.stage import get_current_stage
+        from pxr import UsdPhysics
 
-        self.articulation_view.set_joint_velocities(joint_positions_velocities)
+        stage = get_current_stage()
+
+        for i, prim_path in enumerate(prim_paths):
+            for j, joint_name in enumerate(joint_names):
+                joint_path = f"{prim_path}/{joint_name}"
+
+                joint_limits = UsdPhysics.RevoluteJoint.Get(stage, joint_path)
+                joint_limits.CreateLowerLimitAttr().Set(joint_constraints.low[j].item())
+                joint_limits.GetUpperLimitAttr().Set(joint_constraints.high[j].item())
+
+    def _process_joint_positions(
+        self,
+        joint_positions: Tensor,
+        joint_constraints: Box,
+        noise_function: NoiseFunction,
+    ) -> Tensor:
+        joint_positions = noise_function(joint_positions)
+
+        for i, _ in enumerate(joint_positions):
+            joint_positions = joint_positions.clamp(
+                joint_constraints.low[i], joint_constraints.high[i]
+            )
+
+        return joint_positions

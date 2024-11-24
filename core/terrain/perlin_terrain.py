@@ -1,9 +1,8 @@
-from omni.isaac.core.materials import PhysicsMaterial
-from torch import Tensor
+from perlin_noise import PerlinNoise
 
 import torch
 from core.terrain.terrain import TerrainBuild, TerrainBuilder
-from perlin_noise import PerlinNoise
+from torch import Tensor
 
 
 class PerlinTerrainBuild(TerrainBuild):
@@ -14,11 +13,10 @@ class PerlinTerrainBuild(TerrainBuild):
         height: float,
         position: Tensor,
         path: str,
-        physics_mat: PhysicsMaterial,
         octaves: float,
         noise_scale: float,
     ):
-        super().__init__(size, resolution, height, position, path, physics_mat)
+        super().__init__(size, resolution, height, position, path)
 
         self.octaves = octaves
         self.noise_scale = noise_scale
@@ -56,16 +54,20 @@ class PerlinTerrainBuilder(TerrainBuilder):
         resolution=None,
         height=0.05,
         position=None,
-        path="/World/terrains",
+        path=None,
         octaves: int = 12,
         noise_scale: float = 4,
     ) -> PerlinTerrainBuild:
+        from core.globals import TERRAINS_PATH
+
         if size is None:
             size = [10, 10]
         if resolution is None:
             resolution = [20, 20]
         if position is None:
             position = [0, 0, 0]
+        if path is None:
+            path = TERRAINS_PATH
 
         num_rows = int(size[0] * resolution[0])
         num_cols = int(size[1] * resolution[1])
@@ -81,10 +83,24 @@ class PerlinTerrainBuilder(TerrainBuilder):
                 )
 
         terrain_path = TerrainBuilder._add_heightmap_to_world(
-            heightmap, size, num_cols, num_rows, height, path, "perlin", position
+            heightmap,
+            size,
+            num_cols,
+            num_rows,
+            height,
+            path,
+            "perlin",
+            position,
         )
 
-        physics_material = PhysicsMaterial(terrain_path)
+        from core.utils.physics import set_physics_properties
+
+        set_physics_properties(
+            terrain_path,
+            static_friction=1.0,
+            dynamic_friction=1.0,
+            restitution=1.0,
+        )
 
         return PerlinTerrainBuild(
             size,
@@ -92,7 +108,6 @@ class PerlinTerrainBuilder(TerrainBuilder):
             height,
             position,
             terrain_path,
-            physics_material,
             octaves,
             noise_scale,
         )

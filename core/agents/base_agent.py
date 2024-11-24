@@ -23,7 +23,7 @@ class BaseAgent(ABC):
 
         create_prim(
             prim_path=self.path,
-            prim_type="Group",
+            prim_type="Scope",
         )
 
     @abstractmethod

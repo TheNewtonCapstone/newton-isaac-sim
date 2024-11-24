@@ -1,6 +1,4 @@
-import torch
-
-from torch import Tensor
+from abc import abstractmethod
 
 from core.agents import NewtonBaseAgent
 from core.globals import TERRAINS_PATH, PHYSICS_SCENE_PATH, COLLISION_GROUPS_PATH
@@ -35,15 +33,18 @@ class NewtonVecAgent(NewtonBaseAgent):
         agent_paths = cloner.generate_paths(self.path[:-2], self.num_agents)
 
         cloner.filter_collisions(
+            prim_paths=agent_paths,
             physicsscene_path=PHYSICS_SCENE_PATH,
             collision_root_path=COLLISION_GROUPS_PATH,
-            prim_paths=agent_paths,
             global_paths=[TERRAINS_PATH],
         )
         cloner.clone(
             source_prim_path=self.path,
             prim_paths=agent_paths,
+            replicate_physics=True,
         )
+
+        self.world.reset()
 
         from omni.isaac.core.articulations import ArticulationView
 
@@ -59,3 +60,9 @@ class NewtonVecAgent(NewtonBaseAgent):
         self.world.reset()
 
         self._is_constructed = True
+
+    def step(self, actions: Actions) -> None:
+        return super().step(actions)
+
+    def get_observations(self) -> Observations:
+        return super().get_observations()

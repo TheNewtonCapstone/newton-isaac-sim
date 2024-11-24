@@ -1,6 +1,8 @@
 from abc import abstractmethod
 from typing import Optional
 
+import numpy as np
+
 import torch
 from core.agents import BaseAgent
 from core.sensors import VecIMU
@@ -25,12 +27,14 @@ class NewtonBaseAgent(BaseAgent):
     def construct(self, world: World) -> None:
         super().construct(world)
 
+    @abstractmethod
     def step(self, actions: Actions) -> None:
         super().step(actions)
 
         new_joint_positions = torch.from_numpy(actions).to(self.world.device)
         self.joints_controller.step(new_joint_positions)
 
+    @abstractmethod
     def get_observations(self) -> Observations:
         imu_data_tensor = self.imu.get_data(recalculate=True)
         imu_data_numpy = {}
@@ -53,9 +57,15 @@ class NewtonBaseAgent(BaseAgent):
         self.imu.construct()
 
     def _construct_joints_controller(self, path_expr: str):
+        from gymnasium.spaces import Box
+
         self.joints_controller = VecJointsController(
             path_expr=path_expr,
             world=self.world,
             noise_function=lambda x: x,
+            joint_constraints=Box(
+                low=np.array([-15, -90, -45] * 4),
+                high=np.array([15, 90, 180] * 4),
+            ),
         )
         self.joints_controller.construct()
