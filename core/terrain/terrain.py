@@ -2,7 +2,6 @@ from abc import abstractmethod, ABC
 from typing import Optional
 
 import torch
-from omni.isaac.core.materials import PhysicsMaterial
 from torch import Tensor
 
 
@@ -14,7 +13,6 @@ class TerrainBuild:
         height: float,
         position: Tensor,
         path: str,
-        physics_mat: Optional[PhysicsMaterial],
     ):
         self.size = size
         self.position = position
@@ -22,7 +20,6 @@ class TerrainBuild:
         self.height = height
 
         self.path = path
-        self.physics_mat = physics_mat
 
 
 class TerrainBuilder(ABC):
@@ -31,17 +28,30 @@ class TerrainBuilder(ABC):
         size: Tensor = None,
         resolution: Tensor = None,
         height: float = 1,
-        root_path: str = "/Terrains",
+        root_path: Optional[str] = None,
     ):
+        from core.globals import TERRAINS_PATH
+
         if size is None:
             size = torch.tensor([10, 10])
         if resolution is None:
             resolution = torch.tensor([20, 20])
+        if root_path is None:
+            root_path = TERRAINS_PATH
 
         self.size = size
         self.resolution = resolution
         self.height = height
         self.root_path = root_path
+
+        from omni.isaac.core.utils.prims import create_prim
+        from omni.isaac.core.utils.prims import is_prim_path_valid
+
+        if not is_prim_path_valid(root_path):
+            create_prim(
+                prim_path=root_path,
+                prim_type="Scope",
+            )
 
     def build_from_self(self, position: Tensor) -> TerrainBuild:
         return self.build(
@@ -59,7 +69,7 @@ class TerrainBuilder(ABC):
         resolution: Optional[Tensor] = None,
         height: float = 1,
         position: Optional[Tensor] = None,
-        path: str = "/Terrains",
+        path: Optional[str] = None,
     ) -> TerrainBuild:
         """
         Builds a terrain in the stage, according to the class's implementation.
@@ -158,7 +168,6 @@ class TerrainBuilder(ABC):
 
         num_faces = triangles.shape[0]
         mesh = define_prim(prim_path, "Mesh")
-        # TODO: switch this to the NVIDIA utils API
         mesh.GetAttribute("points").Set(vertices.numpy())
         mesh.GetAttribute("faceVertexIndices").Set(triangles.flatten().numpy())
         mesh.GetAttribute("faceVertexCounts").Set([3] * num_faces)

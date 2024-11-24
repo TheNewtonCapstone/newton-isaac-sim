@@ -1,4 +1,4 @@
-from typing import Dict, Any, Callable, List
+from typing import Dict, Any, Callable, List, Optional
 
 import numpy as np
 import torch
@@ -21,6 +21,7 @@ Observations = Dict[str, np.ndarray]
 
 # Meta
 Settings = Dict[str, Any]
+Indices = Optional[np.ndarray]
 
 # Math
 NoiseFunction = Callable[[torch.Tensor], torch.Tensor]

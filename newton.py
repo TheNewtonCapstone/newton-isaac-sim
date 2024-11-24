@@ -198,6 +198,7 @@ if __name__ == "__main__":
             ),
         ],
         randomizer_settings=randomization_config,
+        inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
     )
 
     # TODO: add a separate playing environment
@@ -217,7 +218,7 @@ if __name__ == "__main__":
         device=rl_config["device"],
         num_envs=rl_config["n_envs"],
         playing=playing,
-        max_episode_length=rl_config["ppo"]["n_steps"],
+        max_episode_length=rl_config["episode_length"],
     )
     callback = NewtonBaseTaskCallback(
         check_freq=64,

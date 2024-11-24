@@ -1,14 +1,11 @@
-import weakref
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
-import omni.timeline
-import torch
 from core.agents import BaseAgent
 from core.domain_randomizer.domain_randomizer import DomainRandomizer
-from core.globals import PHYSICS_SCENE_PATH, TERRAINS_PATH, LIGHTS_PATH
+from core.globals import PHYSICS_PATH, PHYSICS_SCENE_PATH, LIGHTS_PATH
 from core.terrain import TerrainBuilder, TerrainBuild
-from core.types import Settings, Observations, Actions
+from core.types import Settings, Observations, Actions, Indices
 
 
 class BaseEnv(ABC):
@@ -44,11 +41,28 @@ class BaseEnv(ABC):
         from core.utils.gpu import get_free_gpu_memory
 
         free_device_memory = get_free_gpu_memory()
-        assert free_device_memory > 0, "No free GPU memory found"
+        assert free_device_memory > 1000, "No free GPU memory found (>1000)"
+
+        from omni.isaac.core.utils.stage import clear_stage, add_reference_to_stage
+
+        # ensures we have no conflicting stages
+        clear_stage()
+
+        # adds a saved PhysicsScene prim
+        add_reference_to_stage(
+            "assets/physics.usd",
+            prim_path=PHYSICS_PATH,
+        )
+
+        # adds a default lighting setup
+        add_reference_to_stage(
+            "assets/lights.usd",
+            prim_path=LIGHTS_PATH,
+        )
 
         from omni.isaac.core import World
 
-        self.world: World = World(
+        self.world = World(
             physics_prim_path=PHYSICS_SCENE_PATH,
             physics_dt=self.world_settings["physics_dt"],
             rendering_dt=self.world_settings["rendering_dt"],
@@ -57,23 +71,7 @@ class BaseEnv(ABC):
             device=self.world_settings["device"],
             sim_params=self.world_settings["sim_params"],
         )
-
         self.world.reset()
-        self.world.get_physics_context().enable_ccd(True)
-
-        # ensures some base prims exist
-
-        from omni.isaac.core.utils.prims import create_prim
-
-        create_prim(
-            prim_path=LIGHTS_PATH,
-            prim_type="Scope",
-        )
-
-        create_prim(
-            prim_path=TERRAINS_PATH,
-            prim_type="Scope",
-        )
 
     @abstractmethod
     def step(
@@ -81,6 +79,7 @@ class BaseEnv(ABC):
         actions: Actions,
         render: bool,
     ) -> Observations:
+        self._time += 1
 
         # From IsaacLab (SimulationContext)
         # need to do one update to refresh the app
@@ -93,7 +92,7 @@ class BaseEnv(ABC):
         return self.get_observations()
 
     @abstractmethod
-    def reset(self) -> Observations:
+    def reset(self, indices: Indices = None) -> Observations:
         return self.get_observations()
 
     @abstractmethod

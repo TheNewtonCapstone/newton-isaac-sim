@@ -1,8 +1,8 @@
-from omni.isaac.core.materials import PhysicsMaterial
-from torch import Tensor
+from typing import Optional
 
 import torch
 from core.terrain.terrain import TerrainBuild, TerrainBuilder
+from torch import Tensor
 
 
 class FlatTerrainBuild(TerrainBuild):
@@ -11,7 +11,6 @@ class FlatTerrainBuild(TerrainBuild):
         size: Tensor,
         position: Tensor,
         path: str,
-        physics_mat: PhysicsMaterial,
     ):
         super().__init__(
             size,
@@ -19,7 +18,6 @@ class FlatTerrainBuild(TerrainBuild):
             0,
             position,
             path,
-            physics_mat,
         )
 
 
@@ -30,7 +28,7 @@ class FlatTerrainBuilder(TerrainBuilder):
         size: Tensor = None,
         resolution: Tensor = None,
         height: float = 0,
-        root_path: str = "/Terrains",
+        root_path: Optional[str] = None,
     ):
         super().__init__(size, resolution, height, root_path)
 
@@ -54,29 +52,46 @@ class FlatTerrainBuilder(TerrainBuilder):
         resolution=None,
         height=0,
         position=None,
-        path="/Terrains",
+        path=None,
     ) -> FlatTerrainBuild:
         """
         Notes:
             Resolution and height are not used for flat terrain.
         """
 
+        from core.globals import TERRAINS_PATH
+
         if size is None:
             size = [20, 20]
         if position is None:
             position = [0, 0, 0]
+        if path is None:
+            path = TERRAINS_PATH
 
         heightmap = torch.tensor([[0.0] * 2] * 2)
 
         terrain_path = TerrainBuilder._add_heightmap_to_world(
-            heightmap, size, 2, 2, height, path, "flat", position
+            heightmap,
+            size,
+            2,
+            2,
+            height,
+            path,
+            "flat",
+            position,
         )
 
-        physics_mat = PhysicsMaterial(terrain_path)
+        from core.utils.physics import set_physics_properties
+
+        set_physics_properties(
+            terrain_path,
+            static_friction=1.0,
+            dynamic_friction=1.0,
+            restitution=1.0,
+        )
 
         return FlatTerrainBuild(
             size,
             position,
             terrain_path,
-            physics_mat,
         )

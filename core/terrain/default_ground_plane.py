@@ -32,7 +32,7 @@ class DefaultGroundPlaneBuilder(TerrainBuilder):
         resolution=None,
         height=0,
         position=None,
-        path="/Terrains",
+        path=None,
     ) -> DefaultGroundPlaneBuild:
         """
         Notes:

@@ -1,13 +1,14 @@
-physics_dt: 0.02000
+physics_dt: 0.01000
 stage_units_in_meters: 1.0
 rendering_dt: 0.01667
 backend: torch
 device: cuda
 sim_params:
-  substeps: 4
+  substeps: 1
   solver_type: 1 # 0: PGS, 1: TGS
   enable_stabilization: true # true for a 2nd pass to stabilize
-  use_gpu_pipeline: true # true for GPU dynamics (i.e. deformables)
+  enable_scene_query_support: false # true to interact with the scene with the mouse
 
+  use_gpu_pipeline: true # true for GPU dynamics (i.e. deformables)
   gpu_found_lost_aggregate_pairs_capacity: 16777216
   gpu_total_aggregate_pairs_capacity: 65536

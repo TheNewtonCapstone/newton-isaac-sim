@@ -8,6 +8,7 @@ from core.agents import NewtonBaseAgent
 from core.animation import AnimationEngine
 from core.envs.newton_base_env import NewtonBaseEnv
 from core.tasks.base_task import BaseTask, BaseTaskCallback
+from core.types import Actions
 from gymnasium import Space
 from gymnasium.spaces import Box
 from torch import Tensor
@@ -90,6 +91,10 @@ class NewtonBaseTask(BaseTask):
         self.playing_env: NewtonBaseEnv = playing_env
         self.agent: NewtonBaseAgent = agent
 
+        self.last_actions_buf: Actions = np.zeros(
+            (self.num_envs, self.num_actions), dtype=np.float32
+        )
+
     @abstractmethod
     def construct(self) -> None:
         super().construct()
@@ -108,7 +113,5 @@ class NewtonBaseTask(BaseTask):
     @abstractmethod
     def reset(self) -> VecEnvObs:
         super().reset()
-
-        self.env.reset()
 
         return {}
