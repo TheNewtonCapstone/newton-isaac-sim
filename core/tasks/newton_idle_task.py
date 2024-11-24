@@ -9,8 +9,8 @@ from gymnasium.spaces import Box
 
 
 class NewtonIdleTaskCallback(NewtonBaseTaskCallback):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, check_freq: int, save_path: str):
+        super().__init__(check_freq, save_path)
 
         self.training_env: NewtonIdleTask
 
@@ -34,9 +34,14 @@ class NewtonIdleTask(NewtonBaseTask):
         playing: bool,
         max_episode_length: int,
     ):
+        # TODO: make the ROMs used in the observation_space & action_space configurable
         self.observation_space: Box = Box(
-            low=np.array([-1.0] * 3 + [-np.Inf] * 7),
-            high=np.array([1.0] * 3 + [np.Inf] * 7),
+            low=np.array(
+                [-1.0] * 3 + [-np.Inf] * 7 + [-15, -90, -45] * 8 + [-np.Inf] * 12,
+            ),
+            high=np.array(
+                [1.0] * 3 + [np.Inf] * 7 + [15, 90, 180] * 8 + [np.Inf] * 12,
+            ),
         )
 
         self.action_space: Box = Box(
@@ -63,7 +68,7 @@ class NewtonIdleTask(NewtonBaseTask):
             self.reward_space,
         )
 
-        self.min_height: float = 0.2
+        self.reset_height: float = 0.1
 
     def construct(self) -> None:
         super().construct()
@@ -83,11 +88,20 @@ class NewtonIdleTask(NewtonBaseTask):
         obs_buf[:, 3:6] = obs["linear_accelerations"]
         obs_buf[:, 6:9] = obs["angular_velocities"]
         obs_buf[:, 9] = heights
+        obs_buf[:, 10:22] = self.actions_buf
+        obs_buf[:, 22:34] = (
+            self.agent.newton_art_view.get_joint_positions().cpu().numpy()
+        )
+        obs_buf[:, 34:46] = (
+            self.agent.newton_art_view.get_joint_velocities().cpu().numpy()
+        )
 
         self._calculate_rewards()
 
+        self.last_actions_buf = self.actions_buf.copy()
+
         # terminated
-        self.dones_buf = np.where(heights <= self.min_height, True, False)
+        self.dones_buf = np.where(heights <= self.reset_height, True, False)
         self.dones_buf = np.where(heights >= 2.0, True, self.dones_buf)
 
         self.dones_buf = np.where(
@@ -104,8 +118,7 @@ class NewtonIdleTask(NewtonBaseTask):
         # clears the last 2 observations & the progress if any Newton is reset
         obs_buf[resets, :] = 0.0
         self.progress_buf[resets] = 0
-
-        self.last_actions_buf = self.actions_buf.copy()
+        self.last_actions_buf[resets, :] = 0.0
 
         return (
             obs_buf.copy(),
@@ -129,15 +142,25 @@ class NewtonIdleTask(NewtonBaseTask):
         obs_buf[:, 3:6] = obs["linear_accelerations"]
         obs_buf[:, 6:9] = obs["angular_velocities"]
         obs_buf[:, 9] = obs["positions"][:, 2]
+        obs_buf[:, 10:22] = self.actions_buf
+        obs_buf[:, 22:34] = (
+            self.agent.newton_art_view.get_joint_positions().cpu().numpy()
+        )
+        obs_buf[:, 34:46] = (
+            self.agent.newton_art_view.get_joint_velocities().cpu().numpy()
+        )
 
         return obs_buf
 
     def _get_observations(self) -> VecEnvObs:
+        # TODO: make this function return an observation np.ndarray instead of a dict
         env_observations = self.env.get_observations()
 
         return env_observations
 
     def _calculate_rewards(self) -> None:
+        # TODO: rework rewards for Newton*Tasks
+
         obs = self._get_observations()
         positions = obs["positions"]
         angular_velocities = obs["angular_velocities"]
@@ -148,6 +171,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         heights = positions[:, 2]
 
+        # TODO: rework rewards into configurations
         linear_velocity_xy_reward = (
             np.exp(-np.sum(np.square(linear_velocities[:, :2])) / 0.25) * 1.0
         )
@@ -174,7 +198,9 @@ class NewtonIdleTask(NewtonBaseTask):
             + joint_acceleration_reward
         )
 
-        self.rewards_buf = np.where(heights <= self.min_height, -2.0, self.rewards_buf)
+        self.rewards_buf = np.where(
+            heights <= self.reset_height, -2.0, self.rewards_buf
+        )
         self.rewards_buf = np.where(heights >= 2.0, -2.0, self.rewards_buf)
 
         # TODO: should this be here?

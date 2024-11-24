@@ -95,8 +95,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                     max_distance=max_ray_test_dist,
                 )
 
-                if dist != -1:
-                    min_ray_dist = min(dist, min_ray_dist)
+                min_ray_dist = min(dist, min_ray_dist)
 
             # we want all agents to be evenly split across all terrains
             agent_batch_start = i * agent_batch_qty
@@ -107,7 +106,8 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                     [
                         terrain_spawn_position[0],
                         terrain_spawn_position[1],
-                        0.6,
+                        0.35
+                        + terrain_builder.height,  # TODO: make this a better computed value
                     ]
                 )
             )

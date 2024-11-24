@@ -107,8 +107,10 @@ class VecJointsController:
         joint_positions = noise_function(joint_positions)
 
         for i, _ in enumerate(joint_positions):
-            joint_positions = joint_positions.clamp(
-                joint_constraints.low[i], joint_constraints.high[i]
+            joint_positions[i] = torch.clamp(
+                joint_positions[i],
+                torch.from_numpy(joint_constraints.low).to(device=self.world.device),
+                torch.from_numpy(joint_constraints.high).to(device=self.world.device),
             )
 
         return joint_positions

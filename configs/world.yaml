@@ -6,9 +6,19 @@ device: cuda
 sim_params:
   substeps: 1
   solver_type: 1 # 0: PGS, 1: TGS
-  enable_stabilization: true # true for a 2nd pass to stabilize
-  enable_scene_query_support: false # true to interact with the scene with the mouse
+  enable_stabilization: True # true for a 2nd pass to stabilize
+  enable_scene_query_support: False # true to interact with the scene with the mouse
 
-  use_gpu_pipeline: true # true for GPU dynamics (i.e. deformables)
-  gpu_found_lost_aggregate_pairs_capacity: 16777216
-  gpu_total_aggregate_pairs_capacity: 65536
+  use_gpu_pipeline: True # true for GPU dynamics (i.e. deformables)
+
+  # GPU buffers
+  gpu_max_rigid_contact_count: 524288
+  gpu_max_rigid_patch_count: 163840
+  gpu_found_lost_pairs_capacity: 4194304
+  gpu_found_lost_aggregate_pairs_capacity: 33554432
+  gpu_total_aggregate_pairs_capacity: 4194304
+  gpu_max_soft_body_contacts: 1048576
+  gpu_max_particle_contacts: 1048576
+  gpu_heap_capacity: 134217728
+  gpu_temp_buffer_capacity: 33554432
+  gpu_max_num_partitions: 8

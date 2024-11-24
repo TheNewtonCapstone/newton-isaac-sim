@@ -33,7 +33,7 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
         task: NewtonBaseTask = self.training_env
 
         # Saves best cumulative rewards
-        if self.num_timesteps > self.check_freq:
+        if self.n_calls > self.check_freq:
             self.cumulative_reward = np.where(
                 task.dones_buf,
                 np.zeros_like(self.cumulative_reward),
@@ -49,9 +49,28 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
                 f"{self.logger.dir}/{self.save_path}_rew_{self.best_mean_reward:.2f}"
             )
 
-        # TODO: metrics about the agent's state & the animation engine
+        # TODO: better metrics about the agent's state & the animation engine
         agent_observations = task.agent.get_observations()
-        self.logger.record("agent/observations", agent_observations)
+        self.logger.record(
+            "observations/positions",
+            np.linalg.norm(agent_observations["positions"].mean()),
+        )
+        self.logger.record(
+            "observations/linear_accelerations",
+            np.linalg.norm(agent_observations["linear_accelerations"].mean()),
+        )
+        self.logger.record(
+            "observations/linear_velocities",
+            np.linalg.norm(agent_observations["linear_velocities"].mean()),
+        )
+        self.logger.record(
+            "observations/angular_velocities",
+            np.linalg.norm(agent_observations["angular_velocities"].mean()),
+        )
+        self.logger.record(
+            "observations/projected_gravities",
+            np.linalg.norm(agent_observations["projected_gravities"].mean()),
+        )
 
         return True
 
