@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from core.agents import NewtonBaseAgent
 from core.envs import BaseEnv, NewtonBaseEnv
-from core.terrain import TerrainBuilder
+from core.terrain import BaseTerrainBuilder
 from core.types import Observations, Settings, Actions, Indices
 
 
@@ -16,7 +16,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         self,
         agent: NewtonBaseAgent,
         num_envs: int,
-        terrain_builders: List[TerrainBuilder],
+        terrain_builders: List[BaseTerrainBuilder],
         world_settings: Settings,
         randomizer_settings: Settings,
         inverse_control_frequency: int,

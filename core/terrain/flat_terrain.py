@@ -1,11 +1,11 @@
 from typing import Optional
 
 import torch
-from core.terrain.terrain import TerrainBuild, TerrainBuilder
+from core.terrain.terrain import BaseTerrainBuild, BaseTerrainBuilder
 from torch import Tensor
 
 
-class FlatTerrainBuild(TerrainBuild):
+class FlatBaseTerrainBuild(BaseTerrainBuild):
     def __init__(
         self,
         size: Tensor,
@@ -22,7 +22,7 @@ class FlatTerrainBuild(TerrainBuild):
 
 
 # detail does not affect the flat terrain, the number of vertices is determined by the size
-class FlatTerrainBuilder(TerrainBuilder):
+class FlatBaseTerrainBuilder(BaseTerrainBuilder):
     def __init__(
         self,
         size: Tensor = None,
@@ -32,7 +32,7 @@ class FlatTerrainBuilder(TerrainBuilder):
     ):
         super().__init__(size, resolution, height, root_path)
 
-    def build_from_self(self, position: Tensor) -> FlatTerrainBuild:
+    def build_from_self(self, position: Tensor) -> FlatBaseTerrainBuild:
         """
         Notes:
             Resolution and height are not used for flat terrain.
@@ -53,7 +53,7 @@ class FlatTerrainBuilder(TerrainBuilder):
         height=0,
         position=None,
         path=None,
-    ) -> FlatTerrainBuild:
+    ) -> FlatBaseTerrainBuild:
         """
         Notes:
             Resolution and height are not used for flat terrain.
@@ -70,7 +70,7 @@ class FlatTerrainBuilder(TerrainBuilder):
 
         heightmap = torch.tensor([[0.0] * 2] * 2)
 
-        terrain_path = TerrainBuilder._add_heightmap_to_world(
+        terrain_path = BaseTerrainBuilder._add_heightmap_to_world(
             heightmap,
             size,
             2,
@@ -87,10 +87,10 @@ class FlatTerrainBuilder(TerrainBuilder):
             terrain_path,
             static_friction=1.0,
             dynamic_friction=1.0,
-            restitution=1.0,
+            restitution=0.0,
         )
 
-        return FlatTerrainBuild(
+        return FlatBaseTerrainBuild(
             size,
             position,
             terrain_path,

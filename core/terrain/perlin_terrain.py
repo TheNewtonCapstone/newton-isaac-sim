@@ -1,11 +1,11 @@
 from perlin_noise import PerlinNoise
 
 import torch
-from core.terrain.terrain import TerrainBuild, TerrainBuilder
+from core.terrain.terrain import BaseTerrainBuild, BaseTerrainBuilder
 from torch import Tensor
 
 
-class PerlinTerrainBuild(TerrainBuild):
+class PerlinBaseTerrainBuild(BaseTerrainBuild):
     def __init__(
         self,
         size: Tensor,
@@ -22,7 +22,7 @@ class PerlinTerrainBuild(TerrainBuild):
         self.noise_scale = noise_scale
 
 
-class PerlinTerrainBuilder(TerrainBuilder):
+class PerlinBaseTerrainBuilder(BaseTerrainBuilder):
     def __init__(
         self,
         size: Tensor = None,
@@ -37,7 +37,7 @@ class PerlinTerrainBuilder(TerrainBuilder):
         self.octaves = octave
         self.noise_scale = noise_scale
 
-    def build_from_self(self, position: Tensor) -> PerlinTerrainBuild:
+    def build_from_self(self, position: Tensor) -> PerlinBaseTerrainBuild:
         return self.build(
             self.size,
             self.resolution,
@@ -57,7 +57,7 @@ class PerlinTerrainBuilder(TerrainBuilder):
         path=None,
         octaves: int = 12,
         noise_scale: float = 4,
-    ) -> PerlinTerrainBuild:
+    ) -> PerlinBaseTerrainBuild:
         from core.globals import TERRAINS_PATH
 
         if size is None:
@@ -82,7 +82,7 @@ class PerlinTerrainBuilder(TerrainBuilder):
                     [i / num_rows * noise_scale, j / num_cols * noise_scale]
                 )
 
-        terrain_path = TerrainBuilder._add_heightmap_to_world(
+        terrain_path = BaseTerrainBuilder._add_heightmap_to_world(
             heightmap,
             size,
             num_cols,
@@ -99,10 +99,10 @@ class PerlinTerrainBuilder(TerrainBuilder):
             terrain_path,
             static_friction=1.0,
             dynamic_friction=1.0,
-            restitution=1.0,
+            restitution=0.0,
         )
 
-        return PerlinTerrainBuild(
+        return PerlinBaseTerrainBuild(
             size,
             resolution,
             height,
