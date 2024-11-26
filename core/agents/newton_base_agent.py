@@ -64,7 +64,7 @@ class NewtonBaseAgent(BaseAgent):
             world=self.world,
             noise_function=lambda x: x,
             joint_constraints=Box(
-                low=np.array([-15, -90, -45] * 4),
+                low=np.array([-15, -90, -180] * 4),
                 high=np.array([15, 90, 180] * 4),
             ),
         )

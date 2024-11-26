@@ -12,13 +12,13 @@ sim_params:
   use_gpu_pipeline: True # true for GPU dynamics (i.e. deformables)
 
   # GPU buffers
-  gpu_max_rigid_contact_count: 524288
-  gpu_max_rigid_patch_count: 163840
-  gpu_found_lost_pairs_capacity: 4194304
-  gpu_found_lost_aggregate_pairs_capacity: 33554432
+  gpu_max_rigid_contact_count: 2097152
+  gpu_max_rigid_patch_count: 327680
+  gpu_found_lost_pairs_capacity: 16776216
+  gpu_found_lost_aggregate_pairs_capacity: 53850732
   gpu_total_aggregate_pairs_capacity: 4194304
-  gpu_max_soft_body_contacts: 1048576
-  gpu_max_particle_contacts: 1048576
+  gpu_max_soft_body_contacts: 1024 # Soft body contacts are not used for Newton-related sims, so we keep it low
+  gpu_max_particle_contacts: 1024 # Particle contacts are not used for Newton-related sims, so we keep it low
   gpu_heap_capacity: 134217728
   gpu_temp_buffer_capacity: 33554432
   gpu_max_num_partitions: 8
