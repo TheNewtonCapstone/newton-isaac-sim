@@ -32,8 +32,11 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 
         task: NewtonBaseTask = self.training_env
 
+        can_check = self.n_calls > self.check_freq
+        can_save = self.n_calls % self.check_freq == 0
+
         # Saves best cumulative rewards
-        if self.n_calls > self.check_freq:
+        if can_check:
             self.cumulative_reward = np.where(
                 task.dones_buf,
                 np.zeros_like(self.cumulative_reward),
@@ -41,7 +44,8 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
             )
 
         if (
-            self.n_calls % self.check_freq == 0
+            can_check
+            and can_save
             and self.cumulative_reward.mean().item() > self.best_mean_reward
         ):
             self.best_mean_reward = self.cumulative_reward.mean().item()

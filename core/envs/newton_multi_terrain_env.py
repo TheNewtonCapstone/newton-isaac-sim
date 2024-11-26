@@ -133,42 +133,6 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
     def reset(self, indices: Indices = None) -> Observations:
         super().reset(indices)
 
-        indices = (
-            torch.from_numpy(indices)
-            if indices is not None
-            else torch.arange(self.num_envs)
-        )
-
-        num_to_reset = indices.shape[0]
-
-        self.agent.newton_art_view.set_world_poses(
-            positions=self.reset_newton_positions[indices],
-            orientations=self.reset_newton_rotations[indices],
-            indices=indices,
-        )
-
-        # using set_velocities instead of individual methods (lin & ang),
-        # because it's the only method supported in the GPU pipeline
-        self.agent.newton_art_view.set_velocities(
-            torch.zeros((num_to_reset, 6), dtype=torch.float32),
-            indices,
-        )
-
-        self.agent.newton_art_view.set_joint_efforts(
-            torch.zeros((num_to_reset, 12), dtype=torch.float32),
-            indices,
-        )
-
-        self.agent.newton_art_view.set_joint_velocities(
-            torch.zeros((num_to_reset, 12), dtype=torch.float32),
-            indices,
-        )
-
-        self.agent.newton_art_view.set_joint_positions(
-            torch.zeros((num_to_reset, 12), dtype=torch.float32),
-            indices,
-        )
-
         return self.get_observations()
 
     def get_observations(self) -> Observations:

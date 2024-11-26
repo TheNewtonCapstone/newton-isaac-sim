@@ -55,6 +55,45 @@ class NewtonBaseEnv(BaseEnv):
         if indices is None:
             self.world.reset()
 
+            indices = torch.arange(self.num_envs)
+        else:
+            indices = torch.from_numpy(indices)
+
+        num_to_reset = indices.shape[0]
+
+        self.agent.newton_art_view.set_world_poses(
+            positions=self.reset_newton_positions[indices],
+            orientations=self.reset_newton_rotations[indices],
+            indices=indices,
+        )
+
+        # using set_velocities instead of individual methods (lin & ang),
+        # because it's the only method supported in the GPU pipeline
+        self.agent.newton_art_view.set_velocities(
+            torch.zeros((num_to_reset, 6), dtype=torch.float32),
+            indices,
+        )
+
+        self.agent.newton_art_view.set_joint_efforts(
+            torch.zeros((num_to_reset, 12), dtype=torch.float32),
+            indices,
+        )
+
+        self.agent.newton_art_view.set_joint_velocities(
+            torch.zeros((num_to_reset, 12), dtype=torch.float32),
+            indices,
+        )
+
+        joint_positions = torch.tensor(
+            [0.0, 0.0, 0.0] * 4,
+            dtype=torch.float32,
+        ).repeat(num_to_reset, 1)
+
+        self.agent.newton_art_view.set_joint_positions(
+            joint_positions,
+            indices,
+        )
+
         return self.get_observations()
 
     @abstractmethod

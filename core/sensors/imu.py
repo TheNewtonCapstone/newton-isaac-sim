@@ -193,5 +193,4 @@ class VecIMU:
         self._last_linear_velocities = linear_velocities.clone()
         self._last_angular_velocities = angular_velocities.clone()
 
-        # TODO: verify the behavior of the projected gravity
         self._projected_gravities = quat_rotate_inverse(rotations, projected_gravities)

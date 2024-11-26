@@ -37,7 +37,7 @@ class NewtonIdleTask(NewtonBaseTask):
         # TODO: make the ROMs used in the observation_space & action_space configurable
         self.observation_space: Box = Box(
             low=np.array(
-                [-1.0] * 3 + [-np.Inf] * 7 + [-15, -90, -45] * 8 + [-np.Inf] * 12,
+                [-1.0] * 3 + [-np.Inf] * 7 + [-15, -90, -180] * 8 + [-np.Inf] * 12,
             ),
             high=np.array(
                 [1.0] * 3 + [np.Inf] * 7 + [15, 90, 180] * 8 + [np.Inf] * 12,
@@ -45,7 +45,7 @@ class NewtonIdleTask(NewtonBaseTask):
         )
 
         self.action_space: Box = Box(
-            low=np.array([-15, -90, -45] * 4),
+            low=np.array([-15, -90, -180] * 4),
             high=np.array([15, 90, 180] * 4),
         )
 
@@ -168,27 +168,26 @@ class NewtonIdleTask(NewtonBaseTask):
         joint_accelerations = (
             self.agent.newton_art_view.get_applied_joint_efforts().cpu().numpy()
         )
+        joint_positions = self.agent.newton_art_view.get_joint_positions().cpu().numpy()
 
         heights = positions[:, 2]
 
         # TODO: rework rewards into configurations
         linear_velocity_xy_reward = (
-            np.exp(-np.sum(np.square(linear_velocities[:, :2])) / 0.25) * 1.0
+            np.exp(-np.sum(np.square(linear_velocities[:, :2])) * 4.0) * 1.0
         )
-        linear_velocity_z_reward = (
-            np.exp(-np.sum(np.square(linear_velocities[:, 2])) / 0.25) * -0.03
-        )
+        linear_velocity_z_reward = np.square(linear_velocities[:, 2]) * -0.03
         angular_velocity_z_reward = (
-            np.exp(-np.sum(np.square(angular_velocities[:, 2])) / 0.25) * 0.5
+            np.exp(-np.square(angular_velocities[:, 2]) * 4.0) * 0.5
         )
 
         action_rate_reward = (
-            np.sum(np.square(self.actions_buf - self.last_actions_buf)) * 0.2
-        ) * -0.006
-
-        joint_acceleration_reward = (
-            np.exp(-np.sum(np.square(joint_accelerations)) / 0.25) * -0.0003
+            np.sum(np.square(self.actions_buf - self.last_actions_buf)) * -0.006
         )
+
+        joint_acceleration_reward = np.sum(np.square(joint_accelerations)) * -0.0003
+
+        cosmetic_reward = np.sum(np.abs(joint_positions)) * -0.06
 
         self.rewards_buf = (
             linear_velocity_xy_reward
@@ -196,6 +195,7 @@ class NewtonIdleTask(NewtonBaseTask):
             + angular_velocity_z_reward
             + action_rate_reward
             + joint_acceleration_reward
+            + cosmetic_reward
         )
 
         self.rewards_buf = np.where(
