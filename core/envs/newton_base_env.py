@@ -4,7 +4,7 @@ from typing import List
 import torch
 from core.agents import NewtonBaseAgent
 from core.envs import BaseEnv
-from core.terrain import TerrainBuilder
+from core.terrain import BaseTerrainBuilder
 from core.types import Observations, Settings, Actions, Indices
 from torch import Tensor
 
@@ -14,7 +14,7 @@ class NewtonBaseEnv(BaseEnv):
         self,
         agent: NewtonBaseAgent,
         num_envs: int,
-        terrain_builders: List[TerrainBuilder],
+        terrain_builders: List[BaseTerrainBuilder],
         world_settings: Settings,
         randomizer_settings: Settings,
         inverse_control_frequency: int,

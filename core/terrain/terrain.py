@@ -5,7 +5,7 @@ import torch
 from torch import Tensor
 
 
-class TerrainBuild:
+class BaseTerrainBuild:
     def __init__(
         self,
         size: Tensor,
@@ -22,7 +22,7 @@ class TerrainBuild:
         self.path = path
 
 
-class TerrainBuilder(ABC):
+class BaseTerrainBuilder(ABC):
     def __init__(
         self,
         size: Tensor = None,
@@ -53,7 +53,7 @@ class TerrainBuilder(ABC):
                 prim_type="Scope",
             )
 
-    def build_from_self(self, position: Tensor) -> TerrainBuild:
+    def build_from_self(self, position: Tensor) -> BaseTerrainBuild:
         return self.build(
             self.size,
             self.resolution,
@@ -70,7 +70,7 @@ class TerrainBuilder(ABC):
         height: float = 1,
         position: Optional[Tensor] = None,
         path: Optional[str] = None,
-    ) -> TerrainBuild:
+    ) -> BaseTerrainBuild:
         """
         Builds a terrain in the stage, according to the class's implementation.
 
@@ -94,11 +94,11 @@ class TerrainBuilder(ABC):
         builder_name: str,
         position: Tensor,
     ) -> str:
-        vertices, triangles = TerrainBuilder._heightmap_to_mesh(
+        vertices, triangles = BaseTerrainBuilder._heightmap_to_mesh(
             heightmap, size, num_cols, num_rows, height
         )
 
-        return TerrainBuilder._add_mesh_to_world(
+        return BaseTerrainBuilder._add_mesh_to_world(
             vertices, triangles, base_path, builder_name, size, position
         )
 

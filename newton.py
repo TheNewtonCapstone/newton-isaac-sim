@@ -130,8 +130,8 @@ if __name__ == "__main__":
     from core.envs import NewtonMultiTerrainEnv
     from core.agents import NewtonVecAgent
 
-    from core.terrain.flat_terrain import FlatTerrainBuilder
-    from core.terrain.perlin_terrain import PerlinTerrainBuilder
+    from core.terrain.flat_terrain import FlatBaseTerrainBuilder
+    from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
 
     # ---------- #
     # SIMULATION #
@@ -143,7 +143,7 @@ if __name__ == "__main__":
         env = NewtonMultiTerrainEnv(
             agent=newton,
             num_envs=rl_config["n_envs"],
-            terrain_builders=[PerlinTerrainBuilder(), FlatTerrainBuilder()],
+            terrain_builders=[PerlinBaseTerrainBuilder(), FlatBaseTerrainBuilder()],
             world_settings=world_config,
             randomizer_settings=randomization_config,
         )
@@ -174,22 +174,22 @@ if __name__ == "__main__":
         num_envs=rl_config["n_envs"],
         world_settings=world_config,
         terrain_builders=[
-            FlatTerrainBuilder(size=terrains_size),
-            PerlinTerrainBuilder(
+            FlatBaseTerrainBuilder(size=terrains_size),
+            PerlinBaseTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.05,
                 octave=4,
                 noise_scale=2,
             ),
-            PerlinTerrainBuilder(
+            PerlinBaseTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.03,
                 octave=8,
                 noise_scale=4,
             ),
-            PerlinTerrainBuilder(
+            PerlinBaseTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.02,

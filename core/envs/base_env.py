@@ -4,7 +4,7 @@ from typing import List, Optional
 from core.agents import BaseAgent
 from core.domain_randomizer.domain_randomizer import DomainRandomizer
 from core.globals import PHYSICS_PATH, PHYSICS_SCENE_PATH, LIGHTS_PATH
-from core.terrain import TerrainBuilder, TerrainBuild
+from core.terrain import BaseTerrainBuilder, BaseTerrainBuild
 from core.types import Settings, Observations, Actions, Indices
 
 
@@ -13,7 +13,7 @@ class BaseEnv(ABC):
         self,
         agent: BaseAgent,
         num_envs: int,
-        terrain_builders: List[TerrainBuilder],
+        terrain_builders: List[BaseTerrainBuilder],
         world_settings: Settings,
         randomizer_settings: Settings,
     ) -> None:
@@ -24,8 +24,8 @@ class BaseEnv(ABC):
         self.world: Optional[World] = None
         self.world_settings = world_settings
 
-        self.terrain_builders: List[TerrainBuilder] = terrain_builders
-        self.terrain_builds: List[TerrainBuild] = []
+        self.terrain_builders: List[BaseTerrainBuilder] = terrain_builders
+        self.terrain_builds: List[BaseTerrainBuild] = []
 
         self.domain_randomizer: DomainRandomizer = None  # TODO
         self.randomizer_settings: Settings = randomizer_settings

@@ -1,9 +1,9 @@
 from torch import Tensor, tensor
 
-from core.terrain.terrain import TerrainBuilder, TerrainBuild
+from core.terrain.terrain import BaseTerrainBuilder, BaseTerrainBuild
 
 
-class DefaultGroundPlaneBuild(TerrainBuild):
+class DefaultGroundPlaneBuildBase(BaseTerrainBuild):
     def __init__(
         self,
         path: str,
@@ -11,8 +11,8 @@ class DefaultGroundPlaneBuild(TerrainBuild):
         super().__init__(tensor([]), tensor([]), 0, tensor([]), path, None)
 
 
-class DefaultGroundPlaneBuilder(TerrainBuilder):
-    def build_from_self(self, position: Tensor) -> DefaultGroundPlaneBuild:
+class DefaultGroundPlaneBuilderBase(BaseTerrainBuilder):
+    def build_from_self(self, position: Tensor) -> DefaultGroundPlaneBuildBase:
         """
         Notes:
             None of the parameters are used for the default ground plane.
@@ -33,7 +33,7 @@ class DefaultGroundPlaneBuilder(TerrainBuilder):
         height=0,
         position=None,
         path=None,
-    ) -> DefaultGroundPlaneBuild:
+    ) -> DefaultGroundPlaneBuildBase:
         """
         Notes:
             None of the parameters are used for the default ground plane.
@@ -44,4 +44,4 @@ class DefaultGroundPlaneBuilder(TerrainBuilder):
 
         get_current_stage().scene.add_default_ground_plane()
 
-        return DefaultGroundPlaneBuild(path)
+        return DefaultGroundPlaneBuildBase(path)
