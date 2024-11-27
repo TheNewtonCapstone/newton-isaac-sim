@@ -1,5 +1,7 @@
 import argparse
-import copy
+
+from stable_baselines3 import PPO
+from stable_baselines3.common.policies import BasePolicy
 
 import numpy as np
 import torch
@@ -8,10 +10,9 @@ from core.utils.path import (
     build_child_path_with_prefix,
     get_folder_from_path,
 )
-from stable_baselines3 import PPO
-from stable_baselines3.common.policies import BasePolicy
 
 
+# TODO: rework arguments
 def setup_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="newton.py", description="Entrypoint for any Newton-related actions."
@@ -163,11 +164,18 @@ if __name__ == "__main__":
     from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
     from core.envs import NewtonMultiTerrainEnv
     from core.wrappers import RandomDelayWrapper
+    from core.domain_randomizer import NewtonBaseDomainRandomizer
 
     newton_agent = NewtonVecAgent(num_agents=rl_config["n_envs"])
 
     terrains_size = torch.tensor([10, 10])
     terrains_resolution = torch.tensor([20, 20])
+
+    domain_randomizer = NewtonBaseDomainRandomizer(
+        seed=rl_config["seed"],
+        agent=newton_agent,
+        randomizer_settings=randomization_config,
+    )
 
     training_env = NewtonMultiTerrainEnv(
         agent=newton_agent,
@@ -197,12 +205,42 @@ if __name__ == "__main__":
                 noise_scale=8,
             ),
         ],
-        randomizer_settings=randomization_config,
+        domain_randomizer=domain_randomizer,
         inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
     )
 
-    # TODO: add a separate playing environment
-    playing_env = copy.deepcopy(training_env)
+    # TODO: add a proper separate playing environment
+    playing_env = NewtonMultiTerrainEnv(
+        agent=newton_agent,
+        num_envs=rl_config["n_envs"],
+        world_settings=world_config,
+        terrain_builders=[
+            FlatBaseTerrainBuilder(size=terrains_size),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.05,
+                octave=4,
+                noise_scale=2,
+            ),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.03,
+                octave=8,
+                noise_scale=4,
+            ),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.02,
+                octave=16,
+                noise_scale=8,
+            ),
+        ],
+        domain_randomizer=domain_randomizer,
+        inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
+    )
 
     task_runs_directory = "runs"
     task_name = build_child_path_with_prefix(
@@ -294,11 +332,12 @@ if __name__ == "__main__":
             if task.env.world.is_playing():
                 step_return = task.step(actions)
                 observations = step_return[0]
-                actions = model.predict(observations, deterministic=True)[0]
 
-                torque_actions = actions_to_torque(torch.from_numpy(actions[0]))
+                actions = model.predict(observations, deterministic=True)[0]
+                actions_string = ",".join([str(ja) for ja in actions[0]])
+
                 print(
-                    f"{task.env.world.current_time},{task.env.world.get_physics_dt()},{observations[0][0]},{torque_actions[0]},{torque_actions[1]}",
+                    f"{task.env.world.current_time},{task.env.world.get_physics_dt()},{observations[0][0]},{actions_string}",
                     file=log_file,
                 )
 

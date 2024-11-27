@@ -53,6 +53,12 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
                 f"{self.logger.dir}/{self.save_path}_rew_{self.best_mean_reward:.2f}"
             )
 
+        self.logger.record(
+            "reward/cumulative",
+            self.cumulative_reward.mean().item(),
+        )
+        self.logger.record("reward/best_mean", self.best_mean_reward)
+
         # TODO: better metrics about the agent's state & the animation engine
         agent_observations = task.agent.get_observations()
         self.logger.record(
@@ -94,7 +100,6 @@ class NewtonBaseTask(BaseTask):
         action_space: Box,
         reward_space: Box,
     ):
-        self.animation_engine: AnimationEngine = AnimationEngine()  # TODO
 
         super().__init__(
             training_env,
@@ -114,6 +119,7 @@ class NewtonBaseTask(BaseTask):
         self.playing_env: NewtonBaseEnv = playing_env
         self.agent: NewtonBaseAgent = agent
 
+        self.animation_engine: AnimationEngine = AnimationEngine()  # TODO
         self.last_actions_buf: Actions = np.zeros(
             (self.num_envs, self.num_actions), dtype=np.float32
         )
