@@ -1,12 +1,9 @@
-from abc import abstractmethod
 from typing import List
 
-from torch import Tensor
-
-import numpy as np
 import torch
 from core.agents import NewtonBaseAgent
-from core.envs import BaseEnv, NewtonBaseEnv
+from core.domain_randomizer import NewtonBaseDomainRandomizer
+from core.envs import NewtonBaseEnv
 from core.terrain import BaseTerrainBuilder
 from core.types import Observations, Settings, Actions, Indices
 
@@ -18,15 +15,15 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         num_envs: int,
         terrain_builders: List[BaseTerrainBuilder],
         world_settings: Settings,
-        randomizer_settings: Settings,
+        domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
     ):
         super().__init__(
             agent,
             num_envs,
-            terrain_builders,
             world_settings,
-            randomizer_settings,
+            terrain_builders,
+            domain_randomizer,
             inverse_control_frequency,
         )
 
@@ -118,7 +115,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
 
         self.agent.construct(self.world)
 
-        # TODO: self.domain_randomizer.construct()
+        self.domain_randomizer.construct(env=self)
 
         self.reset()
 

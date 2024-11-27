@@ -3,6 +3,7 @@ from typing import List
 
 import torch
 from core.agents import NewtonBaseAgent
+from core.domain_randomizer import NewtonBaseDomainRandomizer
 from core.envs import BaseEnv
 from core.terrain import BaseTerrainBuilder
 from core.types import Observations, Settings, Actions, Indices
@@ -14,20 +15,21 @@ class NewtonBaseEnv(BaseEnv):
         self,
         agent: NewtonBaseAgent,
         num_envs: int,
-        terrain_builders: List[BaseTerrainBuilder],
         world_settings: Settings,
-        randomizer_settings: Settings,
+        terrain_builders: List[BaseTerrainBuilder],
+        domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
     ):
         super().__init__(
             agent,
             num_envs,
-            terrain_builders,
             world_settings,
-            randomizer_settings,
+            terrain_builders,
+            domain_randomizer,
         )
 
         self.agent: NewtonBaseAgent = agent
+        self.domain_randomizer: NewtonBaseDomainRandomizer = domain_randomizer
 
         self.reset_newton_positions: Tensor = torch.zeros((self.num_envs, 3))
         self.reset_newton_rotations: Tensor = torch.tile(
@@ -46,6 +48,8 @@ class NewtonBaseEnv(BaseEnv):
         for _ in range(self._inverse_control_frequency):
             super().step(actions, render)  # advances the simulation by one step
 
+        self.domain_randomizer.on_step()
+
         return self.get_observations()
 
     @abstractmethod
@@ -55,44 +59,7 @@ class NewtonBaseEnv(BaseEnv):
         if indices is None:
             self.world.reset()
 
-            indices = torch.arange(self.num_envs)
-        else:
-            indices = torch.from_numpy(indices)
-
-        num_to_reset = indices.shape[0]
-
-        self.agent.newton_art_view.set_world_poses(
-            positions=self.reset_newton_positions[indices],
-            orientations=self.reset_newton_rotations[indices],
-            indices=indices,
-        )
-
-        # using set_velocities instead of individual methods (lin & ang),
-        # because it's the only method supported in the GPU pipeline
-        self.agent.newton_art_view.set_velocities(
-            torch.zeros((num_to_reset, 6), dtype=torch.float32),
-            indices,
-        )
-
-        self.agent.newton_art_view.set_joint_efforts(
-            torch.zeros((num_to_reset, 12), dtype=torch.float32),
-            indices,
-        )
-
-        self.agent.newton_art_view.set_joint_velocities(
-            torch.zeros((num_to_reset, 12), dtype=torch.float32),
-            indices,
-        )
-
-        joint_positions = torch.tensor(
-            [0.0, 0.0, 0.0] * 4,
-            dtype=torch.float32,
-        ).repeat(num_to_reset, 1)
-
-        self.agent.newton_art_view.set_joint_positions(
-            joint_positions,
-            indices,
-        )
+        self.domain_randomizer.on_reset(indices)
 
         return self.get_observations()
 

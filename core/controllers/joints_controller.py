@@ -113,4 +113,15 @@ class VecJointsController:
                 torch.from_numpy(joint_constraints.high).to(device=self.world.device),
             )
 
+        right_side_joint_indices = self._get_right_side_shoulder_indices()
+        for i in right_side_joint_indices:
+            joint_positions[i] = -joint_positions[i]
+
         return joint_positions
+
+    def _get_right_side_shoulder_indices(self) -> List[int]:
+        return [
+            i
+            for i, name in enumerate(self._articulation_view.joint_names)
+            if "R_HAA" in name
+        ]

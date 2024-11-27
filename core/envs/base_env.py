@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 
 from core.agents import BaseAgent
-from core.domain_randomizer.domain_randomizer import DomainRandomizer
+
+from core.domain_randomizer import BaseDomainRandomizer
 from core.globals import PHYSICS_PATH, PHYSICS_SCENE_PATH, LIGHTS_PATH
 from core.terrain import BaseTerrainBuilder, BaseTerrainBuild
 from core.types import Settings, Observations, Actions, Indices
@@ -13,9 +14,9 @@ class BaseEnv(ABC):
         self,
         agent: BaseAgent,
         num_envs: int,
-        terrain_builders: List[BaseTerrainBuilder],
         world_settings: Settings,
-        randomizer_settings: Settings,
+        terrain_builders: List[BaseTerrainBuilder],
+        domain_randomizer: BaseDomainRandomizer,
     ) -> None:
         from omni.isaac.core import World
 
@@ -27,10 +28,10 @@ class BaseEnv(ABC):
         self.terrain_builders: List[BaseTerrainBuilder] = terrain_builders
         self.terrain_builds: List[BaseTerrainBuild] = []
 
-        self.domain_randomizer: DomainRandomizer = None  # TODO
-        self.randomizer_settings: Settings = randomizer_settings
+        self.domain_randomizer: BaseDomainRandomizer = domain_randomizer
 
         self._time = 0
+        self._is_constructed = False
 
     def __del__(self):
         if self.world is not None:
@@ -38,6 +39,10 @@ class BaseEnv(ABC):
 
     @abstractmethod
     def construct(self) -> None:
+        assert (
+            not self._is_constructed
+        ), f"{self.__class__.__name__} already constructed!"
+
         from core.utils.gpu import get_free_gpu_memory
 
         free_device_memory = get_free_gpu_memory()
@@ -62,6 +67,7 @@ class BaseEnv(ABC):
 
         from omni.isaac.core import World
 
+        # TODO: decide where world should be created
         self.world = World(
             physics_prim_path=PHYSICS_SCENE_PATH,
             physics_dt=self.world_settings["physics_dt"],
@@ -79,6 +85,10 @@ class BaseEnv(ABC):
         actions: Actions,
         render: bool,
     ) -> Observations:
+        assert (
+            self._is_constructed
+        ), f"{self.__class__.__name__} not constructed: tried to step!"
+
         self._time += 1
 
         # From IsaacLab (SimulationContext)
@@ -93,8 +103,16 @@ class BaseEnv(ABC):
 
     @abstractmethod
     def reset(self, indices: Indices = None) -> Observations:
+        assert (
+            self._is_constructed
+        ), f"{self.__class__.__name__} not constructed: tried to reset!"
+
         return self.get_observations()
 
     @abstractmethod
     def get_observations(self) -> Observations:
+        assert (
+            self._is_constructed
+        ), f"{self.__class__.__name__} not constructed: tried to get observations!"
+
         return {}

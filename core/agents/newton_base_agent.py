@@ -21,8 +21,6 @@ class NewtonBaseAgent(BaseAgent):
         self.imu: Optional[VecIMU] = None
         self.joints_controller: Optional[VecJointsController] = None
 
-        self.newton_art_view: Optional[ArticulationView] = None
-
     @abstractmethod
     def construct(self, world: World) -> None:
         super().construct(world)

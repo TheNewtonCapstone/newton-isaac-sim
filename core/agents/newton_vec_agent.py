@@ -8,9 +8,6 @@ from omni.isaac.core import World
 
 class NewtonVecAgent(NewtonBaseAgent):
     def construct(self, world: World) -> None:
-        if self._is_constructed:
-            return
-
         super().construct(world)
 
         self.base_path_expr = self.path + "/Newton_*/base"
@@ -45,14 +42,6 @@ class NewtonVecAgent(NewtonBaseAgent):
         )
 
         self.world.reset()
-
-        from omni.isaac.core.articulations import ArticulationView
-
-        self.newton_art_view = ArticulationView(
-            prim_paths_expr=self.base_path_expr,
-            name="newton_agent_art_view",
-        )
-        self.world.scene.add(self.newton_art_view)
 
         self._construct_imu(self.base_path_expr)
         self._construct_joints_controller(self.base_path_expr)

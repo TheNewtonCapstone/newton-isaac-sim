@@ -80,10 +80,13 @@ class BaseTask(VecEnv):
             action_space=action_space,
         )
 
+        self._is_constructed: bool = False
+
     @property
     def __str__(self):
         return f"BaseTask: {self.num_envs} environments, {self.num_observations} observations, {self.num_actions} actions"
 
+    # TODO: assert that the task is not (and is not, depending) constructed
     @abstractmethod
     def construct(self) -> None:
         pass

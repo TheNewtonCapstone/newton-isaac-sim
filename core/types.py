@@ -21,6 +21,7 @@ Observations = Dict[str, np.ndarray]
 
 # Meta
 Settings = Dict[str, Any]
+# TODO: removed Optional, none of the global types should be Optional (can easily lead to confusion)
 Indices = Optional[np.ndarray]
 
 # Math
