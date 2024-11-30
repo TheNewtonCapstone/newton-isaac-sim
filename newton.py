@@ -6,10 +6,12 @@ from stable_baselines3.common.policies import BasePolicy
 import numpy as np
 import torch
 from core.utils.config import load_config
+from core.utils.math import IDENTITY_QUAT
 from core.utils.path import (
     build_child_path_with_prefix,
     get_folder_from_path,
 )
+from gymnasium.spaces import Box
 
 
 # TODO: rework arguments
@@ -96,10 +98,11 @@ if __name__ == "__main__":
     )  # if we're exporting, don't show the GUI
 
     # override config with CLI num_envs, if specified
+    num_envs = rl_config["n_envs"]
     if cli_args.num_envs != -1:
-        rl_config["n_envs"] = cli_args.num_envs
+        num_envs = cli_args.num_envs
     elif not training:
-        rl_config["n_envs"] = 1
+        num_envs = 1
 
     if playing:
         # increase the number of steps if we're playing
@@ -122,11 +125,11 @@ if __name__ == "__main__":
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
-    from isaacsim import SimulationApp
+    # universe must be imported & constructed first, to load all necessary omniverse extensions
+    from core.universe import Universe
 
-    sim_app = SimulationApp(
-        {"headless": headless}, experience="./apps/omni.isaac.sim.newton.kit"
-    )
+    universe = Universe(headless, world_config)
+    universe.construct()
 
     from core.envs import NewtonMultiTerrainEnv
     from core.agents import NewtonVecAgent
@@ -134,26 +137,56 @@ if __name__ == "__main__":
     from core.terrain.flat_terrain import FlatBaseTerrainBuilder
     from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
 
+    from core.sensors import VecIMU
+    from core.controllers import VecJointsController
+    from core.domain_randomizer import NewtonBaseDomainRandomizer
+
+    imu = VecIMU(
+        universe=universe,
+        local_position=torch.zeros((num_envs, 3)),
+        local_rotation=IDENTITY_QUAT.repeat(num_envs, 1),
+        noise_function=lambda x: x,
+    )
+
+    joints_controller = VecJointsController(
+        universe=universe,
+        noise_function=lambda x: x,
+        joint_constraints=Box(
+            low=np.array([-15, -90, -180] * 4),
+            high=np.array([15, 90, 180] * 4),
+        ),
+    )
+
+    newton_agent = NewtonVecAgent(
+        num_agents=num_envs,
+        imu=imu,
+        joints_controller=joints_controller,
+    )
+
+    domain_randomizer = NewtonBaseDomainRandomizer(
+        seed=rl_config["seed"],
+        agent=newton_agent,
+        randomizer_settings=randomization_config,
+    )
+
     # ---------- #
     # SIMULATION #
     # ---------- #
 
     if physics_only:
-        newton = NewtonVecAgent(num_agents=rl_config["n_envs"])
-
         env = NewtonMultiTerrainEnv(
-            agent=newton,
-            num_envs=rl_config["n_envs"],
+            agent=newton_agent,
+            num_envs=num_envs,
             terrain_builders=[PerlinBaseTerrainBuilder(), FlatBaseTerrainBuilder()],
-            world_settings=world_config,
-            randomizer_settings=randomization_config,
+            domain_randomizer=domain_randomizer,
+            inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
         )
 
-        env.construct()
+        env.construct(universe)
         env.reset()
 
-        while sim_app.is_running() and env.world.is_playing():
-            env.step(np.zeros((rl_config["n_envs"], 12)), render=not headless)
+        while universe.is_playing:
+            env.step(np.zeros((num_envs, 12)))
 
         exit(1)
 
@@ -164,23 +197,13 @@ if __name__ == "__main__":
     from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
     from core.envs import NewtonMultiTerrainEnv
     from core.wrappers import RandomDelayWrapper
-    from core.domain_randomizer import NewtonBaseDomainRandomizer
-
-    newton_agent = NewtonVecAgent(num_agents=rl_config["n_envs"])
 
     terrains_size = torch.tensor([10, 10])
     terrains_resolution = torch.tensor([20, 20])
 
-    domain_randomizer = NewtonBaseDomainRandomizer(
-        seed=rl_config["seed"],
-        agent=newton_agent,
-        randomizer_settings=randomization_config,
-    )
-
     training_env = NewtonMultiTerrainEnv(
         agent=newton_agent,
-        num_envs=rl_config["n_envs"],
-        world_settings=world_config,
+        num_envs=num_envs,
         terrain_builders=[
             FlatBaseTerrainBuilder(size=terrains_size),
             PerlinBaseTerrainBuilder(
@@ -212,8 +235,7 @@ if __name__ == "__main__":
     # TODO: add a proper separate playing environment
     playing_env = NewtonMultiTerrainEnv(
         agent=newton_agent,
-        num_envs=rl_config["n_envs"],
-        world_settings=world_config,
+        num_envs=num_envs,
         terrain_builders=[
             FlatBaseTerrainBuilder(size=terrains_size),
             PerlinBaseTerrainBuilder(
@@ -252,9 +274,8 @@ if __name__ == "__main__":
         training_env=training_env,
         playing_env=playing_env,
         agent=newton_agent,
-        headless=cli_args.headless,
         device=rl_config["device"],
-        num_envs=rl_config["n_envs"],
+        num_envs=num_envs,
         playing=playing,
         max_episode_length=rl_config["episode_length"],
     )
@@ -263,7 +284,7 @@ if __name__ == "__main__":
         save_path=task_name,
     )
 
-    task.construct()
+    task.construct(universe)
 
     # we're not exporting nor purely simulating, so we're training
     if training:
@@ -309,7 +330,7 @@ if __name__ == "__main__":
             model = PPO.load(cli_args.checkpoint, task, device=rl_config["device"])
 
         model.learn(
-            total_timesteps=rl_config["timesteps_per_env"] * rl_config["n_envs"],
+            total_timesteps=rl_config["timesteps_per_env"] * num_envs,
             tb_log_name=task_name,
             reset_num_timesteps=False,
             progress_bar=True,
@@ -328,18 +349,17 @@ if __name__ == "__main__":
         log_file = open(f"{get_folder_from_path(cli_args.checkpoint)}/playing.csv", "w")
         print("time,dt,roll,action1,action2", file=log_file)
 
-        while sim_app.is_running():
-            if task.env.world.is_playing():
-                step_return = task.step(actions)
-                observations = step_return[0]
+        while universe.is_playing:
+            step_return = task.step(actions)
+            observations = step_return[0]
 
-                actions = model.predict(observations, deterministic=True)[0]
-                actions_string = ",".join([str(ja) for ja in actions[0]])
+            actions = model.predict(observations, deterministic=True)[0]
+            actions_string = ",".join([str(ja) for ja in actions[0]])
 
-                print(
-                    f"{task.env.world.current_time},{task.env.world.get_physics_dt()},{observations[0][0]},{actions_string}",
-                    file=log_file,
-                )
+            print(
+                f"{universe.physics_world.current_time},{universe.physics_world.get_physics_dt()},{observations[0][0]},{actions_string}",
+                file=log_file,
+            )
 
         exit(1)
 

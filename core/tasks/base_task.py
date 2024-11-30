@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, Any, List, Optional, Sequence, Type
+from typing import Any, List, Optional, Sequence, Type
 
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecEnv
@@ -11,10 +11,10 @@ from stable_baselines3.common.vec_env.base_vec_env import (
 
 import gymnasium
 import numpy as np
-import torch
 from core.agents import BaseAgent
 from core.envs import BaseEnv
 from core.types import Progress, Rewards, Dones, Actions, Infos
+from core.universe import Universe
 
 
 class BaseTaskCallback(BaseCallback):
@@ -40,14 +40,12 @@ class BaseTask(VecEnv):
         agent: BaseAgent,
         num_envs: int,
         device: str,
-        headless: bool,
         playing: bool,
         max_episode_length: int,
         observation_space: gymnasium.spaces.Space,
         action_space: gymnasium.spaces.Box,
         reward_space: gymnasium.spaces.Box,
     ):
-        self.headless: bool = headless
         self.device: str = device
         self.playing: bool = playing
 
@@ -86,9 +84,9 @@ class BaseTask(VecEnv):
     def __str__(self):
         return f"BaseTask: {self.num_envs} environments, {self.num_observations} observations, {self.num_actions} actions"
 
-    # TODO: assert that the task is not (and is not, depending) constructed
+    # TODO: assert that the task is (and is not, depending) constructed
     @abstractmethod
-    def construct(self) -> None:
+    def construct(self, universe: Universe) -> None:
         pass
 
     # Gymnasium methods (required from VecEnv)

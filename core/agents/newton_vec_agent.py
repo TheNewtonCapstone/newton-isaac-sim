@@ -1,14 +1,12 @@
-from abc import abstractmethod
-
 from core.agents import NewtonBaseAgent
 from core.globals import TERRAINS_PATH, PHYSICS_SCENE_PATH, COLLISION_GROUPS_PATH
 from core.types import Observations, Actions
-from omni.isaac.core import World
+from core.universe import Universe
 
 
 class NewtonVecAgent(NewtonBaseAgent):
-    def construct(self, world: World) -> None:
-        super().construct(world)
+    def construct(self, universe: Universe) -> None:
+        super().construct(universe)
 
         self.base_path_expr = self.path + "/Newton_*/base"
         self.path = self.path + "/Newton_0"
@@ -19,8 +17,6 @@ class NewtonVecAgent(NewtonBaseAgent):
             "assets/newton/newton.usd",
             prim_path=self.path,
         )
-
-        self.world.reset()  # ensures that the USD is loaded
 
         from omni.isaac.cloner import Cloner
 
@@ -41,12 +37,10 @@ class NewtonVecAgent(NewtonBaseAgent):
             replicate_physics=True,
         )
 
-        self.world.reset()
+        self.imu.construct(self.base_path_expr)
+        self.joints_controller.construct(self.base_path_expr)
 
-        self._construct_imu(self.base_path_expr)
-        self._construct_joints_controller(self.base_path_expr)
-
-        self.world.reset()
+        self.universe.reset()
 
         self._is_constructed = True
 

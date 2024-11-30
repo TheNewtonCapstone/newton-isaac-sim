@@ -3,6 +3,7 @@ from typing import Optional
 
 from core.globals import AGENTS_PATH
 from core.types import Observations, Actions
+from core.universe import Universe
 from omni.isaac.core import World
 
 
@@ -10,18 +11,18 @@ class BaseAgent(ABC):
     def __init__(self, num_agents: int) -> None:
         self.path: str = ""
         self.num_agents: int = num_agents
-        self.world: Optional[World] = None
+        self.universe: Optional[Universe] = None
 
         self._is_constructed: bool = False
 
     @abstractmethod
-    def construct(self, world: World) -> None:
+    def construct(self, universe: Universe) -> None:
         assert (
             not self._is_constructed
         ), f"{self.__class__.__name__} already constructed: tried to construct!"
 
         self.path = AGENTS_PATH
-        self.world = world
+        self.universe = universe
 
         from omni.isaac.core.utils.prims import create_prim
 

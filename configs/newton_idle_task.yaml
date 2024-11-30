@@ -9,7 +9,7 @@ base_lr: 3e-4
 episode_length: 5000
 
 newton:
-  inverse_control_frequency: 2  # we're aiming for a total compute budget of 2 times the physics timestep (0.02s)
+  inverse_control_frequency: 4  # we're aiming for a total compute budget of 2 times the physics timestep (0.005s * 4 = 0.02s)
 
 delay:
   enabled: False

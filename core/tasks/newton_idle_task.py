@@ -5,6 +5,7 @@ import numpy as np
 from core.agents import NewtonBaseAgent
 from core.envs import NewtonBaseEnv
 from core.tasks import NewtonBaseTask, NewtonBaseTaskCallback
+from core.universe import Universe
 from gymnasium.spaces import Box
 
 
@@ -30,7 +31,6 @@ class NewtonIdleTask(NewtonBaseTask):
         agent: NewtonBaseAgent,
         num_envs: int,
         device: str,
-        headless: bool,
         playing: bool,
         max_episode_length: int,
     ):
@@ -50,7 +50,7 @@ class NewtonIdleTask(NewtonBaseTask):
         )
 
         self.reward_space: Box = Box(
-            low=np.array([-2.0]),
+            low=np.array([-10.0]),
             high=np.array([1.0]),
         )
 
@@ -60,7 +60,6 @@ class NewtonIdleTask(NewtonBaseTask):
             agent,
             num_envs,
             device,
-            headless,
             playing,
             max_episode_length,
             self.observation_space,
@@ -70,13 +69,13 @@ class NewtonIdleTask(NewtonBaseTask):
 
         self.reset_height: float = 0.1
 
-    def construct(self) -> None:
-        super().construct()
+    def construct(self, universe: Universe) -> None:
+        super().construct(universe)
 
     def step_wait(self) -> VecEnvStepReturn:
         super().step_wait()
 
-        self.env.step(self.actions_buf, self.headless)
+        self.env.step(self.actions_buf)
 
         obs = self._get_observations()
         heights = obs["positions"][:, 2]
@@ -90,10 +89,10 @@ class NewtonIdleTask(NewtonBaseTask):
         obs_buf[:, 9] = heights
         obs_buf[:, 10:22] = self.actions_buf
         obs_buf[:, 22:34] = (
-            self.agent.newton_art_view.get_joint_positions().cpu().numpy()
+            self.agent.joints_controller.art_view.get_joint_positions().cpu().numpy()
         )
         obs_buf[:, 34:46] = (
-            self.agent.newton_art_view.get_joint_velocities().cpu().numpy()
+            self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
         )
 
         self._calculate_rewards()
@@ -102,7 +101,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         # terminated
         self.dones_buf = np.where(heights <= self.reset_height, True, False)
-        self.dones_buf = np.where(heights >= 2.0, True, self.dones_buf)
+        self.dones_buf = np.where(heights >= 1.0, True, self.dones_buf)
 
         self.dones_buf = np.where(
             self.progress_buf >= self.max_episode_length,
@@ -144,10 +143,10 @@ class NewtonIdleTask(NewtonBaseTask):
         obs_buf[:, 9] = obs["positions"][:, 2]
         obs_buf[:, 10:22] = self.actions_buf
         obs_buf[:, 22:34] = (
-            self.agent.newton_art_view.get_joint_positions().cpu().numpy()
+            self.agent.joints_controller.art_view.get_joint_positions().cpu().numpy()
         )
         obs_buf[:, 34:46] = (
-            self.agent.newton_art_view.get_joint_velocities().cpu().numpy()
+            self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
         )
 
         return obs_buf
@@ -166,9 +165,13 @@ class NewtonIdleTask(NewtonBaseTask):
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]
         joint_accelerations = (
-            self.agent.newton_art_view.get_applied_joint_efforts().cpu().numpy()
+            self.agent.joints_controller.art_view.get_applied_joint_efforts()
+            .cpu()
+            .numpy()
         )
-        joint_positions = self.agent.newton_art_view.get_joint_positions().cpu().numpy()
+        joint_positions = (
+            self.agent.joints_controller.art_view.get_joint_positions().cpu().numpy()
+        )
 
         heights = positions[:, 2]
 
@@ -187,7 +190,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         joint_acceleration_reward = np.sum(np.square(joint_accelerations)) * -0.0003
 
-        cosmetic_reward = np.sum(np.abs(joint_positions)) * -0.06
+        # cosmetic_reward = np.sum(np.abs(joint_positions)) * -0.06
 
         self.rewards_buf = (
             linear_velocity_xy_reward
@@ -195,13 +198,13 @@ class NewtonIdleTask(NewtonBaseTask):
             + angular_velocity_z_reward
             + action_rate_reward
             + joint_acceleration_reward
-            + cosmetic_reward
+            # + cosmetic_reward
         )
 
         self.rewards_buf = np.where(
             heights <= self.reset_height, -2.0, self.rewards_buf
         )
-        self.rewards_buf = np.where(heights >= 2.0, -2.0, self.rewards_buf)
+        self.rewards_buf = np.where(heights >= 1.0, -2.0, self.rewards_buf)
 
         # TODO: should this be here?
         self.rewards_buf = np.clip(

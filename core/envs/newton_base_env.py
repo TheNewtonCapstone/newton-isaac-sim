@@ -6,7 +6,8 @@ from core.agents import NewtonBaseAgent
 from core.domain_randomizer import NewtonBaseDomainRandomizer
 from core.envs import BaseEnv
 from core.terrain import BaseTerrainBuilder
-from core.types import Observations, Settings, Actions, Indices
+from core.types import Observations, Actions, Indices
+from core.universe import Universe
 from torch import Tensor
 
 
@@ -15,7 +16,6 @@ class NewtonBaseEnv(BaseEnv):
         self,
         agent: NewtonBaseAgent,
         num_envs: int,
-        world_settings: Settings,
         terrain_builders: List[BaseTerrainBuilder],
         domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
@@ -23,7 +23,6 @@ class NewtonBaseEnv(BaseEnv):
         super().__init__(
             agent,
             num_envs,
-            world_settings,
             terrain_builders,
             domain_randomizer,
         )
@@ -39,14 +38,14 @@ class NewtonBaseEnv(BaseEnv):
         self._inverse_control_frequency = inverse_control_frequency
 
     @abstractmethod
-    def construct(self) -> None:
-        super().construct()
+    def construct(self, universe: Universe) -> None:
+        super().construct(universe)
 
     @abstractmethod
-    def step(self, actions: Actions, render: bool) -> Observations:
+    def step(self, actions: Actions) -> Observations:
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
         for _ in range(self._inverse_control_frequency):
-            super().step(actions, render)  # advances the simulation by one step
+            super().step(actions)  # advances the simulation by one step
 
         self.domain_randomizer.on_step()
 
@@ -55,9 +54,6 @@ class NewtonBaseEnv(BaseEnv):
     @abstractmethod
     def reset(self, indices: Indices = None) -> Observations:
         super().reset(indices)
-
-        if indices is None:
-            self.world.reset()
 
         self.domain_randomizer.on_reset(indices)
 
