@@ -83,7 +83,7 @@ def setup_argparser() -> argparse.ArgumentParser:
 if __name__ == "__main__":
     parser = setup_argparser()
 
-    cli_args = parser.parse_args()
+    cli_args, _ = parser.parse_known_args()
     rl_config = load_config(cli_args.rl_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
