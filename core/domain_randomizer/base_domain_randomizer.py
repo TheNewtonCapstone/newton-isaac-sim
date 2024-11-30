@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Optional, TYPE_CHECKING
 
 from core.agents import BaseAgent
-from core.terrain import BaseTerrainBuild
 from core.types import Settings, Indices
+from core.universe import Universe
 
 
 class BaseDomainRandomizer(ABC):
@@ -12,13 +12,12 @@ class BaseDomainRandomizer(ABC):
         seed: int,
         agent: BaseAgent,
         # TODO: think about how to construct the domain randomizers appropriately (without circular imports)
-        terrain_builds: List[BaseTerrainBuild],
         randomizer_settings: Settings,
     ):
         self.seed: int = seed
 
         self._agent: BaseAgent = agent
-        self._terrain_builds: List[BaseTerrainBuild] = terrain_builds
+        self._universe: Optional[Universe] = None
 
         self.randomizer_settings: Settings = randomizer_settings
 
@@ -26,10 +25,12 @@ class BaseDomainRandomizer(ABC):
         self._is_constructed: bool = False
 
     @abstractmethod
-    def construct(self) -> None:
+    def construct(self, universe: Universe) -> None:
         assert (
             not self._is_constructed
         ), f"{self.__class__.__name__} already constructed: tried to construct!"
+
+        self._universe = universe
 
     @abstractmethod
     def on_step(self) -> None:

@@ -1,6 +1,7 @@
 from typing import Optional
 
 import numpy as np
+from core.universe import Universe
 from torch import Tensor
 
 import torch
@@ -12,16 +13,15 @@ from omni.isaac.core.prims import RigidPrimView
 class VecIMU:
     def __init__(
         self,
-        path_expr: str,
-        world: World,
+        universe: Universe,
         local_position: Tensor,
         local_rotation: Tensor,
         noise_function: NoiseFunction,
     ):
-        self.world: World = world
-        self.path_expr: str = path_expr
-        self.local_position: Tensor = local_position.to(self.world.device)
-        self.local_rotation: Tensor = local_rotation.to(self.world.device)
+        self.universe: Universe = universe
+        self.path_expr: str = ""
+        self.local_position: Tensor = local_position.to(self.universe.physics_device)
+        self.local_rotation: Tensor = local_rotation.to(self.universe.physics_device)
         self.num_imus: int = 0
 
         self.rigid_view: Optional[RigidPrimView] = None
@@ -48,14 +48,15 @@ class VecIMU:
     def __del__(self):
         pass
 
-    def construct(self) -> None:
-        if self._is_constructed:
-            return
+    def construct(self, path_expr: str) -> None:
+        assert not self._is_constructed, "IMU already constructed: tried to construct!"
+
+        self.path_expr = path_expr
 
         self.rigid_view = RigidPrimView(self.path_expr)
-        self.world.scene.add(self.rigid_view)
+        self.universe.add_to_scene(self.rigid_view)
 
-        self.world.reset()
+        self.universe.reset()
 
         self.num_imus = self.rigid_view.count
 
@@ -72,26 +73,28 @@ class VecIMU:
     def reset(self) -> IMUData:
         from core.utils.math import IDENTITY_QUAT
 
-        self._rotations = IDENTITY_QUAT.repeat(self.num_imus, 1).to(self.world.device)
+        self._rotations = IDENTITY_QUAT.repeat(self.num_imus, 1).to(
+            self.universe.physics_device
+        )
 
         self._linear_accelerations = torch.zeros(
-            (self.num_imus, 3), device=self.world.device
+            (self.num_imus, 3), device=self.universe.physics_device
         )
         self._linear_velocities = torch.zeros(
-            (self.num_imus, 3), device=self.world.device
+            (self.num_imus, 3), device=self.universe.physics_device
         )
         self._angular_accelerations = torch.zeros(
-            (self.num_imus, 3), device=self.world.device
+            (self.num_imus, 3), device=self.universe.physics_device
         )
         self._angular_velocities = torch.zeros(
-            (self.num_imus, 3), device=self.world.device
+            (self.num_imus, 3), device=self.universe.physics_device
         )
 
         self._last_linear_velocities = torch.zeros(
-            (self.num_imus, 3), device=self.world.device
+            (self.num_imus, 3), device=self.universe.physics_device
         )
         self._last_angular_velocities = torch.zeros(
-            (self.num_imus, 3), device=self.world.device
+            (self.num_imus, 3), device=self.universe.physics_device
         )
 
         if self._is_constructed:
@@ -157,15 +160,15 @@ class VecIMU:
         # TODO: verify that this is correct
         linear_accelerations = (
             linear_velocities - self._last_linear_velocities
-        ) / self.world.get_physics_dt()
+        ) / self.universe.physics_world.get_physics_dt()
         angular_accelerations = (
             angular_velocities - self._last_angular_velocities
-        ) / self.world.get_physics_dt()
+        ) / self.universe.physics_world.get_physics_dt()
 
-        gravity = self.world.physics_sim_view.get_gravity()
+        gravity = self.universe.physics_world.physics_sim_view.get_gravity()
         projected_gravities = torch.tensor(
             gravity,
-            device=self.world.device,
+            device=self.universe.physics_device,
         ).repeat(self.num_imus, 1)
 
         # store pose

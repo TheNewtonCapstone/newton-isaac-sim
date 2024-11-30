@@ -9,6 +9,7 @@ from core.animation import AnimationEngine
 from core.envs.newton_base_env import NewtonBaseEnv
 from core.tasks.base_task import BaseTask, BaseTaskCallback
 from core.types import Actions
+from core.universe import Universe
 from gymnasium import Space
 from gymnasium.spaces import Box
 from torch import Tensor
@@ -54,10 +55,10 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
             )
 
         self.logger.record(
-            "reward/cumulative",
+            "rewards/cumulative",
             self.cumulative_reward.mean().item(),
         )
-        self.logger.record("reward/best_mean", self.best_mean_reward)
+        self.logger.record("rewards/best_mean", self.best_mean_reward)
 
         # TODO: better metrics about the agent's state & the animation engine
         agent_observations = task.agent.get_observations()
@@ -93,7 +94,6 @@ class NewtonBaseTask(BaseTask):
         agent: NewtonBaseAgent,
         num_envs: int,
         device: str,
-        headless: bool,
         playing: bool,
         max_episode_length: int,
         observation_space: Space,
@@ -107,7 +107,6 @@ class NewtonBaseTask(BaseTask):
             agent,
             num_envs,
             device,
-            headless,
             playing,
             max_episode_length,
             observation_space,
@@ -125,13 +124,13 @@ class NewtonBaseTask(BaseTask):
         )
 
     @abstractmethod
-    def construct(self) -> None:
-        super().construct()
+    def construct(self, universe: Universe) -> None:
+        super().construct(universe)
 
         if self.playing:
-            self.playing_env.construct()
+            self.playing_env.construct(universe)
         else:
-            self.training_env.construct()
+            self.training_env.construct(universe)
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:

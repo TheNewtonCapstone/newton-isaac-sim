@@ -1,5 +1,6 @@
 from typing import Callable, Optional, List
 
+from core.universe import Universe
 from gymnasium.spaces import Box
 from torch import Tensor
 
@@ -12,14 +13,13 @@ from omni.isaac.core.articulations import ArticulationView
 class VecJointsController:
     def __init__(
         self,
-        path_expr: str,
-        world: World,
-        noise_function: Callable[[Tensor], Tensor],
+        universe: Universe,
+        noise_function: NoiseFunction,
         joint_constraints: Box,
     ):
-        self.path_expr: str = path_expr
+        self.path_expr: str = ""
 
-        self.world: World = world
+        self.universe: Universe = universe
         self._articulation_view: Optional[ArticulationView] = None
 
         self._noise_function: NoiseFunction = noise_function
@@ -41,9 +41,12 @@ class VecJointsController:
     def target_joint_positions(self) -> Tensor:
         return self._target_joint_positions
 
-    def construct(self) -> None:
-        if self._is_constructed:
-            return
+    def construct(self, path_expr: str) -> None:
+        assert (
+            not self._is_constructed
+        ), "Joints controller already constructed: tried to construct!"
+
+        self.path_expr = path_expr
 
         from omni.isaac.core.articulations import ArticulationView
 
@@ -51,9 +54,9 @@ class VecJointsController:
             self.path_expr,
             name="joints_controller_art_view",
         )
-        self.world.scene.add(self._articulation_view)
+        self.universe.add_to_scene(self._articulation_view)
 
-        self.world.reset()
+        self.universe.reset()
 
         assert self._joint_constraints.shape[0] == len(
             self._articulation_view.joint_names
@@ -109,13 +112,17 @@ class VecJointsController:
         for i, _ in enumerate(joint_positions):
             joint_positions[i] = torch.clamp(
                 joint_positions[i],
-                torch.from_numpy(joint_constraints.low).to(device=self.world.device),
-                torch.from_numpy(joint_constraints.high).to(device=self.world.device),
+                torch.from_numpy(joint_constraints.low).to(
+                    device=self.universe.physics_device
+                ),
+                torch.from_numpy(joint_constraints.high).to(
+                    device=self.universe.physics_device
+                ),
             )
 
         right_side_joint_indices = self._get_right_side_shoulder_indices()
         for i in right_side_joint_indices:
-            joint_positions[i] = -joint_positions[i]
+            joint_positions[:, i] = -joint_positions[:, i]
 
         return joint_positions
 

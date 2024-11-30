@@ -5,7 +5,8 @@ from core.agents import NewtonBaseAgent
 from core.domain_randomizer import NewtonBaseDomainRandomizer
 from core.envs import NewtonBaseEnv
 from core.terrain import BaseTerrainBuilder
-from core.types import Observations, Settings, Actions, Indices
+from core.types import Observations, Actions, Indices
+from core.universe import Universe
 
 
 class NewtonMultiTerrainEnv(NewtonBaseEnv):
@@ -14,21 +15,19 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         agent: NewtonBaseAgent,
         num_envs: int,
         terrain_builders: List[BaseTerrainBuilder],
-        world_settings: Settings,
         domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
     ):
         super().__init__(
             agent,
             num_envs,
-            world_settings,
             terrain_builders,
             domain_randomizer,
             inverse_control_frequency,
         )
 
-    def construct(self) -> None:
-        super().construct()
+    def construct(self, universe: Universe) -> None:
+        super().construct(universe)
 
         num_terrains = len(self.terrain_builders)
         terrains_size = self.terrain_builders[0].size
@@ -64,8 +63,11 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                 terrain_builder.build_from_self(terrain_spawn_position)
             )
 
-            # propagate physics changes
-            self.world.reset()
+        # propagate physics changes
+        self.universe.reset()
+
+        for i, _ in enumerate(self.terrain_builds):
+            terrain_spawn_position = terrain_positions[i]
 
             # from the raycast, we can get the desired position of the agent to avoid clipping with the terrain
             raycast_height = 25
@@ -103,8 +105,10 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                     [
                         terrain_spawn_position[0],
                         terrain_spawn_position[1],
-                        0.35
-                        + terrain_builder.height,  # TODO: make this a better computed value
+                        0.5
+                        + self.terrain_builds[
+                            i
+                        ].height,  # TODO: make this a better computed value
                     ]
                 )
             )
@@ -113,16 +117,21 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         if len(self.reset_newton_positions) > self.num_envs:
             self.reset_newton_positions = self.reset_newton_positions[: self.num_envs]
 
-        self.agent.construct(self.world)
+        self.agent.construct(self.universe)
 
-        self.domain_randomizer.construct(env=self)
+        self.domain_randomizer.construct(self.universe)
+        # TODO: investigate whether we need to have the positions and rotations in this class
+        self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
+        self.domain_randomizer.set_initial_rotations(self.reset_newton_rotations)
+
+        self._is_constructed = True
 
         self.reset()
 
-    def step(self, actions: Actions, render: bool) -> Observations:
+    def step(self, actions: Actions) -> Observations:
         self.agent.step(actions)  # has to be before the simulation advances
 
-        super().step(actions, render)  # advances the simulation by one step
+        super().step(actions)  # advances the simulation by one step
 
         observations = self.get_observations()
         return observations
