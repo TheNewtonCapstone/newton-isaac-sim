@@ -1,3 +1,0 @@
-roms:  #TODO: implement ROMs
-  low: [-15., -90., -45.]
-  high: [15., 90., 180.]

@@ -105,7 +105,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                     [
                         terrain_spawn_position[0],
                         terrain_spawn_position[1],
-                        0.5
+                        0.4
                         + self.terrain_builds[
                             i
                         ].height,  # TODO: make this a better computed value
@@ -120,9 +120,9 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         self.agent.construct(self.universe)
 
         self.domain_randomizer.construct(self.universe)
-        # TODO: investigate whether we need to have the positions and rotations in this class
+        # TODO: investigate whether we need to have the positions and rotations in this class or in domain randomizer
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
-        self.domain_randomizer.set_initial_rotations(self.reset_newton_rotations)
+        self.domain_randomizer.set_initial_orientations(self.reset_newton_orientations)
 
         self._is_constructed = True
 

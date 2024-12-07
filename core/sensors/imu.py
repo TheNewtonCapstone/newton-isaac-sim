@@ -132,7 +132,7 @@ class VecIMU:
 
         positions, rotations = self.rigid_view.get_world_poses()
         positions = torch.nan_to_num(positions)
-        rotations = torch.nan_to_num(rotations)
+        rotations = torch.nan_to_num(rotations)  # formatted as wxyz
 
         # get the offset from COM to local origin
         com_positions = self.rigid_view.get_coms()[0].squeeze(1)

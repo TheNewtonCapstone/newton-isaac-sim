@@ -1,13 +1,11 @@
-from typing import Callable, Optional, List
-
-from core.universe import Universe
-from gymnasium.spaces import Box
-from torch import Tensor
+from typing import Optional, List
 
 import torch
-from core.types import NoiseFunction
-from omni.isaac.core import World
+from core.types import NoiseFunction, Indices
+from core.universe import Universe
+from gymnasium.spaces import Box
 from omni.isaac.core.articulations import ArticulationView
+from torch import Tensor
 
 
 class VecJointsController:
@@ -24,16 +22,14 @@ class VecJointsController:
 
         self._noise_function: NoiseFunction = noise_function
         self._target_joint_positions: Tensor = torch.zeros(0)
-        self._joint_constraints: Box = joint_constraints
+        self.joint_constraints: Box = joint_constraints
 
         self._is_constructed: bool = False
 
-        # TODO: add constraints and a per-drive class
-
     @property
-    def art_view(self):
+    def art_view(self) -> Optional[ArticulationView]:
         if not self._is_constructed:
-            return 0
+            return None
 
         return self._articulation_view
 
@@ -58,12 +54,12 @@ class VecJointsController:
 
         self.universe.reset()
 
-        assert self._joint_constraints.shape[0] == len(
+        assert self.joint_constraints.shape[0] == len(
             self._articulation_view.joint_names
         ), "Joint constraints must match the number of joints"
 
         self._apply_joint_constraints(
-            self._joint_constraints,
+            self.joint_constraints,
             self._articulation_view.prim_paths,
             self._articulation_view.joint_names,
         )
@@ -71,16 +67,41 @@ class VecJointsController:
         self._is_constructed = True
 
     def step(self, joint_positions: Tensor) -> None:
-        assert self._is_constructed, "Joints controller must be constructed first"
+        assert self._is_constructed, "Joints controller not constructed: tried to step!"
 
         self._target_joint_positions = self._process_joint_positions(
             joint_positions,
-            self._joint_constraints,
+            self.joint_constraints,
             self._noise_function,
         )
 
         # TODO
         self._articulation_view.set_joint_position_targets(self._target_joint_positions)
+
+    def reset(self, joint_positions: Tensor, indices: Indices = None) -> None:
+        assert (
+            self._is_constructed
+        ), "Joints controller not constructed: tried to reset!"
+
+        if indices is None:
+            indices = torch.arange(
+                self._articulation_view.count,
+                device=self.universe.physics_device,
+            )
+        else:
+            indices = torch.from_numpy(indices).to(device=self.universe.physics_device)
+
+        joint_positions = joint_positions.to(device=self.universe.physics_device)
+
+        self._target_joint_positions = self._process_joint_positions(
+            joint_positions,
+            self.joint_constraints,
+        )
+
+        self._articulation_view.set_joint_position_targets(
+            self._target_joint_positions,
+            indices,
+        )
 
     def _apply_joint_constraints(
         self,
@@ -105,9 +126,10 @@ class VecJointsController:
         self,
         joint_positions: Tensor,
         joint_constraints: Box,
-        noise_function: NoiseFunction,
+        noise_function: Optional[NoiseFunction] = None,
     ) -> Tensor:
-        joint_positions = noise_function(joint_positions)
+        if noise_function is not None:
+            joint_positions = noise_function(joint_positions)
 
         for i, _ in enumerate(joint_positions):
             joint_positions[i] = torch.clamp(

@@ -31,7 +31,7 @@ class NewtonBaseEnv(BaseEnv):
         self.domain_randomizer: NewtonBaseDomainRandomizer = domain_randomizer
 
         self.reset_newton_positions: Tensor = torch.zeros((self.num_envs, 3))
-        self.reset_newton_rotations: Tensor = torch.tile(
+        self.reset_newton_orientations: Tensor = torch.tile(
             torch.tensor([0.0, 0.0, 0.0, 1.0]), (self.num_envs, 1)
         )
 
@@ -43,19 +43,21 @@ class NewtonBaseEnv(BaseEnv):
 
     @abstractmethod
     def step(self, actions: Actions) -> Observations:
+        self.domain_randomizer.on_step()  # DR should always happen before any physics step
+
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
         for _ in range(self._inverse_control_frequency):
             super().step(actions)  # advances the simulation by one step
-
-        self.domain_randomizer.on_step()
 
         return self.get_observations()
 
     @abstractmethod
     def reset(self, indices: Indices = None) -> Observations:
-        super().reset(indices)
+        self.domain_randomizer.on_reset(
+            indices
+        )  # DR should always happen before any physics reset
 
-        self.domain_randomizer.on_reset(indices)
+        super().reset(indices)
 
         return self.get_observations()
 

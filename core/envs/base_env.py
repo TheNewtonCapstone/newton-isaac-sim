@@ -57,6 +57,8 @@ class BaseEnv(ABC):
 
         if indices is None:
             self.universe.reset()
+        else:
+            self.universe.step()
 
         return self.get_observations()
 
