@@ -25,7 +25,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         self._newton_art_view: Optional[ArticulationView] = None
         self.initial_positions: torch.Tensor = torch.zeros((1, 3))
-        self.initial_rotations: torch.Tensor = torch.zeros((1, 4))
+        self.initial_orientations: torch.Tensor = torch.zeros((1, 4))
 
     def construct(self, universe: Universe) -> None:
         super().construct(universe)
@@ -44,6 +44,8 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
     def on_reset(self, indices: Indices = None) -> None:
         super().on_reset(indices)
 
+        indices_np = indices
+
         if indices is None:
             indices = torch.arange(self._agent.num_agents)
         else:
@@ -54,12 +56,12 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         # TODO: decide where the reset positions and rotations should come from
         self._newton_art_view.set_world_poses(
             positions=self.initial_positions[indices],
-            orientations=self.initial_rotations[indices],
+            orientations=self.initial_orientations[indices],
             indices=indices,
         )
 
         # using set_velocities instead of individual methods (lin & ang),
-        # because it's the only method supported in the GPU pipeline
+        # because it's the only method supported in the GPU pipeline (default pipeline)
         self._newton_art_view.set_velocities(
             torch.zeros((num_to_reset, 6), dtype=torch.float32),
             indices,
@@ -77,23 +79,22 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         import numpy as np
 
-        # TODO: make this less convoluted by putting the joint constraints in the agent
         joint_positions = torch.from_numpy(
             np.array(
                 [
-                    self._agent.joints_controller._joint_constraints.sample()
+                    self._agent.joints_controller.joint_constraints.sample()
                     for _ in range(num_to_reset)
                 ]
             )
         )
 
-        self._newton_art_view.set_joint_positions(
+        self._agent.joints_controller.reset(
             joint_positions,
-            indices,
+            indices_np,
         )
 
     def set_initial_positions(self, positions: torch.Tensor) -> None:
         self.initial_positions = positions.to(self._universe.physics_device)
 
-    def set_initial_rotations(self, rotations: torch.Tensor) -> None:
-        self.initial_rotations = rotations.to(self._universe.physics_device)
+    def set_initial_orientations(self, orientations: torch.Tensor) -> None:
+        self.initial_orientations = orientations.to(self._universe.physics_device)

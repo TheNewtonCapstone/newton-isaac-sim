@@ -34,7 +34,6 @@ class NewtonVecAgent(NewtonBaseAgent):
         cloner.clone(
             source_prim_path=self.path,
             prim_paths=agent_paths,
-            replicate_physics=True,
         )
 
         self.imu.construct(self.base_path_expr)

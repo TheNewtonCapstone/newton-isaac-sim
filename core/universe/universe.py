@@ -75,6 +75,7 @@ class Universe:
 
         from omni.isaac.core import World
 
+        # TODO: if we're training, disable the scene_query_support option in sim_params
         self._world: World = World(
             physics_prim_path=PHYSICS_SCENE_PATH,
             physics_dt=self._world_settings["physics_dt"],
@@ -91,7 +92,9 @@ class Universe:
         assert self._is_constructed, "Universe not constructed: tried to step!"
 
         if not self.sim_app.is_running():
-            return
+            exit(
+                0
+            )  # TODO: make this optional and more graceful (probably in a task callback)
 
         # From IsaacLab (SimulationContext)
         # need to do one update to refresh the app
@@ -109,6 +112,6 @@ class Universe:
 
         # TODO: implement proper logging, probably with a logger class and different channels for different things (
         #  e.g. rl, physics, etc.)
-        omni.log.info("universe reset", "newton.core.universe")
+        omni.log.info("Universe reset", "newton.core.universe")
 
         self._world.reset()

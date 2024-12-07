@@ -34,19 +34,29 @@ class NewtonIdleTask(NewtonBaseTask):
         playing: bool,
         max_episode_length: int,
     ):
-        # TODO: make the ROMs used in the observation_space & action_space configurable
+        agent_joints_low: np.ndarray = agent.joints_controller.joint_constraints.low
+        agent_joints_high: np.ndarray = agent.joints_controller.joint_constraints.high
+
         self.observation_space: Box = Box(
             low=np.array(
-                [-1.0] * 3 + [-np.Inf] * 7 + [-15, -90, -180] * 8 + [-np.Inf] * 12,
+                [-1.0] * 3
+                + [-np.Inf] * 7
+                + agent_joints_low.tolist()  # twice because we give past actions (target positions) + current positions
+                + agent_joints_low.tolist()
+                + [-np.Inf] * 12,
             ),
             high=np.array(
-                [1.0] * 3 + [np.Inf] * 7 + [15, 90, 180] * 8 + [np.Inf] * 12,
+                [1.0] * 3
+                + [np.Inf] * 7
+                + agent_joints_high.tolist()
+                + agent_joints_high.tolist()
+                + [np.Inf] * 12,
             ),
         )
 
         self.action_space: Box = Box(
-            low=np.array([-15, -90, -180] * 4),
-            high=np.array([15, 90, 180] * 4),
+            low=agent_joints_low.copy(),
+            high=agent_joints_high.copy(),
         )
 
         self.reward_space: Box = Box(
@@ -101,7 +111,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         # terminated
         self.dones_buf = np.where(heights <= self.reset_height, True, False)
-        self.dones_buf = np.where(heights >= 1.0, True, self.dones_buf)
+        # self.dones_buf = np.where(heights >= 1.0, True, self.dones_buf)
 
         self.dones_buf = np.where(
             self.progress_buf >= self.max_episode_length,
@@ -175,7 +185,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         heights = positions[:, 2]
 
-        # TODO: rework rewards into configurations
+        # TODO: rework reward weights into configurations
         linear_velocity_xy_reward = (
             np.exp(-np.sum(np.square(linear_velocities[:, :2])) * 4.0) * 1.0
         )
@@ -204,7 +214,7 @@ class NewtonIdleTask(NewtonBaseTask):
         self.rewards_buf = np.where(
             heights <= self.reset_height, -2.0, self.rewards_buf
         )
-        self.rewards_buf = np.where(heights >= 1.0, -2.0, self.rewards_buf)
+        # self.rewards_buf = np.where(heights >= 1.0, -2.0, self.rewards_buf)
 
         # TODO: should this be here?
         self.rewards_buf = np.clip(
