@@ -133,8 +133,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
 
         super().step(actions)  # advances the simulation by one step
 
-        observations = self.get_observations()
-        return observations
+        return self.get_observations()
 
     def reset(self, indices: Indices = None) -> Observations:
         super().reset(indices)

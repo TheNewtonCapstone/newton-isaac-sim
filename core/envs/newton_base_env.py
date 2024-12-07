@@ -30,10 +30,10 @@ class NewtonBaseEnv(BaseEnv):
         self.agent: NewtonBaseAgent = agent
         self.domain_randomizer: NewtonBaseDomainRandomizer = domain_randomizer
 
+        from core.utils.math import IDENTITY_QUAT
+
         self.reset_newton_positions: Tensor = torch.zeros((self.num_envs, 3))
-        self.reset_newton_orientations: Tensor = torch.tile(
-            torch.tensor([0.0, 0.0, 0.0, 1.0]), (self.num_envs, 1)
-        )
+        self.reset_newton_orientations: Tensor = IDENTITY_QUAT.repeat(self.num_envs, 1)
 
         self._inverse_control_frequency = inverse_control_frequency
 

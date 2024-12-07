@@ -35,7 +35,7 @@ class NewtonBaseAgent(BaseAgent):
 
     @abstractmethod
     def get_observations(self) -> Observations:
-        imu_data_tensor = self.imu.get_data(recalculate=True)
+        imu_data_tensor = self.imu.get_data()
         imu_data_numpy = {}
 
         for key, value in imu_data_tensor.items():
