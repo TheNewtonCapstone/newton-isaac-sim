@@ -139,8 +139,6 @@ class NewtonIdleTask(NewtonBaseTask):
     def reset(self) -> VecEnvObs:
         super().reset()
 
-        self.env.reset()
-
         obs = self._get_observations()
 
         obs_buf: np.ndarray = np.zeros(
@@ -159,6 +157,9 @@ class NewtonIdleTask(NewtonBaseTask):
             self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
         )
 
+        self.env.reset()
+
+        # we want to return the last observation of the previous episode
         return obs_buf
 
     def _get_observations(self) -> VecEnvObs:

@@ -144,7 +144,7 @@ if __name__ == "__main__":
     imu = VecIMU(
         universe=universe,
         local_position=torch.zeros((num_envs, 3)),
-        local_rotation=IDENTITY_QUAT.repeat(num_envs, 1),
+        local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
         noise_function=lambda x: x,
     )
 
@@ -152,8 +152,8 @@ if __name__ == "__main__":
         universe=universe,
         noise_function=lambda x: x,
         joint_constraints=Box(
-            low=np.array([-15, -90, -180] * 4),
-            high=np.array([15, 90, 180] * 4),
+            low=np.array([-45, -90, -180] * 4),
+            high=np.array([45, 90, 180] * 4),
         ),
     )
 
