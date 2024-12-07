@@ -156,8 +156,7 @@ class VecIMU:
         }
 
     def _update_data(self) -> None:
-        if not self._is_constructed:
-            return
+        assert self._is_constructed, "IMU not constructed: tried to update data!"
 
         # from: https://github.com/isaac-sim/IsaacLab/pull/619/files#diff-44fe42c247de7301a3ce18a10d2b8c9045d58d42fc8440a7221b458d0712e83d
 
