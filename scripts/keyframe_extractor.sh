@@ -60,4 +60,5 @@ echo "Extracting keyframes from $BLEND_FILE..."
 BLEND_FILE_NAME=$(basename "$BLEND_FILE" | cut -d "." -f 1)
 
 OUTPUT_FILE="$OUTPUT_DIR/$BLEND_FILE_NAME.keyframes.yaml"
-exec $BLENDER_EXECUTABLE --python-use-system-env --background --quiet "$BLEND_FILE" --python $KEYFRAME_EXTRACTOR_SCRIPT -- --armature "Armature" --keyframes "$OUTPUT_FILE"
+exec $BLENDER_EXECUTABLE --python-use-system-env --background --quiet "$BLEND_FILE" --python $KEYFRAME_EXTRACTOR_SCRIPT \
+  -- --armature "Armature" --output "$OUTPUT_FILE" --animation "$BLEND_FILE_NAME"

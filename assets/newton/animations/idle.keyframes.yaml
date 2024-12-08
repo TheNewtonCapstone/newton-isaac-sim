@@ -1,3 +1,6 @@
+animation: idle
+beginning: 0
+duration: 45
 keyframes:
 - data:
   - bone: FR_HAA

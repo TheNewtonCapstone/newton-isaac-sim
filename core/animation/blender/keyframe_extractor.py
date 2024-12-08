@@ -51,11 +51,9 @@ def extract_keyframes_from_scene(
                 bone = armature.pose.bones.get(bone_name)
                 if bone:
                     world_matrix = armature.matrix_world @ bone.matrix
-                    rotation_quaternion = world_matrix.to_quaternion()
 
                     rotation_keyframe = {
                         "bone": bone_name,
-                        "quaternion": list(rotation_quaternion[:]),
                     }
 
                     if euler:
@@ -65,6 +63,10 @@ def extract_keyframes_from_scene(
                         rotation_euler[:] = [e * 180 / 3.14159 for e in rotation_euler]
 
                         rotation_keyframe["euler"] = list(rotation_euler[:])
+                    else:
+                        rotation_quaternion = world_matrix.to_quaternion()
+
+                        rotation_keyframe["quaternion"] = list(rotation_quaternion[:])
 
                     frame_data.append(rotation_keyframe)
 
@@ -77,12 +79,20 @@ def extract_keyframes_from_scene(
     else:
         print(f"Armature {armature_name} not found, or not an armature.")
 
-    return keyframes_data, end_frame - start_frame, len(bone_names)
+    return keyframes_data, start_frame, end_frame - start_frame, len(bone_names)
 
 
-def list_to_yaml(data: list) -> str:
+def keyframes_to_yaml(
+    data: list,
+    beginning: int,
+    duration: int,
+    animation: str,
+) -> str:
     return yaml.dump(
         {
+            "animation": animation,
+            "beginning": beginning,
+            "duration": duration,
             "keyframes": data,
         }
     )
@@ -97,12 +107,26 @@ def setup_args() -> argparse.Namespace:
         "--armature",
         required=False,
         default="Armature",
+        type=str,
         help="Name of the Armature to extract keyframes from.",
     )
     parser.add_argument(
-        "--keyframes",
+        "--output",
         required=False,
+        type=str,
         help="Path to the file to save the keyframes to.",
+    )
+    parser.add_argument(
+        "--animation",
+        required=True,
+        type=str,
+        help="Name of the animation (to be used in the output YAML).",
+    )
+    parser.add_argument(
+        "--euler",
+        action="store_true",
+        default=False,
+        help="Use Euler angles (degrees) instead of Quaternions (WXYZ).",
     )
 
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :])
@@ -113,23 +137,26 @@ def setup_args() -> argparse.Namespace:
 def main():
     args = setup_args()
     armature_name = args.armature
-    keyframes_path = args.keyframes
+    output_path = args.output
+    animation_name = args.animation
 
     # Extract keyframes
-    rotations_dict, length, num_bones = extract_keyframes_from_scene(armature_name)
+    rotations_dict, start_frame, length, num_bones = extract_keyframes_from_scene(
+        armature_name
+    )
 
     print(
         f"Extracted rotation keyframes:\n  Bones: {num_bones}\n  Frames: {length}\n  Total Keyframes: {length * num_bones}"
     )
 
     # Convert to YAML
-    yaml_data = list_to_yaml(rotations_dict)
+    yaml_data = keyframes_to_yaml(rotations_dict, start_frame, length, animation_name)
 
     # Save to file
-    with open(keyframes_path, "w") as file:
+    with open(output_path, "w") as file:
         file.write(yaml_data)
 
-    print(f"Keyframes saved to: {keyframes_path}")
+    print(f"Keyframes saved to: {output_path}")
 
 
 # Ensure the script only runs when executed directly

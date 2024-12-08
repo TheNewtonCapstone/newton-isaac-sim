@@ -53,6 +53,12 @@ def setup_argparser() -> argparse.ArgumentParser:
         default="configs/randomization.yaml",
     )
     parser.add_argument(
+        "--animations-dir",
+        type=str,
+        help="Path to the directory containing animations.",
+        default="assets/newton/animations",
+    )
+    parser.add_argument(
         "--checkpoint",
         type=str,
         help="Path to the checkpoint to load for RL.",
@@ -87,6 +93,8 @@ if __name__ == "__main__":
     rl_config = load_config(cli_args.rl_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
+
+    animation_dir = cli_args.animations_dir
 
     physics_only = cli_args.physics
     exporting = cli_args.export_onnx
