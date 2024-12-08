@@ -1,42 +1,20 @@
 import argparse
-import os
 
-import numpy as np
-import torch
-from core.envs.generic_env import GenericEnv
-from core.envs.procedural_env import ProceduralEnv
-from core.newton.newton_agent import NewtonAgent
-from core.pid.pid import PidController
-from core.terrain.flat_terrain import FlatTerrainBuilder
-from core.terrain.perlin_terrain import PerlinTerrainBuilder
-from core.twip.balancing_twip_task import (
-    BalancingTwipTask,
-    BalancingTwipCallback,
-    actions_to_torque,
-    roll_from_quat,
-)
-from core.wrappers.tasks import RandomDelayVecWrapper
-from core.twip.twip_agent import TwipAgent
-from core.utils.config import load_config
-from core.utils.path import (
-    get_current_path,
-    build_child_path_with_prefix,
-    get_folder_from_path,
-)
-from isaacsim import SimulationApp
 from stable_baselines3 import PPO
 from stable_baselines3.common.policies import BasePolicy
 
-newton_settings = {
-    "newton_urdf_path": os.path.join(
-        get_current_path(__file__), "assets/newton/newton.urdf"
-    ),
-    "newton_usd_path": os.path.join(
-        get_current_path(__file__), "assets/newton/newton.usd"
-    ),
-}
+import numpy as np
+import torch
+from core.utils.config import load_config
+from core.utils.math import IDENTITY_QUAT
+from core.utils.path import (
+    build_child_path_with_prefix,
+    get_folder_from_path,
+)
+from gymnasium.spaces import Box
 
 
+# TODO: rework arguments
 def setup_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="newton.py", description="Entrypoint for any Newton-related actions."
@@ -45,7 +23,7 @@ def setup_argparser() -> argparse.ArgumentParser:
         "--headless", action="store_true", help="Run in headless mode.", default=False
     )
     parser.add_argument(
-        "--sim-only",
+        "--physics",
         action="store_true",
         help="Run the simulation only (no RL).",
         default=False,
@@ -60,7 +38,7 @@ def setup_argparser() -> argparse.ArgumentParser:
         "--rl-config",
         type=str,
         help="Path to the configuration file for RL.",
-        default="configs/task_twip.yaml",
+        default="configs/newton_idle_task.yaml",
     )
     parser.add_argument(
         "--world-config",
@@ -105,12 +83,12 @@ def setup_argparser() -> argparse.ArgumentParser:
 if __name__ == "__main__":
     parser = setup_argparser()
 
-    cli_args = parser.parse_args()
+    cli_args, _ = parser.parse_known_args()
     rl_config = load_config(cli_args.rl_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
 
-    simulating = cli_args.sim_only
+    physics_only = cli_args.physics
     exporting = cli_args.export_onnx
     pidding = not exporting and cli_args.pid_control
     playing = not exporting and not pidding and cli_args.play
@@ -120,10 +98,11 @@ if __name__ == "__main__":
     )  # if we're exporting, don't show the GUI
 
     # override config with CLI num_envs, if specified
+    num_envs = rl_config["n_envs"]
     if cli_args.num_envs != -1:
-        rl_config["n_envs"] = cli_args.num_envs
+        num_envs = cli_args.num_envs
     elif not training:
-        rl_config["n_envs"] = 1
+        num_envs = 1
 
     if playing:
         # increase the number of steps if we're playing
@@ -146,79 +125,68 @@ if __name__ == "__main__":
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
-    sim_app = SimulationApp(
-        {"headless": headless}, experience="./apps/omni.isaac.sim.newton.kit"
+    # universe must be imported & constructed first, to load all necessary omniverse extensions
+    from core.universe import Universe
+
+    universe = Universe(headless, world_config)
+    universe.construct()
+
+    from core.envs import NewtonMultiTerrainEnv
+    from core.agents import NewtonVecAgent
+
+    from core.terrain.flat_terrain import FlatBaseTerrainBuilder
+    from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
+
+    from core.sensors import VecIMU
+    from core.controllers import VecJointsController
+    from core.domain_randomizer import NewtonBaseDomainRandomizer
+
+    imu = VecIMU(
+        universe=universe,
+        local_position=torch.zeros((num_envs, 3)),
+        local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
+        noise_function=lambda x: x,
     )
 
-    # ----------- #
-    # PID CONTROL #
-    # ----------- #
+    joints_controller = VecJointsController(
+        universe=universe,
+        noise_function=lambda x: x,
+        joint_constraints=Box(
+            low=np.array([-45, -90, -180] * 4),
+            high=np.array([45, 90, 180] * 4),
+        ),
+    )
 
-    if pidding:
-        controller = PidController(
-            kp=1.55,
-            kd=0.1,
-            ki=0.15,
-            min_output=-1.0,
-            max_output=1.0,
-            max_integral=2.0,
-            setpoint=0.0,
-        )
+    newton_agent = NewtonVecAgent(
+        num_agents=num_envs,
+        imu=imu,
+        joints_controller=joints_controller,
+    )
 
-        randomization_config["randomize"] = False
-
-        env = GenericEnv(
-            world_settings=world_config,
-            num_envs=rl_config["n_envs"],
-            terrain_builders=[FlatTerrainBuilder()],
-            randomization_settings=randomization_config,
-        )
-
-        newton = NewtonAgent(newton_settings)
-
-        env.construct(newton)
-        env.reset()
-
-        actions = torch.zeros(env.num_envs, 2)
-        log_file = open("pidding.csv", "w")
-        print("time,dt,roll,action1,action2", file=log_file)
-
-        while sim_app.is_running():
-            imu_data = env.step(actions, render=not headless)
-            roll = roll_from_quat(imu_data[:, 6:10]).item()
-
-            dt = env.world.get_physics_dt()
-            actions = controller.predict(roll, dt)
-
-            actions = actions_to_torque(actions)
-
-            print(
-                f"{env.world.current_time},{dt},{roll},{actions[0]},{actions[1]}",
-                file=log_file,
-            )
-
-        exit(1)
+    domain_randomizer = NewtonBaseDomainRandomizer(
+        seed=rl_config["seed"],
+        agent=newton_agent,
+        randomizer_settings=randomization_config,
+    )
 
     # ---------- #
     # SIMULATION #
     # ---------- #
 
-    if simulating:
-        env = ProceduralEnv(
-            world_settings=world_config,
-            num_envs=rl_config["n_envs"],
-            terrain_builders=[PerlinTerrainBuilder(), FlatTerrainBuilder()],
-            randomization_settings=randomization_config,
+    if physics_only:
+        env = NewtonMultiTerrainEnv(
+            agent=newton_agent,
+            num_envs=num_envs,
+            terrain_builders=[PerlinBaseTerrainBuilder(), FlatBaseTerrainBuilder()],
+            domain_randomizer=domain_randomizer,
+            inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
         )
 
-        newton = NewtonAgent(newton_settings)
-
-        env.construct(newton)
+        env.construct(universe)
         env.reset()
 
-        while sim_app.is_running():
-            if env.world.is_playing():
-                env.step(torch.zeros(env.num_envs, 2), render=not headless)
+        while universe.is_playing:
+            env.step(np.zeros((num_envs, 12)))
 
         exit(1)
 
@@ -226,50 +194,75 @@ if __name__ == "__main__":
     #     RL      #
     # ----------- #
 
-    def generic_env_factory() -> GenericEnv:
-        return GenericEnv(
-            world_settings=world_config,
-            num_envs=rl_config["n_envs"],
-            terrain_builders=[FlatTerrainBuilder(size=[10, 10])],
-            randomization_settings=randomization_config,
-        )
+    from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
+    from core.envs import NewtonMultiTerrainEnv
+    from core.wrappers import RandomDelayWrapper
 
-    def procedural_env_factory() -> ProceduralEnv:
-        terrains_size = [10, 10]
-        terrains_resolution = [20, 20]
+    terrains_size = torch.tensor([10, 10])
+    terrains_resolution = torch.tensor([20, 20])
 
-        return ProceduralEnv(
-            world_settings=world_config,
-            num_envs=rl_config["n_envs"],
-            terrain_builders=[
-                FlatTerrainBuilder(size=terrains_size),
-                PerlinTerrainBuilder(
-                    size=terrains_size,
-                    resolution=terrains_resolution,
-                    height=0.05,
-                    octave=4,
-                    noise_scale=2,
-                ),
-                PerlinTerrainBuilder(
-                    size=terrains_size,
-                    resolution=terrains_resolution,
-                    height=0.03,
-                    octave=8,
-                    noise_scale=4,
-                ),
-                PerlinTerrainBuilder(
-                    size=terrains_size,
-                    resolution=terrains_resolution,
-                    height=0.02,
-                    octave=16,
-                    noise_scale=8,
-                ),
-            ],
-            randomization_settings=randomization_config,
-        )
+    training_env = NewtonMultiTerrainEnv(
+        agent=newton_agent,
+        num_envs=num_envs,
+        terrain_builders=[
+            FlatBaseTerrainBuilder(size=terrains_size),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.05,
+                octave=4,
+                noise_scale=2,
+            ),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.03,
+                octave=8,
+                noise_scale=4,
+            ),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.02,
+                octave=16,
+                noise_scale=8,
+            ),
+        ],
+        domain_randomizer=domain_randomizer,
+        inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
+    )
 
-    def newton_agent_factory() -> NewtonAgent:
-        return NewtonAgent(newton_settings)
+    # TODO: add a proper separate playing environment
+    playing_env = NewtonMultiTerrainEnv(
+        agent=newton_agent,
+        num_envs=num_envs,
+        terrain_builders=[
+            FlatBaseTerrainBuilder(size=terrains_size),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.05,
+                octave=4,
+                noise_scale=2,
+            ),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.03,
+                octave=8,
+                noise_scale=4,
+            ),
+            PerlinBaseTerrainBuilder(
+                size=terrains_size,
+                resolution=terrains_resolution,
+                height=0.02,
+                octave=16,
+                noise_scale=8,
+            ),
+        ],
+        domain_randomizer=domain_randomizer,
+        inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
+    )
 
     task_runs_directory = "runs"
     task_name = build_child_path_with_prefix(
@@ -277,19 +270,21 @@ if __name__ == "__main__":
     )
 
     # task used for either training or playing
-    task = BalancingTwipTask(
-        headless=cli_args.headless,
+    task = NewtonIdleTask(
+        training_env=training_env,
+        playing_env=playing_env,
+        agent=newton_agent,
         device=rl_config["device"],
-        num_envs=rl_config["n_envs"],
+        num_envs=num_envs,
         playing=playing,
-        max_episode_length=rl_config["ppo"]["n_steps"],
-        training_env_factory=procedural_env_factory,
-        playing_env_factory=generic_env_factory,
-        agent_factory=newton_agent_factory,
+        max_episode_length=rl_config["episode_length"],
     )
-    callback = BalancingTwipCallback()
+    callback = NewtonBaseTaskCallback(
+        check_freq=64,
+        save_path=task_name,
+    )
 
-    task.construct()
+    task.construct(universe)
 
     # we're not exporting nor purely simulating, so we're training
     if training:
@@ -301,7 +296,7 @@ if __name__ == "__main__":
             obs_delay_range = range(list_obs_delay_range[0], list_obs_delay_range[1])
             act_delay_range = range(list_act_delay_range[0], list_act_delay_range[1])
 
-            task = RandomDelayVecWrapper(
+            task = RandomDelayWrapper(
                 task,
                 obs_delay_range=obs_delay_range,
                 act_delay_range=act_delay_range,
@@ -335,7 +330,7 @@ if __name__ == "__main__":
             model = PPO.load(cli_args.checkpoint, task, device=rl_config["device"])
 
         model.learn(
-            total_timesteps=rl_config["timesteps_per_env"] * rl_config["n_envs"],
+            total_timesteps=rl_config["timesteps_per_env"] * num_envs,
             tb_log_name=task_name,
             reset_num_timesteps=False,
             progress_bar=True,
@@ -354,17 +349,17 @@ if __name__ == "__main__":
         log_file = open(f"{get_folder_from_path(cli_args.checkpoint)}/playing.csv", "w")
         print("time,dt,roll,action1,action2", file=log_file)
 
-        while sim_app.is_running():
-            if task.env.world.is_playing():
-                step_return = task.step(actions)
-                observations = step_return[0]
-                actions = model.predict(observations, deterministic=True)[0]
+        while universe.is_playing:
+            step_return = task.step(actions)
+            observations = step_return[0]
 
-                torque_actions = actions_to_torque(torch.from_numpy(actions[0]))
-                print(
-                    f"{task.env.world.current_time},{task.env.world.get_physics_dt()},{observations[0][0]},{torque_actions[0]},{torque_actions[1]}",
-                    file=log_file,
-                )
+            actions = model.predict(observations, deterministic=True)[0]
+            actions_string = ",".join([str(ja) for ja in actions[0]])
+
+            print(
+                f"{universe.physics_world.current_time},{universe.physics_world.get_physics_dt()},{observations[0][0]},{actions_string}",
+                file=log_file,
+            )
 
         exit(1)
 

@@ -15,7 +15,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$ProjectFileDir$/newton.py" />
-    <option name="PARAMETERS" value="--checkpoint runs/twip_balancing_014_0/model_11345920.zip --play" />
+    <option name="PARAMETERS" value="--checkpoint runs/newton_idle_038_0/newton_idle_038_rew_-59.47 --play" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

@@ -1,5 +1,26 @@
-physics_dt: 0.02000
+physics_dt: 0.005000
 stage_units_in_meters: 1.0
 rendering_dt: 0.01667
 backend: torch
 device: cuda
+
+# the following overrides what is in assets/physics.usd
+sim_params:
+  substeps: 1
+  solver_type: 1 # 0: PGS, 1: TGS
+  enable_stabilization: True # true for a 2nd pass to stabilize
+  enable_scene_query_support: True # true to interact with the scene with the mouse
+
+  use_gpu_pipeline: True # true for GPU dynamics (i.e. deformables)
+
+  # GPU buffers
+  gpu_max_rigid_contact_count: 2097152
+  gpu_max_rigid_patch_count: 655360
+  gpu_found_lost_pairs_capacity: 16776216
+  gpu_found_lost_aggregate_pairs_capacity: 107701464
+  gpu_total_aggregate_pairs_capacity: 4194304
+  gpu_max_soft_body_contacts: 1024 # Soft body contacts are not used for Newton-related sims, so we keep it low
+  gpu_max_particle_contacts: 1024 # Particle contacts are not used for Newton-related sims, so we keep it low
+  gpu_heap_capacity: 134217728
+  gpu_temp_buffer_capacity: 33554432
+  gpu_max_num_partitions: 8

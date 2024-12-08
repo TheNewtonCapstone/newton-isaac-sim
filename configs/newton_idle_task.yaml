@@ -1,0 +1,40 @@
+task_name: "newton_idle"
+device: "cuda"
+policy: "MlpPolicy"
+seed: 14321
+
+n_envs: 96
+timesteps_per_env: 500_000
+base_lr: 3e-4
+episode_length: 5000
+
+newton:
+  inverse_control_frequency: 4  # we're aiming for a total compute budget of 2 times the physics timestep (0.005s * 4 = 0.02s)
+
+delay:
+  enabled: False
+  obs_delay_range: [1, 8] # sample range of time steps to delay the observations by
+  act_delay_range: [1, 2] # sample range of time steps to delay the actions by
+  instant_rewards: False # should the rewards be calculated on the brain or remote actor?
+
+ppo:
+  n_steps: 24
+  batch_size: 2304
+  n_epochs: 5
+
+  gamma: 0.99
+  gae_lambda: 0.95
+
+  clip_range: 0.2
+  clip_range_vf: None
+
+  normalize_advantage: True
+
+  ent_coef: 0.0
+  vf_coef: 0.5
+
+  max_grad_norm: 0.5
+  use_sde: False
+  sde_sample_freq: -1
+
+  target_kl: None

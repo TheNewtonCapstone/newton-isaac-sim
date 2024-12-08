@@ -1,71 +1,80 @@
-from abc import abstractmethod
+from abc import abstractmethod, ABC
+from typing import Optional
 
 import torch
+from torch import Tensor
 
 
-class TerrainBuild:
+class BaseTerrainBuild:
     def __init__(
         self,
-        stage,
-        size: list[float],
-        resolution: list[int],
+        size: Tensor,
+        resolution: Tensor,
         height: float,
-        position: list[float],
-        path: str
+        position: Tensor,
+        path: str,
     ):
-        self.stage = stage
-        self.path = path
-
         self.size = size
         self.position = position
         self.resolution = resolution
         self.height = height
 
+        self.path = path
 
-class TerrainBuilder:
+
+class BaseTerrainBuilder(ABC):
     def __init__(
         self,
-        size: list[float] = None,
-        resolution: list[int] = None,
+        size: Tensor = None,
+        resolution: Tensor = None,
         height: float = 1,
-        base_path: str = None,
+        root_path: Optional[str] = None,
     ):
+        from core.globals import TERRAINS_PATH
+
         if size is None:
-            size = [5, 5]
+            size = torch.tensor([10, 10])
         if resolution is None:
-            resolution = [10, 10]
-        if base_path is None:
-            base_path = "/World/terrains"
+            resolution = torch.tensor([20, 20])
+        if root_path is None:
+            root_path = TERRAINS_PATH
 
         self.size = size
         self.resolution = resolution
         self.height = height
-        self.base_path = base_path
+        self.root_path = root_path
 
-    def build_from_self(self, stage, position: list[float]) -> TerrainBuild:
+        from omni.isaac.core.utils.prims import create_prim
+        from omni.isaac.core.utils.prims import is_prim_path_valid
+
+        if not is_prim_path_valid(root_path):
+            create_prim(
+                prim_path=root_path,
+                prim_type="Scope",
+            )
+
+    def build_from_self(self, position: Tensor) -> BaseTerrainBuild:
         return self.build(
-            stage,
             self.size,
             self.resolution,
             self.height,
             position,
-            self.base_path
+            self.root_path,
         )
 
-    @staticmethod
+    @abstractmethod
     def build(
-        stage,
-        size: list[float],
-        resolution: list[int],
-        height: float,
-        position: list[float],
-        path="/World/terrains",
-    ) -> TerrainBuild:
+        self,
+        size: Optional[Tensor] = None,
+        resolution: Optional[Tensor] = None,
+        height: float = 1,
+        position: Optional[Tensor] = None,
+        path: Optional[str] = None,
+    ) -> BaseTerrainBuild:
         """
         Builds a terrain in the stage, according to the class's implementation.
 
         Args:
-            stage: USD stage to build the terrain in.
             size: Size of the terrain in the stage's units.
             resolution: Number of vertices per terrain.
             height: Height of the terrain in the stage's units.
@@ -76,27 +85,31 @@ class TerrainBuilder:
 
     @staticmethod
     def _add_heightmap_to_world(
-        heightmap: torch.Tensor,
-        size: list[float],
+        heightmap: Tensor,
+        size: Tensor,
         num_cols: int,
         num_rows: int,
         height: float,
         base_path: str,
         builder_name: str,
-        position: list[float]
+        position: Tensor,
     ) -> str:
-        vertices, triangles = TerrainBuilder._heightmap_to_mesh(heightmap, size, num_cols, num_rows, height)
+        vertices, triangles = BaseTerrainBuilder._heightmap_to_mesh(
+            heightmap, size, num_cols, num_rows, height
+        )
 
-        return TerrainBuilder._add_mesh_to_world(vertices, triangles, base_path, builder_name, size, position)
+        return BaseTerrainBuilder._add_mesh_to_world(
+            vertices, triangles, base_path, builder_name, size, position
+        )
 
     @staticmethod
     def _heightmap_to_mesh(
-        heightmap: torch.Tensor,
-        size: list[float],
+        heightmap: Tensor,
+        size: Tensor,
         num_cols: int,
         num_rows: int,
-        height: float
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        height: float,
+    ) -> tuple[Tensor, Tensor]:
         # from https://github.com/isaac-sim/OmniIsaacGymEnvs/blob/main/omniisaacgymenvs/utils/terrain_utils/terrain_utils.py
 
         x = torch.linspace(0, (size[0]), num_cols)
@@ -128,20 +141,20 @@ class TerrainBuilder:
             triangles[start:end:2, 2] = ind1
 
             # second set of triangles (bottom right)
-            triangles[start + 1: end: 2, 0] = ind0
-            triangles[start + 1: end: 2, 1] = ind2
-            triangles[start + 1: end: 2, 2] = ind3
+            triangles[start + 1 : end : 2, 0] = ind0
+            triangles[start + 1 : end : 2, 1] = ind2
+            triangles[start + 1 : end : 2, 2] = ind3
 
         return vertices, triangles
 
     @staticmethod
     def _add_mesh_to_world(
-        vertices: torch.Tensor,
-        triangles: torch.Tensor,
+        vertices: Tensor,
+        triangles: Tensor,
         base_path: str,
         builder_name: str,
-        size: list[float],
-        position: list[float],
+        size: Tensor,
+        position: Tensor,
     ) -> str:
         from core.utils.usd import find_matching_prims
         from omni.isaac.core.prims.xform_prim import XFormPrim
@@ -172,8 +185,11 @@ class TerrainBuilder:
         )
 
         UsdPhysics.CollisionAPI.Apply(terrain.prim)
+
+        # Contact offset needs to be set to a relatively large (~0.1) value to prevent objects clipping through
+        # for more info, check: https://docs.omniverse.nvidia.com/extensions/latest/ext_physics/rigid-bodies.html
         physx_collision_api = PhysxSchema.PhysxCollisionAPI.Apply(terrain.prim)
-        physx_collision_api.GetContactOffsetAttr().Set(0.02)
-        physx_collision_api.GetRestOffsetAttr().Set(0.02)
+        physx_collision_api.GetContactOffsetAttr().Set(0.1)
+        physx_collision_api.GetRestOffsetAttr().Set(0.01)
 
         return prim_path

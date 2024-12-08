@@ -22,7 +22,7 @@ def set_physics_properties(
     dynamic_friction: float = 0.5,
     static_friction: float = 0.5,
     restitution: float = 0.8
-) -> bool:
+):
     from omni.isaac.core.utils.prims import get_prim_at_path, define_prim, is_prim_path_valid
 
     target_prim = get_prim_at_path(target_prim_path)
@@ -46,7 +46,7 @@ def set_physics_properties(
         physics_material_api.CreateStaticFrictionAttr(static_friction)
         physics_material_api.CreateRestitutionAttr(restitution)
 
-        return True
+        return
 
     # otherwise, bind the material (not the material prim) to the target prim
     material = get_or_define_material(material_prim_path)
@@ -62,7 +62,7 @@ def set_physics_properties(
     physics_material_api.CreateStaticFrictionAttr(static_friction)
     physics_material_api.CreateRestitutionAttr(restitution)
 
-    return True
+    return
 
 
 def raycast(start: list[float], direction: list[float], max_distance: float = 500) -> tuple[list[float], list[float], float]:
@@ -83,10 +83,9 @@ def raycast(start: list[float], direction: list[float], max_distance: float = 50
 
     origin = Gf.Vec3f(start)
     ray_dir = Gf.Vec3f(direction)
-    ray_dir.Normalize(0.00001)
     max_dist = max_distance
 
-    hit_info = get_physx_scene_query_interface().raycast_closest(origin, ray_dir, max_dist)
+    hit_info = get_physx_scene_query_interface().raycast_closest(origin, ray_dir, max_dist, True)
 
     if hit_info is None or not hit_info["hit"]:
         return [], [], -1
