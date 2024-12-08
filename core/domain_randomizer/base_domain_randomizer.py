@@ -11,7 +11,6 @@ class BaseDomainRandomizer(ABC):
         self,
         seed: int,
         agent: BaseAgent,
-        # TODO: think about how to construct the domain randomizers appropriately (without circular imports)
         randomizer_settings: Settings,
     ):
         self.seed: int = seed
