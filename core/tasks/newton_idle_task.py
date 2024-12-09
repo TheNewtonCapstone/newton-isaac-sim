@@ -176,6 +176,8 @@ class NewtonIdleTask(NewtonBaseTask):
         obs_buf[:, 34:46] = (
             self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
         )
+        obs_buf[:, 46] = np.cos(2 * np.pi * 0)
+        obs_buf[:, 47] = np.sin(2 * np.pi * 0)
 
         self.env.reset()
 
@@ -190,8 +192,6 @@ class NewtonIdleTask(NewtonBaseTask):
 
     def _calculate_rewards(self) -> None:
         # TODO: rework rewards for Newton*Tasks
-
-        phase_signal = self.progress_buf / self.max_episode_length
 
         obs = self._get_observations()
         positions = obs["positions"]
@@ -228,7 +228,7 @@ class NewtonIdleTask(NewtonBaseTask):
             .numpy()
         )  # in Nm
         animation_joint_data = self.animation_engine.get_current_clip_datas_ordered(
-            phase_signal, joints_order
+            self.progress_buf, joints_order
         )
         animation_joint_angles = animation_joint_data[:, :, 7] / self.reward_space.high
         # animation joint velocities

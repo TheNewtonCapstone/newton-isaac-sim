@@ -30,6 +30,7 @@ class AnimationClip:
     framerate: int
     start_frame: int
     duration: int
+    duration_in_seconds: float
     keyframes: List[Keyframe]
 
 
@@ -37,12 +38,14 @@ class AnimationEngine:
     def __init__(
         self,
         clips: Dict[str, Settings],
+        step_dt: float,
     ):
         self.current_clip_name: Optional[str] = None
 
         self.clip_configs: Dict[str, Settings] = clips
         self.clips: Dict[str, AnimationClip] = {}
 
+        self._step_dt: float = step_dt
         self._is_constructed: bool = False
 
     @property
@@ -88,11 +91,14 @@ class AnimationEngine:
 
                 keyframes.append(keyframe)
 
+            duration_in_seconds = clip_settings["duration"] / clip_settings["framerate"]
+
             self.clips[clip_name] = AnimationClip(
                 name=clip_name,
                 framerate=clip_settings["framerate"],
                 start_frame=clip_settings["start_frame"],
                 duration=clip_settings["duration"],
+                duration_in_seconds=duration_in_seconds,
                 keyframes=keyframes,
             )
 
@@ -107,7 +113,7 @@ class AnimationEngine:
         """
         Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
         Args:
-            progress: The progress of the current episode, in the range [0, 1] for every vectorized agent.
+            progress: The progress of the current episode, in the range [0, max_episode_length] for every vectorized agent.
             joints_order: List of joint names in the order they should be returned.
             interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
 
@@ -151,7 +157,7 @@ class AnimationEngine:
         """
         Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
         Args:
-            progress: The progress of the current episode, in the range [0, 1] for every vectorized agent.
+            progress: The progress of the current episode, in number of steps done, for every vectorized agent.
             interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
 
         Returns:
@@ -160,20 +166,24 @@ class AnimationEngine:
         return self.get_clip_datas(self.current_clip_name, progress, interpolate)
 
     def get_clip_datas(
-        self, clip_name: str, progress: np.ndarray, interpolate: bool = True
+        self,
+        clip_name: str,
+        progress: np.ndarray,
+        interpolate: bool = True,
     ) -> List[ArmatureData]:
         """
         Get the armature data for the given clip at the given progress. Optionally interpolates between keyframes.
         Args:
             clip_name: The name of the clip to get data from.
-            progress: The progress of the current episode, in the range [0, 1] for every vectorized agent.
+            progress: The progress of the current episode, in number of steps done, for every vectorized agent.
             interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
 
         Returns:
             A list of armature data for each agent.
         """
         clip: AnimationClip = self.clips[clip_name]
-        frames = progress * clip.duration
+        progress_in_seconds = progress * self._step_dt
+        frames = progress_in_seconds * clip.framerate
 
         data = []
 
@@ -183,7 +193,9 @@ class AnimationEngine:
         return data
 
     def get_current_clip_data(
-        self, frame: float, interpolate: bool = True
+        self,
+        frame: float,
+        interpolate: bool = True,
     ) -> ArmatureData:
         """
         Get the armature data for the current clip at the given frame. Optionally interpolates between keyframes.
@@ -197,7 +209,10 @@ class AnimationEngine:
         return self.get_clip_data(self.current_clip_name, frame, interpolate)
 
     def get_clip_data(
-        self, clip_name: str, frame: float, interpolate: bool = True
+        self,
+        clip_name: str,
+        frame: float,
+        interpolate: bool = True,
     ) -> ArmatureData:
         """
         Get the armature data for the given clip at the given frame. Optionally interpolates between keyframes.

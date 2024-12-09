@@ -233,8 +233,17 @@ def main():
         joints_controller=joints_controller,
     )
 
+    step_dt = (
+        rl_config["newton"]["inverse_control_frequency"] * world_config["physics_dt"]
+    )
+
+    # TODO: Add a separate animation only mode in simulation
+    #   This will allow us to test animations without the need for training/testing
+    #   labels=enhancement
+
     animation_engine = AnimationEngine(
         clips=animation_clips_settings,
+        step_dt=step_dt,
     )
 
     domain_randomizer = NewtonBaseDomainRandomizer(
@@ -243,9 +252,9 @@ def main():
         randomizer_settings=randomization_config,
     )
 
-    # ---------- #
-    # SIMULATION #
-    # ---------- #
+    # ---------------- #
+    #   PHYSICS ONLY   #
+    # ---------------- #
 
     if physics_only:
         env = NewtonMultiTerrainEnv(

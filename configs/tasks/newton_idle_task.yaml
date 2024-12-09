@@ -4,9 +4,9 @@ policy: "MlpPolicy"
 seed: 14321
 
 n_envs: 96
-timesteps_per_env: 500_000
+timesteps_per_env: 100_000
 base_lr: 3e-4
-episode_length: 5000
+episode_length: 500
 
 newton:
   inverse_control_frequency: 4  # we're aiming for a total compute budget of 2 times the physics timestep (0.005s * 4 = 0.02s)
@@ -33,8 +33,8 @@ ppo:
   ent_coef: 0.0
   vf_coef: 0.5
 
-  max_grad_norm: 0.5
+  max_grad_norm: 1.0
   use_sde: False
   sde_sample_freq: -1
 
-  target_kl: None
+  target_kl: 0.01
