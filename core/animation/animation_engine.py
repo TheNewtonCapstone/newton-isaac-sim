@@ -123,6 +123,14 @@ class AnimationEngine:
 
         for i, clip_data in enumerate(clip_datas):
             for j, bone_name in enumerate(joints_order):
+
+                # TODO: Investigate why HR's bones are not proper
+                #   HR is different from the other bones and gives weird rotation values (+- 90deg)
+
+                # Quick fix for HR's bone structure being wonky
+                if "HR" in bone_name:
+                    bone_name = f"FR_{bone_name[3:]}"
+
                 if bone_name not in clip_data:
                     continue
 
