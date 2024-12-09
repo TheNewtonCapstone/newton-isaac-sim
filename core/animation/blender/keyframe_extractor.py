@@ -1,3 +1,5 @@
+import math
+
 import bpy
 import argparse
 import sys
@@ -10,16 +12,16 @@ def extract_keyframes_from_scene(
     # List of bone names we are interested in
     bone_names = [
         "FR_HAA",
-        "FR_HFE",
-        "FR_FKE",
         "FL_HAA",
-        "FL_HFE",
-        "FL_FKE",
         "HR_HAA",
-        "HR_HFE",
-        "HR_FKE",
         "HL_HAA",
+        "FR_HFE",
+        "HR_HFE",
+        "FL_HFE",
         "HL_HFE",
+        "FR_FKE",
+        "FL_FKE",
+        "HR_FKE",
         "HL_FKE",
     ]
 
@@ -51,12 +53,42 @@ def extract_keyframes_from_scene(
             for bone_name in bone_names:
                 bone = armature.pose.bones.get(bone_name)
                 if bone:
+                    parent = bone.parent
+
                     world_matrix = armature.matrix_world @ bone.matrix
+
+                    # Compute relative orientation
+                    if parent:
+                        parent_world_matrix = armature.matrix_world @ parent.matrix
+                        relative_matrix = parent_world_matrix.inverted() @ world_matrix
+                        relative_quaternion = relative_matrix.to_quaternion()
+                    else:
+                        # No parent, so the matrix is already in world space
+                        relative_quaternion = world_matrix.to_quaternion()
+
+                    relative_euler = relative_quaternion.to_euler()
+                    relative_euler[:] = [math.degrees(e) for e in relative_euler]
+
+                    largest_angle = max(
+                        abs(math.degrees(relative_euler.x)),
+                        abs(math.degrees(relative_euler.y)),
+                        abs(math.degrees(relative_euler.z)),
+                    )
+
+                    rotation_angle = relative_euler.x
+
+                    if "_HAA" in bone_name:
+                        rotation_angle = relative_euler.y
+
+                    # Resting position should be at 0deg (basically correcting for Blender's coordinate system)
+                    if "_HFE" in bone_name:
+                        rotation_angle += 90
 
                     transform_keyframe = {
                         "bone": bone_name,
                         "position": list(world_matrix.to_translation()),
                         "orientation": list(world_matrix.to_quaternion()),
+                        "relative_angle": rotation_angle,
                     }
 
                     frame_data.append(transform_keyframe)

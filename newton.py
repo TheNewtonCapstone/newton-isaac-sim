@@ -6,7 +6,7 @@ from stable_baselines3.common.policies import BasePolicy
 
 import numpy as np
 import torch
-from core.types import Matter, AnimationClipSettings
+from core.types import Matter, Settings
 from core.utils.config import load_config
 from core.utils.math import IDENTITY_QUAT
 from gymnasium.spaces import Box
@@ -85,7 +85,7 @@ def setup_argparser() -> argparse.ArgumentParser:
 
 def animation_setting_files_to_clips(
     files: List[str],
-) -> Dict[str, AnimationClipSettings]:
+) -> Dict[str, Settings]:
     clips = {}
 
     for file in files:
@@ -189,7 +189,7 @@ def main():
     ) = base_matter
 
     print(
-        f"Running with {rl_config['n_envs']} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n",
+        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n",
         f"{'Exporting ONNX' if exporting else 'Playing' if playing else 'Training' if training else 'Physiccing'}.\n",
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
@@ -235,7 +235,6 @@ def main():
 
     animation_engine = AnimationEngine(
         clips=animation_clips_settings,
-        max_episode_length=rl_config["episode_length"],
     )
 
     domain_randomizer = NewtonBaseDomainRandomizer(

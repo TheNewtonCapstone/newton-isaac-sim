@@ -26,7 +26,7 @@ EXTRA_LD_LIBRARY_PATHS=(
     "$SCRIPT_DIR/kit/plugins/gpu.foundation"
 )
 
-EXTRA_PACKAGE_PATHS=(
+EXTRA_PYTHON_PATHS=(
     "$SCRIPT_DIR/python_packages"
     "$SCRIPT_DIR/kit/python/lib/python3.10/site-packages"
     "$SCRIPT_DIR/kit/kernel/py"
@@ -50,12 +50,9 @@ EXTRA_PACKAGE_PATHS=(
 )
 
 for path in "${EXTRA_LD_LIBRARY_PATHS[@]}"; do
-    EXTRA_LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$path
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$path
 done
 
-for path in "${EXTRA_PACKAGE_PATHS[@]}"; do
-    EXTRA_PYTHON_PATH=$EXTRA_PYTHON_PATH:$path
+for path in "${EXTRA_PYTHON_PATHS[@]}"; do
+    export PYTHONPATH=$PYTHONPATH:$path
 done
-
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$EXTRA_LD_LIBRARY_PATH
-export PYTHONPATH=$PYTHONPATH:$EXTRA_PYTHON_PATH

@@ -5,7 +5,7 @@
 
 # .blend file from arguments, make sure the argument is passed and the file exists
 if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <blend_file> <output_file>"
+    echo "Usage: $0 <blend_file> <output_dir>"
     exit 1
 fi
 

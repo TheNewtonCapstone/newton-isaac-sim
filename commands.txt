@@ -1,3 +1,0 @@
-conda activate isaac-sim
-source _isaac_sim/setup_conda_env.sh
-tensorboard --logdir runs/
