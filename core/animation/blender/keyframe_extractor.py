@@ -81,16 +81,16 @@ def extract_keyframes_from_scene(
 
 def keyframes_to_yaml(
     data: list,
-    beginning: int,
     start_frame: int,
+    duration: int,
     framerate: int,
     animation: str,
 ) -> str:
     return yaml.dump(
         {
             "name": animation,
-            "beginning": beginning,
             "start_frame": start_frame,
+            "duration": duration,
             "framerate": framerate,
             "keyframes": data,
         },

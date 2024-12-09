@@ -88,7 +88,7 @@ class AnimationEngine:
             self.clips[clip_name] = AnimationClip(
                 name=clip_name,
                 framerate=clip_settings["framerate"],
-                start_frame=clip_settings["beginning"],
+                start_frame=clip_settings["start_frame"],
                 duration=clip_settings["duration"],
                 keyframes=keyframes,
             )

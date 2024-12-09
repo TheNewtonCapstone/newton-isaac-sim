@@ -1,6 +1,6 @@
 name: newton_idle
-beginning: 0
-start_frame: 45
+start_frame: 0
+duration: 45
 framerate: 24
 keyframes:
 - frame: 0
