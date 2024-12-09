@@ -6,9 +6,8 @@ import yaml
 
 def extract_keyframes_from_scene(
     armature_name: str = "Armature",
-    euler: bool = False,
 ) -> tuple:
-    # List of bone names you are interested in
+    # List of bone names we are interested in
     bone_names = [
         "FR_HAA",
         "FR_HFE",
@@ -34,6 +33,8 @@ def extract_keyframes_from_scene(
     # Access the armature object
     armature = bpy.data.objects.get(armature_name)
 
+    framerate = bpy.context.scene.render.fps
+
     if armature and armature.type == "ARMATURE":
         print(f"Processing armature: {armature_name}")
 
@@ -52,23 +53,13 @@ def extract_keyframes_from_scene(
                 if bone:
                     world_matrix = armature.matrix_world @ bone.matrix
 
-                    rotation_keyframe = {
+                    transform_keyframe = {
                         "bone": bone_name,
+                        "position": list(world_matrix.to_translation()),
+                        "orientation": list(world_matrix.to_quaternion()),
                     }
 
-                    if euler:
-                        rotation_euler = world_matrix.to_euler()
-
-                        # Convert Euler angles to degrees
-                        rotation_euler[:] = [e * 180 / 3.14159 for e in rotation_euler]
-
-                        rotation_keyframe["euler"] = list(rotation_euler[:])
-                    else:
-                        rotation_quaternion = world_matrix.to_quaternion()
-
-                        rotation_keyframe["quaternion"] = list(rotation_quaternion[:])
-
-                    frame_data.append(rotation_keyframe)
+                    frame_data.append(transform_keyframe)
 
             keyframes_data.append(
                 {
@@ -79,22 +70,31 @@ def extract_keyframes_from_scene(
     else:
         print(f"Armature {armature_name} not found, or not an armature.")
 
-    return keyframes_data, start_frame, end_frame - start_frame, len(bone_names)
+    return (
+        framerate,
+        keyframes_data,
+        start_frame,
+        end_frame - start_frame,
+        len(bone_names),
+    )
 
 
 def keyframes_to_yaml(
     data: list,
     beginning: int,
-    duration: int,
+    start_frame: int,
+    framerate: int,
     animation: str,
 ) -> str:
     return yaml.dump(
         {
-            "animation": animation,
+            "name": animation,
             "beginning": beginning,
-            "duration": duration,
+            "start_frame": start_frame,
+            "framerate": framerate,
             "keyframes": data,
-        }
+        },
+        sort_keys=False,
     )
 
 
@@ -122,12 +122,6 @@ def setup_args() -> argparse.Namespace:
         type=str,
         help="Name of the animation (to be used in the output YAML).",
     )
-    parser.add_argument(
-        "--euler",
-        action="store_true",
-        default=False,
-        help="Use Euler angles (degrees) instead of Quaternions (WXYZ).",
-    )
 
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :])
 
@@ -141,16 +135,22 @@ def main():
     animation_name = args.animation
 
     # Extract keyframes
-    rotations_dict, start_frame, length, num_bones = extract_keyframes_from_scene(
-        armature_name
+    framerate, rotations_dict, start_frame, duration, num_bones = (
+        extract_keyframes_from_scene(armature_name)
     )
 
     print(
-        f"Extracted rotation keyframes:\n  Bones: {num_bones}\n  Frames: {length}\n  Total Keyframes: {length * num_bones}"
+        f"Extracted rotation keyframes:\n  Bones: {num_bones}\n  Frames: {duration}\n  Total Keyframes: {duration * num_bones}\n  Framerate: {framerate}"
     )
 
     # Convert to YAML
-    yaml_data = keyframes_to_yaml(rotations_dict, start_frame, length, animation_name)
+    yaml_data = keyframes_to_yaml(
+        rotations_dict,
+        start_frame,
+        duration,
+        framerate,
+        animation_name,
+    )
 
     # Save to file
     with open(output_path, "w") as file:

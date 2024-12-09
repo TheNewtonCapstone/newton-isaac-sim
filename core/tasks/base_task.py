@@ -35,6 +35,7 @@ class BaseTaskCallback(BaseCallback):
 class BaseTask(VecEnv):
     def __init__(
         self,
+        name: str,
         training_env: BaseEnv,
         playing_env: BaseEnv,
         agent: BaseAgent,
@@ -46,6 +47,7 @@ class BaseTask(VecEnv):
         action_space: gymnasium.spaces.Box,
         reward_space: gymnasium.spaces.Box,
     ):
+        self.name: str = name
         self.device: str = device
         self.playing: bool = playing
 

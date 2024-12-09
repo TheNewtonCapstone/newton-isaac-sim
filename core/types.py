@@ -1,4 +1,5 @@
-from typing import Dict, Any, Callable, List, Optional
+import argparse
+from typing import Dict, Any, Callable, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -19,10 +20,15 @@ Infos = List[Dict[str, Any]]
 
 Observations = Dict[str, np.ndarray]
 
+# Math
+NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
+
+# Animation
+AnimationClipSettings = Dict[str, Any]
+
 # Meta
 Settings = Dict[str, Any]
 # TODO: removed Optional, none of the global types should be Optional (can easily lead to confusion)
 Indices = Optional[np.ndarray]
 
-# Math
-NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
+Matter = Tuple[argparse.Namespace, Settings, Settings, Settings, Dict[str, AnimationClipSettings], bool, bool, bool, bool, bool, bool, int]

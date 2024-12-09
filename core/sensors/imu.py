@@ -86,9 +86,9 @@ class VecIMU:
 
         self.num_imus = self.rigid_view.count
 
-        self.reset()
-
         self._is_constructed = True
+
+        self.reset()
 
     def reset(self) -> IMUData:
         from core.utils.math import IDENTITY_QUAT

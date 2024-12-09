@@ -1,8 +1,8 @@
-import torch
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
 
 import numpy as np
 from core.agents import NewtonBaseAgent
+from core.animation import AnimationEngine
 from core.envs import NewtonBaseEnv
 from core.tasks import NewtonBaseTask, NewtonBaseTaskCallback
 from core.universe import Universe
@@ -29,6 +29,7 @@ class NewtonIdleTask(NewtonBaseTask):
         training_env: NewtonBaseEnv,
         playing_env: NewtonBaseEnv,
         agent: NewtonBaseAgent,
+        animation_engine: AnimationEngine,
         num_envs: int,
         device: str,
         playing: bool,
@@ -65,9 +66,11 @@ class NewtonIdleTask(NewtonBaseTask):
         )
 
         super().__init__(
+            "newton_idle",
             training_env,
             playing_env,
             agent,
+            animation_engine,
             num_envs,
             device,
             playing,
@@ -84,6 +87,15 @@ class NewtonIdleTask(NewtonBaseTask):
 
     def step_wait(self) -> VecEnvStepReturn:
         super().step_wait()
+
+        # TODO: Integrate the animation engine into the Newton*Tasks
+        #   Update the observations & reward function accordingly
+        #   From what I currently understand, we add two observations to the observation space:
+        #    - The phase signal (0-1) of the phase progress, transformed by cos(2*pi*progress) & sin(2*pi*progress)
+        #   This would allow the model to recognize the periodicity of the animation and hopefully learn the intricacies
+        #   of each gait.
+        #   The reward function would compare desired joint positions with the current joint positions, and reward
+        #   the agent for getting closer to the desired positions.
 
         self.env.step(self.actions_buf)
 

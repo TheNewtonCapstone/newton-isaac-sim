@@ -1,20 +1,17 @@
 import argparse
+from typing import List, Optional, Dict
 
 from stable_baselines3 import PPO
 from stable_baselines3.common.policies import BasePolicy
 
 import numpy as np
 import torch
+from core.types import Matter, AnimationClipSettings
 from core.utils.config import load_config
 from core.utils.math import IDENTITY_QUAT
-from core.utils.path import (
-    build_child_path_with_prefix,
-    get_folder_from_path,
-)
 from gymnasium.spaces import Box
 
 
-# TODO: rework arguments
 def setup_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="newton.py", description="Entrypoint for any Newton-related actions."
@@ -38,7 +35,7 @@ def setup_argparser() -> argparse.ArgumentParser:
         "--rl-config",
         type=str,
         help="Path to the configuration file for RL.",
-        default="configs/newton_idle_task.yaml",
+        default="configs/tasks/newton_idle_task.yaml",
     )
     parser.add_argument(
         "--world-config",
@@ -86,7 +83,21 @@ def setup_argparser() -> argparse.ArgumentParser:
     return parser
 
 
-if __name__ == "__main__":
+def animation_setting_files_to_clips(
+    files: List[str],
+) -> Dict[str, AnimationClipSettings]:
+    clips = {}
+
+    for file in files:
+        clip = load_config(file)
+        clips[clip["name"]] = clip
+
+    return clips
+
+
+def setup() -> Optional[Matter]:
+    from core.utils.path import get_files_with_extension
+
     parser = setup_argparser()
 
     cli_args, _ = parser.parse_known_args()
@@ -94,30 +105,42 @@ if __name__ == "__main__":
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
 
-    animation_dir = cli_args.animations_dir
+    animation_settings_dir = cli_args.animations_dir
+    animation_settings = [
+        f"{animation_settings_dir}/{f}"
+        for f in get_files_with_extension(animation_settings_dir, ".yaml")
+    ]
+
+    if len(animation_settings) == 0:
+        print(f"No animation files found in {animation_settings_dir}.")
+
+        return None
+
+    animation_clips_settings = animation_setting_files_to_clips(animation_settings)
 
     physics_only = cli_args.physics
     exporting = cli_args.export_onnx
-    pidding = not exporting and cli_args.pid_control
-    playing = not exporting and not pidding and cli_args.play
-    training = not exporting and not pidding and not cli_args.play
+    playing = not exporting and cli_args.play
+    training = not exporting and not cli_args.play
     headless = (
         cli_args.headless or cli_args.export_onnx
     )  # if we're exporting, don't show the GUI
+    interactive = not headless and (
+        physics_only or playing
+    )  # interactive means that the user is expected to control the agent
 
-    # override config with CLI num_envs, if specified
+    # override some config with CLI num_envs, if specified
     num_envs = rl_config["n_envs"]
     if cli_args.num_envs != -1:
         num_envs = cli_args.num_envs
     elif not training:
         num_envs = 1
 
-    if playing:
+    if interactive:
         # increase the number of steps if we're playing
         rl_config["ppo"]["n_steps"] *= 4
 
-    if playing or pidding:
-        # force the physics device to CPU if we're playing or pidding (for better control)
+        # force the physics device to CPU if we're playing (for better control)
         world_config["device"] = "cpu"
 
     # ensure proper config reading when encountering None
@@ -127,9 +150,47 @@ if __name__ == "__main__":
     if rl_config["ppo"]["target_kl"] == "None":
         rl_config["ppo"]["target_kl"] = None
 
+    return (
+        cli_args,
+        rl_config,
+        world_config,
+        randomization_config,
+        animation_clips_settings,
+        physics_only,
+        exporting,
+        playing,
+        training,
+        interactive,
+        headless,
+        num_envs,
+    )
+
+
+def main():
+    base_matter = setup()
+
+    if base_matter is None:
+        print("An error occurred during setup.")
+        return
+
+    (
+        cli_args,
+        rl_config,
+        world_config,
+        randomization_config,
+        animation_clips_settings,
+        physics_only,
+        exporting,
+        playing,
+        training,
+        interactive,
+        headless,
+        num_envs,
+    ) = base_matter
+
     print(
         f"Running with {rl_config['n_envs']} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n",
-        f"{'Exporting ONNX' if exporting else 'Playing' if playing else 'Training' if training else 'Pidding'}.\n",
+        f"{'Exporting ONNX' if exporting else 'Playing' if playing else 'Training' if training else 'Physiccing'}.\n",
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
@@ -147,6 +208,7 @@ if __name__ == "__main__":
 
     from core.sensors import VecIMU
     from core.controllers import VecJointsController
+    from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
 
     imu = VecIMU(
@@ -169,6 +231,11 @@ if __name__ == "__main__":
         num_agents=num_envs,
         imu=imu,
         joints_controller=joints_controller,
+    )
+
+    animation_engine = AnimationEngine(
+        clips=animation_clips_settings,
+        max_episode_length=rl_config["episode_length"],
     )
 
     domain_randomizer = NewtonBaseDomainRandomizer(
@@ -272,6 +339,8 @@ if __name__ == "__main__":
         inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
     )
 
+    from core.utils.path import build_child_path_with_prefix
+
     task_runs_directory = "runs"
     task_name = build_child_path_with_prefix(
         rl_config["task_name"], task_runs_directory
@@ -282,6 +351,7 @@ if __name__ == "__main__":
         training_env=training_env,
         playing_env=playing_env,
         agent=newton_agent,
+        animation_engine=animation_engine,
         device=rl_config["device"],
         num_envs=num_envs,
         playing=playing,
@@ -349,6 +419,8 @@ if __name__ == "__main__":
         exit(1)
 
     if playing:
+        from core.utils.path import get_folder_from_path
+
         model = PPO.load(cli_args.checkpoint)
 
         actions = model.predict(task.reset()[0], deterministic=True)[0]
@@ -406,3 +478,7 @@ if __name__ == "__main__":
     )  # outputs are mu (actions), sigma, value
 
     print(f"Exported to {cli_args.checkpoint}.onnx!")
+
+
+if __name__ == "__main__":
+    main()
