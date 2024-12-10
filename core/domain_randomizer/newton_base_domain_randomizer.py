@@ -36,6 +36,8 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         )
         self._universe.add_to_scene(self._newton_art_view)
 
+        self._universe.reset()
+
         self._is_constructed = True
 
     def on_step(self) -> None:
@@ -44,7 +46,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
     def on_reset(self, indices: Indices = None) -> None:
         super().on_reset(indices)
 
-        indices_np = indices
+        indices_n = indices
 
         if indices is None:
             indices = torch.arange(self._agent.num_agents)
@@ -82,7 +84,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         joint_positions = torch.from_numpy(
             np.array(
                 [
-                    self._agent.joints_controller.joint_constraints.sample()
+                    self._agent.joints_controller.box_joint_constraints.sample()
                     for _ in range(num_to_reset)
                 ]
             )
@@ -90,7 +92,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         self._agent.joints_controller.reset(
             joint_positions,
-            indices_np,
+            indices_n,
         )
 
     def set_initial_positions(self, positions: torch.Tensor) -> None:

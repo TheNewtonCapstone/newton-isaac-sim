@@ -79,9 +79,14 @@ class VecIMU:
 
         self.path_expr = path_expr
 
-        self.rigid_view = RigidPrimView(self.path_expr)
+        self.rigid_view = RigidPrimView(
+            self.path_expr,
+            name="imu_rigid_view",
+            prepare_contact_sensors=False,
+        )
         self.universe.add_to_scene(self.rigid_view)
 
+        # propagate physics changes
         self.universe.reset()
 
         self.num_imus = self.rigid_view.count

@@ -35,8 +35,10 @@ class NewtonIdleTask(NewtonBaseTask):
         playing: bool,
         max_episode_length: int,
     ):
-        agent_joints_low: np.ndarray = agent.joints_controller.joint_constraints.low
-        agent_joints_high: np.ndarray = agent.joints_controller.joint_constraints.high
+        agent_joints_low: np.ndarray = agent.joints_controller.box_joint_constraints.low
+        agent_joints_high: np.ndarray = (
+            agent.joints_controller.box_joint_constraints.high
+        )
 
         self.observation_space: Box = Box(
             low=np.array(

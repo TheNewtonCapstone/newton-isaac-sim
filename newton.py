@@ -68,6 +68,12 @@ def setup_argparser() -> argparse.ArgumentParser:
         default=False,
     )
     parser.add_argument(
+        "--animation",
+        type=str,
+        help="Animate the agent using a parsed animation file.",
+        default=None,
+    )
+    parser.add_argument(
         "--num-envs",
         type=int,
         help="Number of environments to run (will be read from the rl-config if not specified).",
@@ -100,28 +106,32 @@ def setup() -> Optional[Matter]:
 
     parser = setup_argparser()
 
+    # General Configs
     cli_args, _ = parser.parse_known_args()
     rl_config = load_config(cli_args.rl_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
 
-    animation_settings_dir = cli_args.animations_dir
-    animation_settings = [
-        f"{animation_settings_dir}/{f}"
-        for f in get_files_with_extension(animation_settings_dir, ".yaml")
+    # Animations
+    animation_config_dir = cli_args.animations_dir
+    animation_config = [
+        f"{animation_config_dir}/{f}"
+        for f in get_files_with_extension(animation_config_dir, ".yaml")
     ]
 
-    if len(animation_settings) == 0:
-        print(f"No animation files found in {animation_settings_dir}.")
+    if len(animation_config) == 0:
+        print(f"No animation files found in {animation_config_dir}.")
 
-        return None
+    animation_clips_config = animation_setting_files_to_clips(animation_config)
+    current_animation = cli_args.animation
 
-    animation_clips_settings = animation_setting_files_to_clips(animation_settings)
-
+    # Control Flags
+    animating = current_animation is not None
     physics_only = cli_args.physics
     exporting = cli_args.export_onnx
-    playing = not exporting and cli_args.play
-    training = not exporting and not cli_args.play
+    is_rl = not physics_only and not animating and not exporting
+    playing = is_rl and cli_args.play
+    training = is_rl and not cli_args.play
     headless = (
         cli_args.headless or cli_args.export_onnx
     )  # if we're exporting, don't show the GUI
@@ -133,7 +143,7 @@ def setup() -> Optional[Matter]:
     num_envs = rl_config["n_envs"]
     if cli_args.num_envs != -1:
         num_envs = cli_args.num_envs
-    elif not training:
+    if not training:
         num_envs = 1
 
     # ensure proper config reading when encountering None
@@ -143,19 +153,27 @@ def setup() -> Optional[Matter]:
     if rl_config["ppo"]["target_kl"] == "None":
         rl_config["ppo"]["target_kl"] = None
 
+    control_step_dt = (
+        rl_config["newton"]["inverse_control_frequency"] * world_config["physics_dt"]
+    )
+
     return (
         cli_args,
         rl_config,
         world_config,
         randomization_config,
-        animation_clips_settings,
+        animation_clips_config,
+        current_animation,
+        animating,
         physics_only,
+        is_rl,
         exporting,
         playing,
         training,
         interactive,
         headless,
         num_envs,
+        control_step_dt,
     )
 
 
@@ -171,19 +189,23 @@ def main():
         rl_config,
         world_config,
         randomization_config,
-        animation_clips_settings,
+        animation_clips_config,
+        current_animation,
+        animating,
         physics_only,
+        is_rl,
         exporting,
         playing,
         training,
         interactive,
         headless,
         num_envs,
+        control_step_dt,
     ) = base_matter
 
     print(
         f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n",
-        f"{'Exporting ONNX' if exporting else 'Playing' if playing else 'Training' if training else 'Physiccing'}.\n",
+        f"{'Exporting ONNX' if exporting else 'Playing' if playing else 'Training' if training else 'Animating' if animating else 'Physiccing'}.\n",
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
@@ -211,13 +233,24 @@ def main():
         noise_function=lambda x: x,
     )
 
+    joints_constraints = {
+        "FR_HAA": (-45, 45),
+        "FL_HAA": (-45, 45),
+        "HR_HAA": (-45, 45),
+        "HL_HAA": (-45, 45),
+        "FR_HFE": (-90, 90),
+        "HR_HFE": (-90, 90),
+        "FL_HFE": (-90, 90),
+        "HL_HFE": (-90, 90),
+        "FR_KFE": (-180, 180),
+        "FL_KFE": (-180, 180),
+        "HR_KFE": (-180, 180),
+        "HL_KFE": (-180, 180),
+    }
     joints_controller = VecJointsController(
         universe=universe,
+        joint_constraints=joints_constraints,
         noise_function=lambda x: x,
-        joint_constraints=Box(
-            low=np.array([-45, -90, -180] * 4),
-            high=np.array([45, 90, 180] * 4),
-        ),
     )
 
     newton_agent = NewtonVecAgent(
@@ -226,17 +259,13 @@ def main():
         joints_controller=joints_controller,
     )
 
-    step_dt = (
-        rl_config["newton"]["inverse_control_frequency"] * world_config["physics_dt"]
-    )
-
     # TODO: Add a separate animation only mode in simulation
     #   This will allow us to test animations without the need for training/testing
     #   labels=enhancement
 
     animation_engine = AnimationEngine(
-        clips=animation_clips_settings,
-        step_dt=step_dt,
+        clips=animation_clips_config,
+        step_dt=control_step_dt,
     )
 
     domain_randomizer = NewtonBaseDomainRandomizer(
@@ -244,6 +273,44 @@ def main():
         agent=newton_agent,
         randomizer_settings=randomization_config,
     )
+
+    # --------------- #
+    #    ANIMATING    #
+    # --------------- #
+
+    if animating:
+        env = NewtonMultiTerrainEnv(
+            agent=newton_agent,
+            num_envs=num_envs,
+            terrain_builders=[FlatBaseTerrainBuilder()],
+            domain_randomizer=domain_randomizer,
+            inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
+        )
+
+        env.construct(universe)
+        env.reset()  # called manually, because the task usually does it, must be done before stepping
+
+        animation_engine.construct(current_animation)
+
+        joints_names = joints_controller.art_view.joint_names
+
+        # this is very specific to Newton, because we know that it takes joint positions and the animation engine
+        # provides that exactly; a different robot or different control mode would probably require a different approach
+        while universe.is_playing:
+            joint_data = animation_engine.get_current_clip_data_ordered(
+                universe.physics_world.current_time_step_index // control_step_dt,
+                joints_names,
+            )
+
+            # index 7 is the joint position (angle in degrees)
+            joint_positions = joint_data[:, 7]
+
+            # print(joint_positions)
+
+            # we wrap it in an array to make it 2D (it's a vectorized env)
+            env.step(np.array([joint_positions], dtype=np.float32))
+
+        exit(1)
 
     # ---------------- #
     #   PHYSICS ONLY   #

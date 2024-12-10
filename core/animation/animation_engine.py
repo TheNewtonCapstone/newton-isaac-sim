@@ -28,7 +28,6 @@ class Keyframe:
 class AnimationClip:
     name: str
     framerate: int
-    start_frame: int
     duration: int
     duration_in_seconds: float
     keyframes: List[Keyframe]
@@ -96,13 +95,52 @@ class AnimationEngine:
             self.clips[clip_name] = AnimationClip(
                 name=clip_name,
                 framerate=clip_settings["framerate"],
-                start_frame=clip_settings["start_frame"],
                 duration=clip_settings["duration"],
                 duration_in_seconds=duration_in_seconds,
                 keyframes=keyframes,
             )
 
         self._is_constructed = True
+
+    def get_current_clip_data_ordered(
+        self,
+        progress: int,
+        joints_order: List[str],
+        interpolate: bool = True,
+    ) -> np.ndarray:
+        """
+        Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
+        Args:
+            progress: The progress of the current episode, in the range [0, max_episode_length] for an agent.
+            joints_order: List of joint names in the order they should be returned.
+            interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
+
+        Returns:
+            A numpy array with shape (num_bones, 8) containing the joint positions, orientations and relative angles for the agent.
+        """
+        clip_data = self.get_current_clip_data(progress, interpolate)
+
+        num_bones = len(clip_data)
+        result = np.zeros((num_bones, 8))
+
+        for j, bone_name in enumerate(joints_order):
+            # Quick fix for HR's bone structure being wonky
+            if "HR" in bone_name:
+                bone_name = f"FR_{bone_name[3:]}"
+
+            if bone_name not in clip_data:
+                continue
+
+            bone_data = clip_data[bone_name]
+            result[j] = np.concatenate(
+                [
+                    bone_data.position,
+                    bone_data.orientation,
+                    [bone_data.relative_angle],
+                ]
+            )
+
+        return result
 
     def get_current_clip_datas_ordered(
         self,
@@ -120,7 +158,7 @@ class AnimationEngine:
         Returns:
             A numpy array with shape (num_agents, num_bones, 8) containing the joint positions, orientations and relative angles for each agent.
         """
-        clip_datas = self.get_clip_datas(self.current_clip_name, progress, interpolate)
+        clip_datas = self.get_current_clip_datas(progress, interpolate)
 
         num_agents = len(clip_datas)
         num_bones = len(clip_datas[0])

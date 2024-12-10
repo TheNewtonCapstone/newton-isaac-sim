@@ -1,7 +1,8 @@
 from typing import Optional, List
 
+import numpy as np
 import torch
-from core.types import NoiseFunction, Indices
+from core.types import NoiseFunction, Indices, JointsConstraints
 from core.universe import Universe
 from gymnasium.spaces import Box
 from omni.isaac.core.articulations import ArticulationView
@@ -13,7 +14,7 @@ class VecJointsController:
         self,
         universe: Universe,
         noise_function: NoiseFunction,
-        joint_constraints: Box,
+        joint_constraints: JointsConstraints,
     ):
         self.path_expr: str = ""
 
@@ -22,7 +23,10 @@ class VecJointsController:
 
         self._noise_function: NoiseFunction = noise_function
         self._target_joint_positions: Tensor = torch.zeros(0)
-        self.joint_constraints: Box = joint_constraints
+        self.joint_constraints: JointsConstraints = joint_constraints
+        self.box_joint_constraints: Box = self._dict_to_box_constraints(
+            joint_constraints
+        )
 
         self._is_constructed: bool = False
 
@@ -54,12 +58,8 @@ class VecJointsController:
 
         self.universe.reset()
 
-        assert self.joint_constraints.shape[0] == len(
-            self._articulation_view.joint_names
-        ), "Joint constraints must match the number of joints"
-
         self._apply_joint_constraints(
-            self.joint_constraints,
+            self.box_joint_constraints,
             self._articulation_view.prim_paths,
             self._articulation_view.joint_names,
         )
@@ -71,7 +71,7 @@ class VecJointsController:
 
         self._target_joint_positions = self._process_joint_positions(
             joint_positions,
-            self.joint_constraints,
+            self.box_joint_constraints,
             self._noise_function,
         )
 
@@ -95,17 +95,41 @@ class VecJointsController:
 
         self._target_joint_positions = self._process_joint_positions(
             joint_positions,
-            self.joint_constraints,
+            self.box_joint_constraints,
         )
 
-        self._articulation_view.set_joint_position_targets(
-            self._target_joint_positions,
-            indices,
+        self._articulation_view.set_joint_positions(
+            positions=self._target_joint_positions,
+            indices=indices,
         )
+
+    def _dict_to_box_constraints(self, joint_constraints: JointsConstraints) -> Box:
+        joint_names = list(joint_constraints.keys())
+
+        low_joint_constraints = np.zeros(
+            (len(joint_names)),
+            dtype=np.float32,
+        )
+        high_joint_constraints = np.zeros_like(low_joint_constraints)
+
+        # Ensures that the joint constraints are in the correct order
+        for i, joint_name in enumerate(joint_names):
+            constraint = joint_constraints[joint_name]
+
+            low_joint_constraints[i] = constraint[0]
+            high_joint_constraints[i] = constraint[1]
+
+        box_joint_constraints = Box(
+            low=low_joint_constraints,
+            high=high_joint_constraints,
+            dtype=np.float32,
+        )
+
+        return box_joint_constraints
 
     def _apply_joint_constraints(
         self,
-        joint_constraints: Box,
+        box_joint_constraints: Box,
         prim_paths: List[str],
         joint_names: List[str],
     ) -> None:
@@ -119,38 +143,36 @@ class VecJointsController:
                 joint_path = f"{prim_path}/{joint_name}"
 
                 joint_limits = UsdPhysics.RevoluteJoint.Get(stage, joint_path)
-                joint_limits.CreateLowerLimitAttr().Set(joint_constraints.low[j].item())
-                joint_limits.GetUpperLimitAttr().Set(joint_constraints.high[j].item())
+                joint_limits.CreateLowerLimitAttr().Set(
+                    box_joint_constraints.low[j].item()
+                )
+                joint_limits.GetUpperLimitAttr().Set(
+                    box_joint_constraints.high[j].item()
+                )
 
     def _process_joint_positions(
         self,
         joint_positions: Tensor,
-        joint_constraints: Box,
+        box_joint_constraints: Box,
         noise_function: Optional[NoiseFunction] = None,
     ) -> Tensor:
         if noise_function is not None:
             joint_positions = noise_function(joint_positions)
 
+        low_constraints_t = torch.from_numpy(box_joint_constraints.low).to(
+            device=self.universe.physics_device
+        )
+        high_constraints_t = torch.from_numpy(box_joint_constraints.high).to(
+            device=self.universe.physics_device
+        )
+
         for i, _ in enumerate(joint_positions):
             joint_positions[i] = torch.clamp(
                 joint_positions[i],
-                torch.from_numpy(joint_constraints.low).to(
-                    device=self.universe.physics_device
-                ),
-                torch.from_numpy(joint_constraints.high).to(
-                    device=self.universe.physics_device
-                ),
+                min=low_constraints_t,
+                max=high_constraints_t,
             )
 
-        right_side_joint_indices = self._get_right_side_shoulder_indices()
-        for i in right_side_joint_indices:
-            joint_positions[:, i] = -joint_positions[:, i]
+            joint_positions[i] = torch.deg2rad(joint_positions[i])
 
         return joint_positions
-
-    def _get_right_side_shoulder_indices(self) -> List[int]:
-        return [
-            i
-            for i, name in enumerate(self._articulation_view.joint_names)
-            if "R_HAA" in name
-        ]

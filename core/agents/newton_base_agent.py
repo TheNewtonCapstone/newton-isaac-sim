@@ -30,7 +30,9 @@ class NewtonBaseAgent(BaseAgent):
     def step(self, actions: Actions) -> None:
         super().step(actions)
 
-        new_joint_positions = torch.from_numpy(actions).to(self.universe.physics_device)
+        new_joint_positions = torch.from_numpy(actions).to(
+            self._universe.physics_device
+        )
         self.joints_controller.step(new_joint_positions)
 
     @abstractmethod

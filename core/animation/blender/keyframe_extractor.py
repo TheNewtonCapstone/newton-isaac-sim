@@ -19,14 +19,12 @@ def extract_keyframes_from_scene(
         "HR_HFE",
         "FL_HFE",
         "HL_HFE",
-        "FR_FKE",
-        "FL_FKE",
-        "HR_FKE",
-        "HL_FKE",
+        "FR_KFE",
+        "FL_KFE",
+        "HR_KFE",
+        "HL_KFE",
     ]
-
-    # List to store keyframe data
-    keyframes_data = []
+    num_bones = len(bone_names)
 
     # Get global animation start and end frames
     start_frame = bpy.context.scene.frame_start
@@ -34,78 +32,133 @@ def extract_keyframes_from_scene(
 
     # Access the armature object
     armature = bpy.data.objects.get(armature_name)
+    if not armature:
+        print(f"Armature {armature_name} not found!")
+        return (0, [], 0, 0, 0)
+    elif armature and not armature.type == "ARMATURE":
+        print(f"Object {armature_name} is not an armature!")
+        return (0, [], 0, 0, 0)
+
+    print(f"Processing armature: {armature_name}")
 
     framerate = bpy.context.scene.render.fps
 
-    if armature and armature.type == "ARMATURE":
-        print(f"Processing armature: {armature_name}")
+    # Ensure armature is in pose mode
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode="POSE")
 
-        # Ensure armature is in pose mode
-        bpy.context.view_layer.objects.active = armature
-        bpy.ops.object.mode_set(mode="POSE")
+    # List to store non-transformed keyframe data
+    raw_animation = []
 
-        # Iterate through every frame in the global animation range
-        for frame in range(start_frame, end_frame + 1):
-            bpy.context.scene.frame_set(frame)  # Set the frame in the scene
+    # Iterate through every frame in the global animation range
+    for frame in range(start_frame, end_frame + 1):
+        bpy.context.scene.frame_set(frame)  # Set the frame in the scene
 
-            frame_data = []
+        raw_keyframe_data = []
 
-            for bone_name in bone_names:
-                bone = armature.pose.bones.get(bone_name)
-                if bone:
-                    parent = bone.parent
+        for bone_name in bone_names:
+            bone = armature.pose.bones.get(bone_name)
+            if bone:
+                parent = bone.parent
 
-                    world_matrix = armature.matrix_world @ bone.matrix
+                world_matrix = armature.matrix_world @ bone.matrix
 
-                    # Compute relative orientation
-                    if parent:
-                        parent_world_matrix = armature.matrix_world @ parent.matrix
-                        relative_matrix = parent_world_matrix.inverted() @ world_matrix
-                        relative_quaternion = relative_matrix.to_quaternion()
-                    else:
-                        # No parent, so the matrix is already in world space
-                        relative_quaternion = world_matrix.to_quaternion()
+                # Compute relative orientation
+                if parent:
+                    parent_world_matrix = armature.matrix_world @ parent.matrix
+                    relative_matrix = parent_world_matrix.inverted() @ world_matrix
+                    relative_quaternion = relative_matrix.to_quaternion()
+                else:
+                    # No parent, so the matrix is already in world space
+                    relative_quaternion = world_matrix.to_quaternion()
 
-                    relative_euler = relative_quaternion.to_euler()
-                    relative_euler[:] = [math.degrees(e) for e in relative_euler]
+                relative_euler = relative_quaternion.to_euler()
+                relative_euler[:] = [math.degrees(e) for e in relative_euler]
 
-                    largest_angle = max(
-                        abs(math.degrees(relative_euler.x)),
-                        abs(math.degrees(relative_euler.y)),
-                        abs(math.degrees(relative_euler.z)),
-                    )
-
-                    rotation_angle = relative_euler.x
-
-                    if "_HAA" in bone_name:
-                        rotation_angle = relative_euler.y
-
-                    # Resting position should be at 0deg (basically correcting for Blender's coordinate system)
-                    if "_HFE" in bone_name:
-                        rotation_angle += 90
-
-                    transform_keyframe = {
-                        "bone": bone_name,
-                        "position": list(world_matrix.to_translation()),
-                        "orientation": list(world_matrix.to_quaternion()),
-                        "relative_angle": rotation_angle,
-                    }
-
-                    frame_data.append(transform_keyframe)
-
-            keyframes_data.append(
-                {
-                    "frame": frame,
-                    "data": frame_data,
+                raw_transform_keyframe = {
+                    "bone": bone_name,
+                    "position": list(world_matrix.to_translation()),
+                    "orientation": list(world_matrix.to_quaternion()),
+                    "relative_angles": list(relative_euler),
                 }
-            )
-    else:
-        print(f"Armature {armature_name} not found, or not an armature.")
+
+                raw_keyframe_data.append(raw_transform_keyframe)
+
+        raw_animation.append(
+            {
+                "frame": frame,
+                "data": raw_keyframe_data,
+            }
+        )
+
+    # List to store transformed keyframe data
+    animation = []
+
+    angle_ranges = [[[0] * 2] * 3] * num_bones
+
+    # Iterate through every frame in the global animation range and finds the relative angles that changed the most,
+    # that's the axis of rotation for the bone
+    for keyframe in raw_animation:
+        frame = keyframe["frame"]
+        raw_keyframe_data = keyframe["data"]
+
+        bpy.context.scene.frame_set(frame)
+
+        for i, bone_data in enumerate(raw_keyframe_data):
+            for j, angle in enumerate(bone_data["relative_angles"]):
+                angle_ranges[i][j][0] = min(angle_ranges[i][j][0], angle)
+                angle_ranges[i][j][1] = max(angle_ranges[i][j][1], angle)
+
+    # Builds the final animation data using the axis of rotation for each bone (chosen by the relative angle that
+    # changed the most)
+    for keyframe in raw_animation:
+        frame = keyframe["frame"]
+        raw_keyframe_data = keyframe["data"]
+
+        bpy.context.scene.frame_set(frame)
+
+        keyframe_data = []
+
+        for i, bone_data in enumerate(raw_keyframe_data):
+            transform_keyframe = {
+                "bone": bone_data["bone"],
+                "position": bone_data["position"],
+                "orientation": bone_data["orientation"],
+            }
+
+            chosen_relative_angle = 0
+            largest_angle_range_size = -360
+            for j, angle in enumerate(bone_data["relative_angles"]):
+                angle_range = angle_ranges[i][j]
+                angle_range_size = angle_range[1] - angle_range[0]
+
+                if angle_range_size > largest_angle_range_size:
+                    largest_angle_range_size = angle_range_size
+                    chosen_relative_angle = angle
+
+            adjustment = 0
+
+            if "R_HAA" in bone_data["bone"]:
+                adjustment = -90
+            elif "L_HAA" in bone_data["bone"]:
+                adjustment = 90
+            elif "_HFE" in bone_data["bone"]:
+                adjustment = 90
+
+            transform_keyframe["relative_angle"] = chosen_relative_angle + adjustment
+
+            keyframe_data.append(transform_keyframe)
+
+        animation.append(
+            {
+                "frame": frame,
+                "data": keyframe_data,
+            }
+        )
 
     return (
         framerate,
-        keyframes_data,
-        start_frame,
+        animation,
         end_frame - start_frame,
         len(bone_names),
     )
@@ -113,15 +166,13 @@ def extract_keyframes_from_scene(
 
 def keyframes_to_yaml(
     data: list,
-    start_frame: int,
     duration: int,
     framerate: int,
-    animation: str,
+    name: str,
 ) -> str:
     return yaml.dump(
         {
-            "name": animation,
-            "start_frame": start_frame,
+            "name": name,
             "duration": duration,
             "framerate": framerate,
             "keyframes": data,
@@ -167,8 +218,8 @@ def main():
     animation_name = args.animation
 
     # Extract keyframes
-    framerate, rotations_dict, start_frame, duration, num_bones = (
-        extract_keyframes_from_scene(armature_name)
+    framerate, rotations_dict, duration, num_bones = extract_keyframes_from_scene(
+        armature_name
     )
 
     print(
@@ -178,7 +229,6 @@ def main():
     # Convert to YAML
     yaml_data = keyframes_to_yaml(
         rotations_dict,
-        start_frame,
         duration,
         framerate,
         animation_name,

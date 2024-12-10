@@ -39,7 +39,7 @@ class NewtonVecAgent(NewtonBaseAgent):
         self.imu.construct(self.base_path_expr)
         self.joints_controller.construct(self.base_path_expr)
 
-        self.universe.reset()
+        self._universe.reset()
 
         self._is_constructed = True
 

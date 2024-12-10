@@ -64,7 +64,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
             )
 
         # propagate physics changes
-        self.universe.reset()
+        self._universe.reset()
 
         for i, _ in enumerate(self.terrain_builds):
             terrain_spawn_position = terrain_positions[i]
@@ -105,10 +105,8 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                     [
                         terrain_spawn_position[0],
                         terrain_spawn_position[1],
-                        0.4
-                        + self.terrain_builds[
-                            i
-                        ].height,  # TODO: make this a better computed value
+                        # TODO: make this a better computed value
+                        0.9 + self.terrain_builds[i].height,
                     ]
                 )
             )
@@ -117,16 +115,16 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         if len(self.reset_newton_positions) > self.num_envs:
             self.reset_newton_positions = self.reset_newton_positions[: self.num_envs]
 
-        self.agent.construct(self.universe)
+        self.agent.construct(self._universe)
 
-        self.domain_randomizer.construct(self.universe)
+        self.domain_randomizer.construct(self._universe)
         # TODO: investigate whether we need to have the positions and rotations in this class or in domain randomizer
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
         self.domain_randomizer.set_initial_orientations(self.reset_newton_orientations)
 
         self._is_constructed = True
 
-        self.reset()
+        self._universe.reset()
 
     def step(self, actions: Actions) -> Observations:
         self.agent.step(actions)  # has to be before the simulation advances

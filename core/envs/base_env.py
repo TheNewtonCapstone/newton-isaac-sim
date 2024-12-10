@@ -16,7 +16,7 @@ class BaseEnv(ABC):
         terrain_builders: List[BaseTerrainBuilder],
         domain_randomizer: BaseDomainRandomizer,
     ) -> None:
-        self.universe: Optional[Universe] = None
+        self._universe: Optional[Universe] = None
 
         self.agent: BaseAgent = agent
         self.num_envs = num_envs
@@ -34,7 +34,7 @@ class BaseEnv(ABC):
             not self._is_constructed
         ), f"{self.__class__.__name__} already constructed!"
 
-        self.universe = universe
+        self._universe = universe
 
     @abstractmethod
     def step(
@@ -45,7 +45,7 @@ class BaseEnv(ABC):
             self._is_constructed
         ), f"{self.__class__.__name__} not constructed: tried to step!"
 
-        self.universe.step()
+        self._universe.step()
 
         return self.get_observations()
 
@@ -56,9 +56,7 @@ class BaseEnv(ABC):
         ), f"{self.__class__.__name__} not constructed: tried to reset!"
 
         if indices is None:
-            self.universe.reset()
-        else:
-            self.universe.step()
+            self._universe.reset()
 
         return self.get_observations()
 

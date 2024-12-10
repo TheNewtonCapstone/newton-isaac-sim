@@ -9,6 +9,7 @@ IMUData = Dict[str, torch.Tensor]
 
 # Motors
 JointsPositions = torch.Tensor
+JointsConstraints = Dict[str, Tuple[float, float]]
 
 # RL
 Actions = np.ndarray
@@ -28,4 +29,4 @@ Settings = Dict[str, Any]
 # TODO: removed Optional, none of the global types should be Optional (can easily lead to confusion)
 Indices = Optional[np.ndarray]
 
-Matter = Tuple[argparse.Namespace, Settings, Settings, Settings, Dict[str, Settings], bool, bool, bool, bool, bool, bool, int]
+Matter = Tuple[argparse.Namespace, Settings, Settings, Settings, Dict[str, Settings], str, bool, bool, bool, bool, bool, bool, bool, bool, int, float]

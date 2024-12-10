@@ -11,7 +11,7 @@ class BaseAgent(ABC):
     def __init__(self, num_agents: int) -> None:
         self.path: str = ""
         self.num_agents: int = num_agents
-        self.universe: Optional[Universe] = None
+        self._universe: Optional[Universe] = None
 
         self._is_constructed: bool = False
 
@@ -22,7 +22,7 @@ class BaseAgent(ABC):
         ), f"{self.__class__.__name__} already constructed: tried to construct!"
 
         self.path = AGENTS_PATH
-        self.universe = universe
+        self._universe = universe
 
         from omni.isaac.core.utils.prims import create_prim
 
