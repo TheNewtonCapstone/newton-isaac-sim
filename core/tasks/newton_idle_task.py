@@ -135,7 +135,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         self.dones_buf = np.where(
             self.progress_buf >= self.max_episode_length,
-            True,
+            not self.playing,
             self.dones_buf,
         )  # truncated
 

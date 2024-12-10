@@ -136,13 +136,6 @@ def setup() -> Optional[Matter]:
     elif not training:
         num_envs = 1
 
-    if interactive:
-        # increase the number of steps if we're playing
-        rl_config["ppo"]["n_steps"] *= 4
-
-        # force the physics device to CPU if we're playing (for better control)
-        world_config["device"] = "cpu"
-
     # ensure proper config reading when encountering None
     if rl_config["ppo"]["clip_range_vf"] == "None":
         rl_config["ppo"]["clip_range_vf"] = None

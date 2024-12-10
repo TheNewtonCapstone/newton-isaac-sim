@@ -50,37 +50,38 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
             and self.cumulative_reward.mean().item() > self.best_mean_reward
         ):
             self.best_mean_reward = self.cumulative_reward.mean().item()
+            self.logger.record("rewards/best_mean", self.best_mean_reward)
+
             self.model.save(
                 f"{self.logger.dir}/{self.save_path}_rew_{self.best_mean_reward:.2f}"
             )
 
         self.logger.record(
-            "rewards/cumulative",
-            self.cumulative_reward.mean().item(),
+            "rewards/best_cumulative",
+            self.cumulative_reward.max().item(),
         )
-        self.logger.record("rewards/best_mean", self.best_mean_reward)
 
         # TODO: better metrics about the agent's state & the animation engine
         agent_observations = task.agent.get_observations()
         self.logger.record(
             "observations/positions",
-            np.linalg.norm(agent_observations["positions"].mean()),
+            np.linalg.norm(agent_observations["positions"], axis=1).mean(),
         )
         self.logger.record(
             "observations/linear_accelerations",
-            np.linalg.norm(agent_observations["linear_accelerations"].mean()),
+            np.linalg.norm(agent_observations["linear_accelerations"], axis=1).mean(),
         )
         self.logger.record(
             "observations/linear_velocities",
-            np.linalg.norm(agent_observations["linear_velocities"].mean()),
+            np.linalg.norm(agent_observations["linear_velocities"], axis=1).mean(),
         )
         self.logger.record(
             "observations/angular_velocities",
-            np.linalg.norm(agent_observations["angular_velocities"].mean()),
+            np.linalg.norm(agent_observations["angular_velocities"], axis=1).mean(),
         )
         self.logger.record(
             "observations/projected_gravities",
-            np.linalg.norm(agent_observations["projected_gravities"].mean()),
+            np.linalg.norm(agent_observations["projected_gravities"], axis=1).mean(),
         )
 
         return True
