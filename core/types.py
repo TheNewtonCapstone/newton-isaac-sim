@@ -23,6 +23,8 @@ Observations = Dict[str, np.ndarray]
 
 # Math
 NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
+# TODO: Create type for many types of numbers combined
+#   I.e. float | torch.Tensor | np.ndarray
 
 # Meta
 Settings = Dict[str, Any]
