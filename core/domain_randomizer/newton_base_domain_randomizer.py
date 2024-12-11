@@ -49,46 +49,41 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         indices_n = indices
 
         if indices is None:
-            indices = torch.arange(self._agent.num_agents)
+            indices_t = torch.arange(self._agent.num_agents)
         else:
-            indices = torch.from_numpy(indices).to(device=self._universe.physics_device)
+            indices_t = torch.from_numpy(indices).to(
+                device=self._universe.physics_device
+            )
 
-        num_to_reset = indices.shape[0]
+        num_to_reset = indices_t.shape[0]
 
         # TODO: decide where the reset positions and rotations should come from
         self._newton_art_view.set_world_poses(
             positions=self.initial_positions[indices],
             orientations=self.initial_orientations[indices],
-            indices=indices,
+            indices=indices_t,
         )
 
         # using set_velocities instead of individual methods (lin & ang),
         # because it's the only method supported in the GPU pipeline (default pipeline)
         self._newton_art_view.set_velocities(
             torch.zeros((num_to_reset, 6), dtype=torch.float32),
-            indices,
+            indices_t,
         )
 
         self._newton_art_view.set_joint_efforts(
             torch.zeros((num_to_reset, 12), dtype=torch.float32),
-            indices,
+            indices_t,
         )
 
         self._newton_art_view.set_joint_velocities(
             torch.zeros((num_to_reset, 12), dtype=torch.float32),
-            indices,
+            indices_t,
         )
 
-        import numpy as np
-
-        joint_positions = torch.from_numpy(
-            np.array(
-                [
-                    self._agent.joints_controller.box_joint_constraints.sample()
-                    for _ in range(num_to_reset)
-                ]
-            )
-        )
+        joint_positions = (
+            torch.rand((num_to_reset, 12), dtype=torch.float32) * 2.0 - 1.0
+        )  # [-1, 1]
 
         self._agent.joints_controller.reset(
             joint_positions,

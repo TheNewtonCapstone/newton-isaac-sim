@@ -66,11 +66,11 @@ class VecJointsController:
 
         self._is_constructed = True
 
-    def step(self, joint_positions: Tensor) -> None:
+    def step(self, joint_actions: Tensor) -> None:
         assert self._is_constructed, "Joints controller not constructed: tried to step!"
 
-        self._target_joint_positions = self._process_joint_positions(
-            joint_positions,
+        self._target_joint_positions = self._process_joint_actions(
+            joint_actions,
             self.box_joint_constraints,
             self._noise_function,
         )
@@ -93,7 +93,7 @@ class VecJointsController:
 
         joint_positions = joint_positions.to(device=self.universe.physics_device)
 
-        self._target_joint_positions = self._process_joint_positions(
+        self._target_joint_positions = self._process_joint_actions(
             joint_positions,
             self.box_joint_constraints,
         )
@@ -102,6 +102,31 @@ class VecJointsController:
             positions=self._target_joint_positions,
             indices=indices,
         )
+
+    def get_normalized_joint_positions(self) -> Tensor:
+        """
+        Returns:
+            The joint positions normalized to the joint constraints [-1, 1].
+        """
+        joint_positions = self.get_joint_positions_deg()
+
+        from core.utils.math import map_range
+
+        joint_positions_normalized = map_range(
+            joint_positions.cpu(),
+            torch.from_numpy(self.box_joint_constraints.low),
+            torch.from_numpy(self.box_joint_constraints.high),
+            -1.0,
+            1.0,
+        )
+
+        return joint_positions_normalized
+
+    def get_joint_positions_deg(self) -> Tensor:
+        return torch.rad2deg(self._articulation_view.get_joint_positions())
+
+    def get_joint_velocities_deg(self) -> Tensor:
+        return torch.rad2deg(self._articulation_view.get_joint_velocities())
 
     def _dict_to_box_constraints(self, joint_constraints: JointsConstraints) -> Box:
         joint_names = list(joint_constraints.keys())
@@ -150,15 +175,22 @@ class VecJointsController:
                     box_joint_constraints.high[j].item()
                 )
 
-    def _process_joint_positions(
+    def _process_joint_actions(
         self,
-        joint_positions: Tensor,
+        joint_actions: Tensor,
         box_joint_constraints: Box,
         noise_function: Optional[NoiseFunction] = None,
     ) -> Tensor:
-        if noise_function is not None:
-            joint_positions = noise_function(joint_positions)
+        """
+        Joint actions are processed by mapping them to the joint constraints (degrees) and applying noise.
+        Args:
+            joint_actions: The joint actions to be processed [-1, 1].
+            box_joint_constraints: The joint constraints, as a gymnasium.Box object.
+            noise_function: The noise function to be applied to the computed joint positions.
 
+        Returns:
+            The processed joint positions (in radians).
+        """
         low_constraints_t = torch.from_numpy(box_joint_constraints.low).to(
             device=self.universe.physics_device
         )
@@ -166,12 +198,23 @@ class VecJointsController:
             device=self.universe.physics_device
         )
 
-        for i, _ in enumerate(joint_positions):
+        joint_positions = torch.zeros_like(joint_actions)
+
+        for i, _ in enumerate(joint_actions):
+            joint_positions[i] = torch.lerp(
+                low_constraints_t,
+                high_constraints_t,
+                (joint_actions[i] + 1) / 2,
+            )
+
             joint_positions[i] = torch.clamp(
                 joint_positions[i],
                 min=low_constraints_t,
                 max=high_constraints_t,
             )
+
+            if noise_function is not None:
+                joint_positions[i] = noise_function(joint_positions[i])
 
             joint_positions[i] = torch.deg2rad(joint_positions[i])
 

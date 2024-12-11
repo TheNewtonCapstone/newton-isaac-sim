@@ -35,33 +35,28 @@ class NewtonIdleTask(NewtonBaseTask):
         playing: bool,
         max_episode_length: int,
     ):
-        agent_joints_low: np.ndarray = agent.joints_controller.box_joint_constraints.low
-        agent_joints_high: np.ndarray = (
-            agent.joints_controller.box_joint_constraints.high
-        )
-
         self.observation_space: Box = Box(
             low=np.array(
-                [-1.0] * 3
-                + [-np.Inf] * 7
-                + agent_joints_low.tolist()  # twice because we give past actions (target positions) + current positions
-                + agent_joints_low.tolist()
-                + [-np.Inf] * 12
-                + [-1] * 2,  # for the transformed phase signal
+                [-10.0] * 3  # for the projected gravity
+                + [-np.Inf] * 6  # for linear & angular velocities
+                + [-1.0] * 12  # for the joint positions
+                + [-np.Inf] * 12  # for the joint velocities
+                + [-1.0] * 24  # for the previous 2 actions
+                + [-1.0] * 2,  # for the transformed phase signal
             ),
             high=np.array(
-                [1.0] * 3
-                + [np.Inf] * 7
-                + agent_joints_high.tolist()
-                + agent_joints_high.tolist()
-                + [np.Inf] * 12
-                + [1] * 2,
+                [10.0] * 3  # for the projected gravity
+                + [np.Inf] * 6  # for linear & angular velocities
+                + [1.0] * 12  # for the joint positions
+                + [np.Inf] * 12  # for the joint velocities
+                + [1.0] * 24  # for the previous 2 actions
+                + [1.0] * 2  # for the transformed phase signal,
             ),
         )
 
         self.action_space: Box = Box(
-            low=agent_joints_low.copy(),
-            high=agent_joints_high.copy(),
+            low=np.array([-1.0] * 12),
+            high=np.array([1.0] * 12),
         )
 
         self.reward_space: Box = Box(
@@ -103,37 +98,17 @@ class NewtonIdleTask(NewtonBaseTask):
         #   The reward function would compare desired joint positions with the current joint positions, and reward
         #   the agent for getting closer to the desired positions.
 
-        phase_signal = self.progress_buf / self.max_episode_length
-
-        obs = self._get_observations()
-        heights = obs["positions"][:, 2]
-
-        obs_buf: np.ndarray = np.zeros(
-            (self.num_envs, self.num_observations), dtype=np.float32
-        )
-        obs_buf[:, :3] = obs["projected_gravities"]
-        obs_buf[:, 3:6] = obs["linear_accelerations"]
-        obs_buf[:, 6:9] = obs["angular_velocities"]
-        obs_buf[:, 9] = heights
-        obs_buf[:, 10:22] = self.actions_buf
-        obs_buf[:, 22:34] = (
-            self.agent.joints_controller.art_view.get_joint_positions().cpu().numpy()
-        )
-        obs_buf[:, 34:46] = (
-            self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
-        )
-
-        # For the explanation of the phase signal, see the comment above
-        obs_buf[:, 46] = np.cos(2 * np.pi * phase_signal)
-        obs_buf[:, 47] = np.sin(2 * np.pi * phase_signal)
-
+        obs_buf = self._get_observations()
         self._calculate_rewards()
 
-        self.last_actions_buf = self.actions_buf.copy()
+        # only now can we save the actions (after gathering observations & rewards)
+        self.last_actions_buf[1, :, :] = self.last_actions_buf[0, :, :]
+        self.last_actions_buf[0, :, :] = self.actions_buf.copy()
 
+        heights = self.env.get_observations()["positions"][:, 2]
         # terminated
         self.dones_buf = np.where(heights <= self.reset_height, True, False)
-        # self.dones_buf = np.where(heights >= 1.0, True, self.dones_buf)
+        self.dones_buf = np.where(heights >= 1.0, True, self.dones_buf)
 
         self.dones_buf = np.where(
             self.progress_buf >= self.max_episode_length,
@@ -149,7 +124,7 @@ class NewtonIdleTask(NewtonBaseTask):
         # clears the last 2 observations & the progress if any Newton is reset
         obs_buf[resets, :] = 0.0
         self.progress_buf[resets] = 0
-        self.last_actions_buf[resets, :] = 0.0
+        self.last_actions_buf[:, resets, :] = 0.0
 
         return (
             obs_buf.copy(),
@@ -161,50 +136,53 @@ class NewtonIdleTask(NewtonBaseTask):
     def reset(self) -> VecEnvObs:
         super().reset()
 
-        obs = self._get_observations()
+        obs_buf = self._get_observations()
+
+        self.env.reset()
+
+        # we want to return the last observation of the previous episode, according to the STB3 documentation
+        return obs_buf
+
+    def _get_observations(self) -> VecEnvObs:
+        obs = self.env.get_observations()
+
+        phase_signal = self.progress_buf / self.max_episode_length
 
         obs_buf: np.ndarray = np.zeros(
             (self.num_envs, self.num_observations), dtype=np.float32
         )
-
         obs_buf[:, :3] = obs["projected_gravities"]
-        obs_buf[:, 3:6] = obs["linear_accelerations"]
+        obs_buf[:, 3:6] = obs["linear_velocities"]
         obs_buf[:, 6:9] = obs["angular_velocities"]
-        obs_buf[:, 9] = obs["positions"][:, 2]
-        obs_buf[:, 10:22] = self.actions_buf
-        obs_buf[:, 22:34] = (
-            self.agent.joints_controller.art_view.get_joint_positions().cpu().numpy()
+        obs_buf[:, 9:21] = (
+            self.agent.joints_controller.get_normalized_joint_positions().cpu().numpy()
         )
-        obs_buf[:, 34:46] = (
-            self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
+        obs_buf[:, 21:33] = (
+            self.agent.joints_controller.get_joint_velocities_deg().cpu().numpy()
         )
-        obs_buf[:, 46] = np.cos(2 * np.pi * 0)
-        obs_buf[:, 47] = np.sin(2 * np.pi * 0)
+        # 1st & 2nd set of past actions, we don't care about just-applied actions
+        obs_buf[:, 33:57] = self.last_actions_buf[:].reshape(
+            (self.num_envs, self.num_actions * 2)
+        )
 
-        self.env.reset()
+        # From what I currently understand, we add two observations to the observation space:
+        #  - The phase signal (0-1) of the phase progress, transformed by cos(2*pi*progress) & sin(2*pi*progress)
+        # This would allow the model to recognize the periodicity of the animation and hopefully learn the intricacies
+        # of each gait.
+        obs_buf[:, 57] = np.cos(2 * np.pi * phase_signal)
+        obs_buf[:, 58] = np.sin(2 * np.pi * phase_signal)
 
-        # we want to return the last observation of the previous episode
         return obs_buf
-
-    def _get_observations(self) -> VecEnvObs:
-        # TODO: make this function return an observation np.ndarray instead of a dict
-        env_observations = self.env.get_observations()
-
-        return env_observations
 
     def _calculate_rewards(self) -> None:
         # TODO: rework rewards for Newton*Tasks
 
-        obs = self._get_observations()
+        obs = self.env.get_observations()
         positions = obs["positions"]
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]
 
         joints_order = self.agent.joints_controller.art_view.joint_names
-
-        # TODO: Decide on whether to have an action space from [0, 1] or within the ROMs
-        #   Disney uses an action space from [0, 1] along with some transformations to eventually map it to their motors ROMs
-        #   Or we can keep doing what we're doing, but adjust the reward function to avoid huge numbers
 
         # base position
         # base orientation
@@ -213,15 +191,10 @@ class NewtonIdleTask(NewtonBaseTask):
         base_angular_velocity_xy = angular_velocities[:, :2]
         base_angular_velocity_z = angular_velocities[:, 2]
         joint_angles = (
-            np.rad2deg(
-                self.agent.joints_controller.art_view.get_joint_positions()
-                .cpu()
-                .numpy()
-            )
-            / self.reward_space.high
+            self.agent.joints_controller.get_joint_positions_deg().cpu().numpy()
         )  # in degrees
         joint_velocities = (
-            self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
+            self.agent.joints_controller.get_joint_velocities_deg().cpu().numpy()
         )  # in degrees / second
         # joint_accelerations
         joint_efforts = (
@@ -230,18 +203,19 @@ class NewtonIdleTask(NewtonBaseTask):
             .numpy()
         )  # in Nm
         animation_joint_data = self.animation_engine.get_current_clip_datas_ordered(
-            self.progress_buf, joints_order
+            self.progress_buf,
+            joints_order,
         )
-        animation_joint_angles = animation_joint_data[:, :, 7] / self.reward_space.high
+        animation_joint_angles = animation_joint_data[:, :, 7]
         # animation joint velocities
 
-        from core.utils.math import difference_length_squared_n
+        from core.utils.math import magnitude_sqr_n
 
         # base position reward
         # base orientation reward
         base_linear_velocity_xy_reward = np.exp(
-            difference_length_squared_n(
-                base_linear_velocity_xy, np.zeros_like(base_linear_velocity_xy)
+            magnitude_sqr_n(
+                base_linear_velocity_xy - np.zeros_like(base_linear_velocity_xy)
             )
             * -8
         )
@@ -251,8 +225,8 @@ class NewtonIdleTask(NewtonBaseTask):
         )
         base_angular_velocity_xy_reward = (
             np.exp(
-                difference_length_squared_n(
-                    base_angular_velocity_xy, np.zeros_like(base_angular_velocity_xy)
+                magnitude_sqr_n(
+                    base_angular_velocity_xy - np.zeros_like(base_angular_velocity_xy)
                 )
                 * -2
             )
@@ -268,18 +242,24 @@ class NewtonIdleTask(NewtonBaseTask):
             * 0.5
         )
         joint_positions_reward = (
-            -difference_length_squared_n(joint_angles, animation_joint_angles) * 15.0
+            -magnitude_sqr_n(joint_angles - animation_joint_angles) * 15.0
         )
         # joint velocities reward
         joint_efforts_reward = (
-            -difference_length_squared_n(joint_efforts, np.zeros_like(joint_efforts))
-            * 0.001
+            -magnitude_sqr_n(joint_efforts - np.zeros_like(joint_efforts)) * 0.001
         )
         # joint accelerations reward
         joint_action_rate_reward = (
-            -difference_length_squared_n(self.actions_buf, self.last_actions_buf) * 1.5
+            -magnitude_sqr_n(self.actions_buf - self.last_actions_buf[0]) * 1.5
         )
-        # joints action acceleration
+        joint_action_acceleration_reward = (
+            -magnitude_sqr_n(
+                self.actions_buf
+                - 2 * self.last_actions_buf[0]
+                + self.last_actions_buf[1]
+            )
+            * 0.45
+        )  # not sure why this is the formula, but it comes from Disney
 
         self.rewards_buf = (
             base_linear_velocity_xy_reward
@@ -289,13 +269,14 @@ class NewtonIdleTask(NewtonBaseTask):
             + joint_positions_reward
             + joint_efforts_reward
             + joint_action_rate_reward
+            + joint_action_acceleration_reward
         )
 
         heights = positions[:, 2]
         self.rewards_buf = np.where(
             heights <= self.reset_height, -20.0, self.rewards_buf
         )
-        # self.rewards_buf = np.where(heights >= 1.0, -2.0, self.rewards_buf)
+        self.rewards_buf = np.where(heights >= 1.0, -2.0, self.rewards_buf)
 
         # TODO: should this be here?
         self.rewards_buf = np.clip(

@@ -1,6 +1,7 @@
 import random
 
 import numpy as np
+
 import torch
 from torch import Tensor
 
@@ -13,7 +14,15 @@ def gaussian_distribute(value: torch.Tensor | np.ndarray, mu: float = 1.0,
     return value * random.gauss(mu, sigma)
 
 
-def lerp(a: float | torch.Tensor | np.ndarray, b: float | torch.Tensor | np.ndarray, t: float) -> float | torch.Tensor | np.ndarray:
+def map_range(value: float | torch.Tensor | np.ndarray, from_min: float | torch.Tensor | np.ndarray,
+              from_max: float | torch.Tensor | np.ndarray, to_min: float | torch.Tensor | np.ndarray,
+              to_max: float | torch.Tensor | np.ndarray, ) -> float | torch.Tensor | np.ndarray:
+    # Map value from one range to another
+    return (value - from_min) / (from_max - from_min) * (to_max - to_min) + to_min
+
+
+def lerp(a: float | torch.Tensor | np.ndarray, b: float | torch.Tensor | np.ndarray,
+         t: float) -> float | torch.Tensor | np.ndarray:
     # Linear interpolation
     return a + t * (b - a)
 
@@ -74,8 +83,8 @@ def difference_length_n(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.linalg.norm(diff)
 
 
-def length_squared_n(a: np.ndarray) -> np.ndarray:
-    return np.sum(a * a, axis=1)
+def magnitude_sqr_n(a: np.ndarray, axis: int = 1) -> np.ndarray:
+    return np.sum(a * a, axis=axis)
 
 
 def length_n(a: np.ndarray) -> np.ndarray:
