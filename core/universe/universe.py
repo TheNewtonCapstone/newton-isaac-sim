@@ -1,26 +1,40 @@
-from typing import Optional
-
 from core.globals import PHYSICS_SCENE_PATH, LIGHTS_PATH, PHYSICS_PATH
 from core.types import Settings
+from omni.isaac.kit import SimulationApp
+from omni.isaac.core import SimulationContext
 
-# needs to be the first non-meta import, before any omniverse-related imports
-from isaacsim import SimulationApp
 
-
-class Universe:
-    def __init__(self, headless: bool, world_settings: Settings) -> None:
-        self.sim_app: Optional[SimulationApp] = None
-        self._world: Optional = None
+class Universe(SimulationContext):
+    def __init__(
+        self,
+        headless: bool,
+        sim_app: SimulationApp,
+        world_settings: Settings,
+    ):
+        self.sim_app: SimulationApp = sim_app
         self._world_settings: Settings = world_settings
 
-        self.physics_device: str = world_settings["device"]
-        self.headless: bool = headless
+        self._headless = headless
 
         self._is_constructed: bool = False
+
+        super().__init__(
+            physics_prim_path=PHYSICS_SCENE_PATH,
+            physics_dt=self._world_settings["physics_dt"],
+            rendering_dt=self._world_settings["rendering_dt"],
+            stage_units_in_meters=self._world_settings["stage_units_in_meters"],
+            backend=self._world_settings["backend"],
+            device=self._world_settings["device"],
+            sim_params=self._world_settings["sim_params"],
+        )
 
     def __del__(self):
         if self._is_constructed:
             self._world.stop()
+
+    @property
+    def headless(self) -> bool:
+        return self._headless
 
     @property
     def physics_world(self):
@@ -36,7 +50,7 @@ class Universe:
         Args:
             prim (XFormPrim): The prim to add to the scene: can be any as supported by the Scene.add(obj) method
         """
-        self._world.scene.add(prim)
+        # self.scene.add(prim)
 
     def construct(self) -> None:
         assert (
@@ -76,14 +90,13 @@ class Universe:
         from omni.isaac.core import World
 
         # TODO: if we're training, disable the scene_query_support option in sim_params
-        self._world: World = World(
-            physics_prim_path=PHYSICS_SCENE_PATH,
-            physics_dt=self._world_settings["physics_dt"],
-            rendering_dt=self._world_settings["rendering_dt"],
-            stage_units_in_meters=self._world_settings["stage_units_in_meters"],
-            backend=self._world_settings["backend"],
-            device=self._world_settings["device"],
-            sim_params=self._world_settings["sim_params"],
+
+        phys_ctx = self.get_physics_context()
+        # the following are performance options, that we don't care about when not in headless mode
+        # phys_ctx.enable_fabric(self.headless)
+        phys_ctx.set_physx_update_transformations_settings(
+            update_to_usd=not self.headless,
+            update_velocities_to_usd=not self.headless,
         )
 
         self._is_constructed = True

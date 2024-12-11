@@ -136,8 +136,8 @@ def setup() -> Optional[Matter]:
         cli_args.headless or cli_args.export_onnx
     )  # if we're exporting, don't show the GUI
     interactive = not headless and (
-        physics_only or playing
-    )  # interactive means that the user is expected to control the agent
+        physics_only or playing or animating
+    )  # interactive means that the user is expected to control the agent in some way
 
     # override some config with CLI num_envs, if specified
     num_envs = rl_config["n_envs"]
@@ -145,6 +145,9 @@ def setup() -> Optional[Matter]:
         num_envs = cli_args.num_envs
     if not training:
         num_envs = 1
+
+    if interactive:
+        world_config["sim_params"]["enable_scene_query_support"] = True
 
     # ensure proper config reading when encountering None
     if rl_config["ppo"]["clip_range_vf"] == "None":
@@ -209,11 +212,16 @@ def main():
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
-    # universe must be imported & constructed first, to load all necessary omniverse extensions
+    # big_bang must be imported & invoked first, to load all necessary omniverse extensions
+    from core import big_bang
+
+    universe = big_bang({"headless": headless}, world_config)
+
+    # only now can we import the rest of the modules
     from core.universe import Universe
 
-    universe = Universe(headless, world_config)
-    universe.construct()
+    # to circumvent Python typing restrictions, we reassign the universe to the global variable with the correct type!
+    universe: Universe = universe
 
     from core.envs import NewtonMultiTerrainEnv
     from core.agents import NewtonVecAgent
@@ -259,10 +267,6 @@ def main():
         joints_controller=joints_controller,
     )
 
-    # TODO: Add a separate animation only mode in simulation
-    #   This will allow us to test animations without the need for training/testing
-    #   labels=enhancement
-
     animation_engine = AnimationEngine(
         clips=animation_clips_config,
         step_dt=control_step_dt,
@@ -304,8 +308,6 @@ def main():
 
             # index 7 is the joint position (angle in degrees)
             joint_positions = joint_data[:, 7]
-
-            # print(joint_positions)
 
             # we wrap it in an array to make it 2D (it's a vectorized env)
             env.step(np.array([joint_positions], dtype=np.float32))
