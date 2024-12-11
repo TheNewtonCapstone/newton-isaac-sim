@@ -103,13 +103,14 @@ class VecJointsController:
             indices=indices,
         )
 
-    def get_normalized_joint_positions(self) -> Tensor:
+    def normalize_joint_positions(self, joint_positions: Tensor) -> Tensor:
         """
-        Returns:
-            The joint positions normalized to the joint constraints [-1, 1].
-        """
-        joint_positions = self.get_joint_positions_deg()
+        Args:
+            joint_positions: The joint positions to be normalized (in degrees).
 
+        Returns:
+            The normalized joint positions.
+        """
         from core.utils.math import map_range
 
         joint_positions_normalized = map_range(
@@ -121,6 +122,13 @@ class VecJointsController:
         )
 
         return joint_positions_normalized
+
+    def get_normalized_joint_positions(self) -> Tensor:
+        """
+        Returns:
+            The joint positions normalized to the joint constraints [-1, 1].
+        """
+        return self.normalize_joint_positions(self.get_joint_positions_deg())
 
     def get_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_positions())

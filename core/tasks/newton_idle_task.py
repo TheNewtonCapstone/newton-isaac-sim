@@ -1,3 +1,4 @@
+import torch
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
 
 import numpy as np
@@ -176,6 +177,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
     def _calculate_rewards(self) -> None:
         # TODO: rework rewards for Newton*Tasks
+        #   The current reward function is missing many features, all in comments below
 
         obs = self.env.get_observations()
         positions = obs["positions"]
@@ -190,9 +192,9 @@ class NewtonIdleTask(NewtonBaseTask):
         base_linear_velocity_z = linear_velocities[:, 2]
         base_angular_velocity_xy = angular_velocities[:, :2]
         base_angular_velocity_z = angular_velocities[:, 2]
-        joint_angles = (
-            self.agent.joints_controller.get_joint_positions_deg().cpu().numpy()
-        )  # in degrees
+        joint_positions = (
+            self.agent.joints_controller.get_normalized_joint_positions().cpu().numpy()
+        )  # [-1, 1] unitless
         joint_velocities = (
             self.agent.joints_controller.get_joint_velocities_deg().cpu().numpy()
         )  # in degrees / second
@@ -206,7 +208,14 @@ class NewtonIdleTask(NewtonBaseTask):
             self.progress_buf,
             joints_order,
         )
-        animation_joint_angles = animation_joint_data[:, :, 7]
+        # we use the joint controller here, because it contains all the required information
+        animation_joint_positions = (
+            self.agent.joints_controller.normalize_joint_positions(
+                torch.from_numpy(animation_joint_data[:, :, 7])
+            )
+            .cpu()
+            .numpy()
+        )  # [-1, 1] unitless
         # animation joint velocities
 
         from core.utils.math import magnitude_sqr_n
@@ -242,7 +251,7 @@ class NewtonIdleTask(NewtonBaseTask):
             * 0.5
         )
         joint_positions_reward = (
-            -magnitude_sqr_n(joint_angles - animation_joint_angles) * 15.0
+            -magnitude_sqr_n(joint_positions - animation_joint_positions) * 15.0
         )
         # joint velocities reward
         joint_efforts_reward = (
