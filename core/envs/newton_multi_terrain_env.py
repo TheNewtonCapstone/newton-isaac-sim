@@ -63,39 +63,6 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                 terrain_builder.build_from_self(terrain_spawn_position)
             )
 
-        # propagate physics changes
-        self._universe.reset()
-
-        for i, _ in enumerate(self.terrain_builds):
-            terrain_spawn_position = terrain_positions[i]
-
-            # from the raycast, we can get the desired position of the agent to avoid clipping with the terrain
-            raycast_height = 25
-            max_ray_test_dist = 100
-            min_ray_dist = max_ray_test_dist
-            num_rays = 9
-            rays_side = math.isqrt(num_rays)
-            ray_separation = 0.15
-
-            for j in range(num_rays):
-                # we also want to cover a grid of rays on the xy-plane
-                start_x = -ray_separation * (rays_side / 2)
-                start_y = -ray_separation * (rays_side / 2)
-                ray_x = ray_separation * (j % rays_side) + start_x
-                ray_y = ray_separation * (j // rays_side) + start_y
-
-                _, _, dist = raycast(
-                    [
-                        terrain_spawn_position[0] + ray_x,
-                        terrain_spawn_position[1] + ray_y,
-                        raycast_height,
-                    ],
-                    [0, 0, -1],
-                    max_distance=max_ray_test_dist,
-                )
-
-                min_ray_dist = min(dist, min_ray_dist)
-
             # we want all agents to be evenly split across all terrains
             agent_batch_start = i * agent_batch_qty
             agent_batch_end = i * agent_batch_qty + agent_batch_qty
@@ -106,7 +73,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                         terrain_spawn_position[0],
                         terrain_spawn_position[1],
                         # TODO: make this a better computed value
-                        0.9 + self.terrain_builds[i].height,
+                        0.5 + self.terrain_builds[i].height,
                     ]
                 )
             )
