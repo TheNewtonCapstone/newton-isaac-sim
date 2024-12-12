@@ -5,11 +5,14 @@ seed: 14321
 
 n_envs: 96
 timesteps_per_env: 100_000
-base_lr: 3e-4
+base_lr: 3e-5
 episode_length: 500
 
 newton:
   inverse_control_frequency: 4  # we're aiming for a total compute budget of 2 times the physics timestep (0.005s * 4 = 0.02s)
+
+  # TODO: Add gains as a configuration parameter
+  #   Even with our custom actuators, we still need to tune the gains somewhat and having it as a configuration parameter would be nice
 
 delay:
   enabled: False

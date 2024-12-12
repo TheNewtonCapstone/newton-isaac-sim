@@ -8,6 +8,8 @@ from core.universe import Universe
 
 class BaseAgent(ABC):
     def __init__(self, num_agents: int) -> None:
+        assert num_agents > 0, f"Number of agents must be greater than 0: {num_agents}"
+
         self.path: str = ""
         self.num_agents: int = num_agents
         self._universe: Optional[Universe] = None

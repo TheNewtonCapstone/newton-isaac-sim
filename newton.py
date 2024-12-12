@@ -285,7 +285,12 @@ def main():
         env = NewtonMultiTerrainEnv(
             agent=newton_agent,
             num_envs=num_envs,
-            terrain_builders=[FlatBaseTerrainBuilder()],
+            terrain_builders=[
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+            ],
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
         )
@@ -308,8 +313,15 @@ def main():
             # index 7 is the joint position (angle in degrees)
             joint_positions = joint_data[:, 7]
 
+            # TODO: Investigate if there's a way to simplify joint_normalization
+            #   since the system expects a [-1, 1] range, we normalize the joint positions to their limits; it is
+            #   redundant since we'll undo the normalization later in the controller, so it might warrant a change
+            joint_actions = newton_agent.joints_controller.normalize_joint_positions(
+                torch.from_numpy(joint_positions)
+            )
+
             # we wrap it in an array to make it 2D (it's a vectorized env)
-            env.step(np.array([joint_positions], dtype=np.float32))
+            env.step(np.array([joint_actions], dtype=np.float32))
 
         exit(1)
 
@@ -451,6 +463,13 @@ def main():
                 instant_rewards=instant_rewards,
             )
 
+        # TODO: Add proper way to customize network size & shape
+        #   We can offer a set of predefined policies, or allow the user to specify their own. I'm thinking of a
+        #   set of functions, instead of classes, since it's a small configuration. We could also offer a wrapper around
+        #   PPO (and eventually A2C) to allow for easy customization of the network.
+
+        policy_kwargs = dict(activation_fn=torch.nn.ELU, net_arch=[512, 512, 512])
+
         model = PPO(
             rl_config["policy"],
             task,
@@ -472,6 +491,7 @@ def main():
             sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
             target_kl=rl_config["ppo"]["target_kl"],
             tensorboard_log=task_runs_directory,
+            policy_kwargs=policy_kwargs,
         )
 
         if cli_args.checkpoint is not None:
