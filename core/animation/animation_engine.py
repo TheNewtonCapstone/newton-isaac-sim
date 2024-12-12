@@ -104,7 +104,7 @@ class AnimationEngine:
 
     def get_current_clip_data_ordered(
         self,
-        progress: int,
+        progress: float,
         joints_order: List[str],
         interpolate: bool = True,
     ) -> np.ndarray:

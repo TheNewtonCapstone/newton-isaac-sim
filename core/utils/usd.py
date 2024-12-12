@@ -1,7 +1,9 @@
 import re
 from typing import Any
-from pxr import Usd
+
 from pxr.UsdShade import Material
+
+from pxr import Usd
 
 
 def get_or_define_material(material_prim_path: str) -> Material:
@@ -17,7 +19,7 @@ def get_or_define_material(material_prim_path: str) -> Material:
         ValueError: If the material API cannot be applied to the prim.
     """
 
-    from omni.isaac.core.utils.prims import define_prim, is_prim_path_valid
+    from omni.isaac.core.utils.prims import is_prim_path_valid
     from omni.isaac.core.utils.stage import get_current_stage
     from pxr import UsdShade
 
@@ -45,7 +47,6 @@ def get_or_apply_api(prim: Usd.Prim, api_type: Any) -> Usd.APISchemaBase:
     """
 
     from omni.isaac.core.utils.stage import get_current_stage
-    from pxr import Usd
 
     # get API if it already exists
     api = api_type.Get(get_current_stage(), prim.GetPath())

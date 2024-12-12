@@ -49,8 +49,6 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
 
         agent_batch_qty = int(math.ceil(self.num_envs / num_terrains))
 
-        from core.utils.physics import raycast
-
         # build & add all given terrains
         for i, terrain_builder in enumerate(self.terrain_builders):
             terrain_spawn_position = terrain_positions[i]
@@ -73,7 +71,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                         terrain_spawn_position[0],
                         terrain_spawn_position[1],
                         # TODO: make this a better computed value
-                        0.5 + self.terrain_builds[i].height,
+                        0.4 + self.terrain_builds[i].height,
                     ]
                 )
             )

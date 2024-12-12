@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from core.agents import BaseAgent
 from core.types import Settings, Indices

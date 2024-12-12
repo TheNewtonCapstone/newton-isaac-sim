@@ -4,7 +4,6 @@ from typing import Optional
 from core.globals import AGENTS_PATH
 from core.types import Observations, Actions
 from core.universe import Universe
-from omni.isaac.core import World
 
 
 class BaseAgent(ABC):

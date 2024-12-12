@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 import torch
 from core.agents import NewtonBaseAgent
@@ -34,7 +34,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
             prim_paths_expr=self._agent.base_path_expr,
             name="newton_dr_art_view",
         )
-        self._universe.add_to_scene(self._newton_art_view)
+        self._universe.add(self._newton_art_view)
 
         self._universe.reset()
 
@@ -51,9 +51,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         if indices is None:
             indices_t = torch.arange(self._agent.num_agents)
         else:
-            indices_t = torch.from_numpy(indices).to(
-                device=self._universe.physics_device
-            )
+            indices_t = torch.from_numpy(indices).to(device=self._universe.device)
 
         num_to_reset = indices_t.shape[0]
 
@@ -91,7 +89,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         )
 
     def set_initial_positions(self, positions: torch.Tensor) -> None:
-        self.initial_positions = positions.to(self._universe.physics_device)
+        self.initial_positions = positions.to(self._universe.device)
 
     def set_initial_orientations(self, orientations: torch.Tensor) -> None:
-        self.initial_orientations = orientations.to(self._universe.physics_device)
+        self.initial_orientations = orientations.to(self._universe.device)

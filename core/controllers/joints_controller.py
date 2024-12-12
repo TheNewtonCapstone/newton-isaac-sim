@@ -9,6 +9,50 @@ from omni.isaac.core.articulations import ArticulationView
 from torch import Tensor
 
 
+def dict_to_box_constraints(joint_constraints: JointsConstraints) -> Box:
+    joint_names = list(joint_constraints.keys())
+
+    low_joint_constraints = np.zeros(
+        (len(joint_names)),
+        dtype=np.float32,
+    )
+    high_joint_constraints = np.zeros_like(low_joint_constraints)
+
+    # Ensures that the joint constraints are in the correct order
+    for i, joint_name in enumerate(joint_names):
+        constraint = joint_constraints[joint_name]
+
+        low_joint_constraints[i] = constraint[0]
+        high_joint_constraints[i] = constraint[1]
+
+    box_joint_constraints = Box(
+        low=low_joint_constraints,
+        high=high_joint_constraints,
+        dtype=np.float32,
+    )
+
+    return box_joint_constraints
+
+
+def apply_joint_constraints(
+    box_joint_constraints: Box,
+    prim_paths: List[str],
+    joint_names: List[str],
+) -> None:
+    from omni.isaac.core.utils.stage import get_current_stage
+    from pxr import UsdPhysics
+
+    stage = get_current_stage()
+
+    for i, prim_path in enumerate(prim_paths):
+        for j, joint_name in enumerate(joint_names):
+            joint_path = f"{prim_path}/{joint_name}"
+
+            joint_limits = UsdPhysics.RevoluteJoint.Get(stage, joint_path)
+            joint_limits.CreateLowerLimitAttr().Set(box_joint_constraints.low[j].item())
+            joint_limits.GetUpperLimitAttr().Set(box_joint_constraints.high[j].item())
+
+
 class VecJointsController:
     def __init__(
         self,
@@ -24,9 +68,7 @@ class VecJointsController:
         self._noise_function: NoiseFunction = noise_function
         self._target_joint_positions: Tensor = torch.zeros(0)
         self.joint_constraints: JointsConstraints = joint_constraints
-        self.box_joint_constraints: Box = self._dict_to_box_constraints(
-            joint_constraints
-        )
+        self.box_joint_constraints: Box = dict_to_box_constraints(joint_constraints)
 
         self._is_constructed: bool = False
 
@@ -54,11 +96,11 @@ class VecJointsController:
             self.path_expr,
             name="joints_controller_art_view",
         )
-        self.universe.add_to_scene(self._articulation_view)
+        self.universe.add(self._articulation_view)
 
         self.universe.reset()
 
-        self._apply_joint_constraints(
+        apply_joint_constraints(
             self.box_joint_constraints,
             self._articulation_view.prim_paths,
             self._articulation_view.joint_names,
@@ -86,12 +128,12 @@ class VecJointsController:
         if indices is None:
             indices = torch.arange(
                 self._articulation_view.count,
-                device=self.universe.physics_device,
+                device=self.universe.device,
             )
         else:
-            indices = torch.from_numpy(indices).to(device=self.universe.physics_device)
+            indices = torch.from_numpy(indices).to(device=self.universe.device)
 
-        joint_positions = joint_positions.to(device=self.universe.physics_device)
+        joint_positions = joint_positions.to(device=self.universe.device)
 
         self._target_joint_positions = self._process_joint_actions(
             joint_positions,
@@ -136,53 +178,6 @@ class VecJointsController:
     def get_joint_velocities_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_velocities())
 
-    def _dict_to_box_constraints(self, joint_constraints: JointsConstraints) -> Box:
-        joint_names = list(joint_constraints.keys())
-
-        low_joint_constraints = np.zeros(
-            (len(joint_names)),
-            dtype=np.float32,
-        )
-        high_joint_constraints = np.zeros_like(low_joint_constraints)
-
-        # Ensures that the joint constraints are in the correct order
-        for i, joint_name in enumerate(joint_names):
-            constraint = joint_constraints[joint_name]
-
-            low_joint_constraints[i] = constraint[0]
-            high_joint_constraints[i] = constraint[1]
-
-        box_joint_constraints = Box(
-            low=low_joint_constraints,
-            high=high_joint_constraints,
-            dtype=np.float32,
-        )
-
-        return box_joint_constraints
-
-    def _apply_joint_constraints(
-        self,
-        box_joint_constraints: Box,
-        prim_paths: List[str],
-        joint_names: List[str],
-    ) -> None:
-        from omni.isaac.core.utils.stage import get_current_stage
-        from pxr import UsdPhysics
-
-        stage = get_current_stage()
-
-        for i, prim_path in enumerate(prim_paths):
-            for j, joint_name in enumerate(joint_names):
-                joint_path = f"{prim_path}/{joint_name}"
-
-                joint_limits = UsdPhysics.RevoluteJoint.Get(stage, joint_path)
-                joint_limits.CreateLowerLimitAttr().Set(
-                    box_joint_constraints.low[j].item()
-                )
-                joint_limits.GetUpperLimitAttr().Set(
-                    box_joint_constraints.high[j].item()
-                )
-
     def _process_joint_actions(
         self,
         joint_actions: Tensor,
@@ -200,10 +195,10 @@ class VecJointsController:
             The processed joint positions (in radians).
         """
         low_constraints_t = torch.from_numpy(box_joint_constraints.low).to(
-            device=self.universe.physics_device
+            device=self.universe.device
         )
         high_constraints_t = torch.from_numpy(box_joint_constraints.high).to(
-            device=self.universe.physics_device
+            device=self.universe.device
         )
 
         joint_positions = torch.zeros_like(joint_actions)

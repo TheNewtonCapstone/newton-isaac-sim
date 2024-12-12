@@ -1,15 +1,14 @@
 import argparse
 from typing import List, Optional, Dict
 
+import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.policies import BasePolicy
 
-import numpy as np
 import torch
 from core.types import Matter, Settings
 from core.utils.config import load_config
 from core.utils.math import IDENTITY_QUAT
-from gymnasium.spaces import Box
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -220,7 +219,7 @@ def main():
     # only now can we import the rest of the modules
     from core.universe import Universe
 
-    # to circumvent Python typing restrictions, we reassign the universe to the global variable with the correct type!
+    # to circumvent Python typing restrictions, we type the universe here
     universe: Universe = universe
 
     from core.envs import NewtonMultiTerrainEnv
@@ -302,7 +301,7 @@ def main():
         # provides that exactly; a different robot or different control mode would probably require a different approach
         while universe.is_playing:
             joint_data = animation_engine.get_current_clip_data_ordered(
-                universe.physics_world.current_time_step_index // control_step_dt,
+                universe.current_time_step_index // control_step_dt,
                 joints_names,
             )
 
@@ -507,7 +506,7 @@ def main():
             actions_string = ",".join([str(ja) for ja in actions[0]])
 
             print(
-                f"{universe.physics_world.current_time},{universe.physics_world.get_physics_dt()},{observations[0][0]},{actions_string}",
+                f"{universe.current_time},{universe.get_physics_dt()},{observations[0][0]},{actions_string}",
                 file=log_file,
             )
 

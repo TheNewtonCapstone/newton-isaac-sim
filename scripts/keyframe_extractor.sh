@@ -37,8 +37,8 @@ echo "Found version checker script."
 
 # Check if the file version is compatible with the blender's version (version_checker outputs <Compatible|Incompatible> <version>)
 VERSION_CHECKER_OUT=$(python $VERSION_CHECKER_SCRIPT "$BLEND_FILE" --blender-version "$BLENDER_VERSION")
-VERSION_CHECK=$(echo $VERSION_CHECKER_OUT | cut -d " " -f 1)
-FILE_VERSION=$(echo $VERSION_CHECKER_OUT | cut -d " " -f 2)
+VERSION_CHECK=$(echo "$VERSION_CHECKER_OUT" | cut -d " " -f 1)
+FILE_VERSION=$(echo "$VERSION_CHECKER_OUT" | cut -d " " -f 2)
 
 if [ "$VERSION_CHECK" != "Compatible" ]; then
     echo "File (version $FILE_VERSION) is incompatible with found Blender. Please use a compatible version."

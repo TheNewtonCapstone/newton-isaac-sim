@@ -8,7 +8,7 @@ class DefaultGroundPlaneBuildBase(BaseTerrainBuild):
         self,
         path: str,
     ):
-        super().__init__(tensor([]), tensor([]), 0, tensor([]), path, None)
+        super().__init__(tensor([]), tensor([]), 0, tensor([]), path)
 
 
 class DefaultGroundPlaneBuilderBase(BaseTerrainBuilder):

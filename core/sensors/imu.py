@@ -1,13 +1,10 @@
 from typing import Optional
 
-import numpy as np
-from core.universe import Universe
-from torch import Tensor
-
 import torch
 from core.types import IMUData, NoiseFunction
-from omni.isaac.core import World
+from core.universe import Universe
 from omni.isaac.core.prims import RigidPrimView
+from torch import Tensor
 
 
 class VecIMU:
@@ -20,10 +17,8 @@ class VecIMU:
     ):
         self.universe: Universe = universe
         self.path_expr: str = ""
-        self.local_position: Tensor = local_position.to(self.universe.physics_device)
-        self.local_orientation: Tensor = local_orientation.to(
-            self.universe.physics_device
-        )
+        self.local_position: Tensor = local_position.to(self.universe.device)
+        self.local_orientation: Tensor = local_orientation.to(self.universe.device)
         self.num_imus: int = 0
 
         self.rigid_view: Optional[RigidPrimView] = None
@@ -36,42 +31,42 @@ class VecIMU:
 
         self._positions: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
         self._rotations: Tensor = IDENTITY_QUAT.repeat(self.num_imus, 1).to(
-            self.universe.physics_device
+            self.universe.device
         )
 
         self._linear_accelerations: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
         self._linear_velocities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
 
         self._angular_accelerations: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
         self._angular_velocities = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
 
         self._last_linear_velocities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
         self._last_angular_velocities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
 
         self._projected_gravities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
 
     def construct(self, path_expr: str) -> None:
@@ -84,7 +79,7 @@ class VecIMU:
             name="imu_rigid_view",
             prepare_contact_sensors=False,
         )
-        self.universe.add_to_scene(self.rigid_view)
+        self.universe.add(self.rigid_view)
 
         # propagate physics changes
         self.universe.reset()
@@ -93,48 +88,49 @@ class VecIMU:
 
         self._is_constructed = True
 
+        # required to fill the tensors with the correct number of IMUs
         self.reset()
 
     def reset(self) -> IMUData:
         from core.utils.math import IDENTITY_QUAT
 
         self._positions: Tensor = torch.zeros(
-            (self.num_imus, 3), device=self.universe.physics_device
+            (self.num_imus, 3), device=self.universe.device
         )
         self._rotations: Tensor = IDENTITY_QUAT.repeat(self.num_imus, 1).to(
-            self.universe.physics_device
+            self.universe.device
         )
 
         self._linear_accelerations: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
         self._linear_velocities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
 
         self._angular_accelerations: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
         self._angular_velocities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
 
         self._last_linear_velocities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
         self._last_angular_velocities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
 
         self._projected_gravities: Tensor = torch.zeros(
             (self.num_imus, 3),
-            device=self.universe.physics_device,
+            device=self.universe.device,
         )
 
         return self.get_data()
@@ -165,8 +161,8 @@ class VecIMU:
 
         # from: https://github.com/isaac-sim/IsaacLab/pull/619/files#diff-44fe42c247de7301a3ce18a10d2b8c9045d58d42fc8440a7221b458d0712e83d
 
-        physics_dt = self.universe.physics_world.current_time - self._last_update_time
-        self._last_update_time = self.universe.physics_world.current_time
+        physics_dt = self.universe.current_time - self._last_update_time
+        self._last_update_time = self.universe.current_time
 
         positions, orientations = self.rigid_view.get_world_poses()
         positions = torch.nan_to_num(positions)
@@ -212,10 +208,10 @@ class VecIMU:
                 angular_velocities - self._last_angular_velocities
             ) / physics_dt
 
-        gravity = self.universe.physics_world.physics_sim_view.get_gravity()
+        gravity = self.universe.physics_sim_view.get_gravity()
         projected_gravities = torch.tensor(
             gravity,
-            device=self.universe.physics_device,
+            device=self.universe.device,
         ).repeat(self.num_imus, 1)
 
         # store pose

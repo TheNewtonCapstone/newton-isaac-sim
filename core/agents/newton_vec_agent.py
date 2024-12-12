@@ -1,5 +1,5 @@
 from core.agents import NewtonBaseAgent
-from core.globals import TERRAINS_PATH, PHYSICS_SCENE_PATH, COLLISION_GROUPS_PATH
+from core.globals import TERRAINS_PATH, COLLISION_GROUPS_PATH
 from core.types import Observations, Actions
 from core.universe import Universe
 
@@ -27,13 +27,14 @@ class NewtonVecAgent(NewtonBaseAgent):
 
         cloner.filter_collisions(
             prim_paths=agent_paths,
-            physicsscene_path=PHYSICS_SCENE_PATH,
+            physicsscene_path=self._universe.get_physics_context().prim_path,
             collision_root_path=COLLISION_GROUPS_PATH,
             global_paths=[TERRAINS_PATH],
         )
         cloner.clone(
             source_prim_path=self.path,
             prim_paths=agent_paths,
+            copy_from_source=True,
         )
 
         self.imu.construct(self.base_path_expr)

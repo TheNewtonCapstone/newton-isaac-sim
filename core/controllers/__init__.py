@@ -1,1 +1,1 @@
-from .joints_controller import VecJointsController
+from .joints_controller import *
