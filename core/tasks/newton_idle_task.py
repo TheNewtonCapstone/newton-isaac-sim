@@ -35,6 +35,7 @@ class NewtonIdleTask(NewtonBaseTask):
         device: str,
         playing: bool,
         max_episode_length: int,
+        rl_step_dt: float,
     ):
         self.observation_space: Box = Box(
             low=np.array(
@@ -75,6 +76,7 @@ class NewtonIdleTask(NewtonBaseTask):
             device,
             playing,
             max_episode_length,
+            rl_step_dt,
             self.observation_space,
             self.action_space,
             self.reward_space,
@@ -112,7 +114,7 @@ class NewtonIdleTask(NewtonBaseTask):
         self.dones_buf = np.where(heights >= 1.0, True, self.dones_buf)
 
         self.dones_buf = np.where(
-            self.progress_buf >= self.max_episode_length,
+            self.progress_buf > self.max_episode_length,
             not self.playing,
             self.dones_buf,
         )  # truncated
@@ -196,14 +198,24 @@ class NewtonIdleTask(NewtonBaseTask):
             self.agent.joints_controller.get_normalized_joint_positions().cpu().numpy()
         )  # [-1, 1] unitless
         joint_velocities = (
-            self.agent.joints_controller.get_joint_velocities_deg().cpu().numpy()
-        )  # in degrees / second
+            self.agent.joints_controller.get_normalized_joint_velocities().cpu().numpy()
+        )  # [-1, 1] unitless
         # joint_accelerations
         joint_efforts = (
             self.agent.joints_controller.art_view.get_measured_joint_efforts()
             .cpu()
             .numpy()
         )  # in Nm
+        last_animation_joint_data = (
+            self.animation_engine.get_current_clip_datas_ordered(
+                np.where(
+                    self.progress_buf == 0,
+                    self.max_episode_length - 1,
+                    self.progress_buf - 1,
+                ),
+                joints_order,
+            )
+        )
         animation_joint_data = self.animation_engine.get_current_clip_datas_ordered(
             self.progress_buf,
             joints_order,
@@ -216,7 +228,16 @@ class NewtonIdleTask(NewtonBaseTask):
             .cpu()
             .numpy()
         )  # [-1, 1] unitless
-        # animation joint velocities
+        animation_joint_velocities = (
+            self.agent.joints_controller.normalize_joint_positions(
+                torch.from_numpy(
+                    (animation_joint_data[:, :, 7] - last_animation_joint_data[:, :, 7])
+                    / self.rl_step_dt
+                )
+            )
+            .cpu()
+            .numpy()
+        )  # [-1, 1] unitless
 
         from core.utils.math import magnitude_sqr_n
 
@@ -253,7 +274,9 @@ class NewtonIdleTask(NewtonBaseTask):
         joint_positions_reward = (
             -magnitude_sqr_n(joint_positions - animation_joint_positions) * 15.0
         )
-        # joint velocities reward
+        joint_velocities_reward = (
+            -magnitude_sqr_n(joint_velocities - animation_joint_velocities) * 0.1
+        )
         joint_efforts_reward = (
             -magnitude_sqr_n(joint_efforts - np.zeros_like(joint_efforts)) * 0.001
         )
@@ -276,6 +299,7 @@ class NewtonIdleTask(NewtonBaseTask):
             + base_angular_velocity_xy_reward
             + base_angular_velocity_z_reward
             + joint_positions_reward
+            + joint_velocities_reward
             + joint_efforts_reward
             + joint_action_rate_reward
             + joint_action_acceleration_reward

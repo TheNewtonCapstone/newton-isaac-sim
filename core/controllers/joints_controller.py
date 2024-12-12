@@ -172,6 +172,17 @@ class VecJointsController:
         """
         return self.normalize_joint_positions(self.get_joint_positions_deg())
 
+    def get_normalized_joint_velocities(self) -> Tensor:
+        """
+        Returns:
+            The joint velocities normalized to the joint constraints [-1, 1].
+        """
+
+        # TODO: Normalize joint velocities according to their actual limits
+        #   As opposed to using the joints' constraints
+
+        return self.normalize_joint_positions(self.get_joint_velocities_deg())
+
     def get_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_positions())
 

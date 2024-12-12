@@ -43,6 +43,7 @@ class BaseTask(VecEnv):
         device: str,
         playing: bool,
         max_episode_length: int,
+        rl_step_dt: float,
         observation_space: gymnasium.spaces.Space,
         action_space: gymnasium.spaces.Box,
         reward_space: gymnasium.spaces.Box,
@@ -60,6 +61,7 @@ class BaseTask(VecEnv):
 
         self.num_envs: int = num_envs
         self.max_episode_length: int = max_episode_length
+        self.rl_step_dt: float = rl_step_dt
 
         self.num_observations: int = self.observation_space.shape[0]
         self.num_actions: int = self.action_space.shape[0]

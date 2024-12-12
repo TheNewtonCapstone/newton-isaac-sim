@@ -425,6 +425,7 @@ def main():
         num_envs=num_envs,
         playing=playing,
         max_episode_length=rl_config["episode_length"],
+        rl_step_dt=control_step_dt,
     )
     callback = NewtonBaseTaskCallback(
         check_freq=64,
