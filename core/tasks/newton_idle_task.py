@@ -108,10 +108,11 @@ class NewtonIdleTask(NewtonBaseTask):
         self.last_actions_buf[1, :, :] = self.last_actions_buf[0, :, :]
         self.last_actions_buf[0, :, :] = self.actions_buf.copy()
 
-        heights = self.env.get_observations()["positions"][:, 2]
+        gravity_on_z = self.env.get_observations()["projected_gravities"][:, 2]
         # terminated
-        self.dones_buf = np.where(heights <= self.reset_height, True, False)
-        self.dones_buf = np.where(heights >= 1.0, True, self.dones_buf)
+        self.dones_buf = np.where(
+            gravity_on_z >= 0.0, True, False
+        )  # when we're not upright
 
         self.dones_buf = np.where(
             self.progress_buf > self.max_episode_length,
@@ -182,9 +183,9 @@ class NewtonIdleTask(NewtonBaseTask):
         #   The current reward function is missing many features, all in comments below
 
         obs = self.env.get_observations()
-        positions = obs["positions"]
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]
+        projected_gravities = obs["projected_gravities"]
 
         joints_order = self.agent.joints_controller.art_view.joint_names
 
@@ -239,59 +240,61 @@ class NewtonIdleTask(NewtonBaseTask):
             .numpy()
         )  # [-1, 1] unitless
 
-        from core.utils.math import magnitude_sqr_n
+        from core.utils.rl import (
+            exp_squared_norm,
+            fd_first_order_squared_norm,
+            fd_second_order_squared_norm,
+        )
 
         # base position reward
         # base orientation reward
-        base_linear_velocity_xy_reward = np.exp(
-            magnitude_sqr_n(
-                base_linear_velocity_xy - np.zeros_like(base_linear_velocity_xy)
-            )
-            * -8
+        base_linear_velocity_xy_reward = exp_squared_norm(
+            base_linear_velocity_xy,
+            mult=-8.0,
+            weight=1.0,
         )
-        base_linear_velocity_z_reward = np.exp(
-            np.square(base_linear_velocity_z - np.zeros_like(base_linear_velocity_z))
-            * -8
+        base_linear_velocity_z_reward = exp_squared_norm(
+            base_angular_velocity_z,
+            mult=-8.0,
+            weight=1.0,
         )
-        base_angular_velocity_xy_reward = (
-            np.exp(
-                magnitude_sqr_n(
-                    base_angular_velocity_xy - np.zeros_like(base_angular_velocity_xy)
-                )
-                * -2
-            )
-            * 0.5
+        base_angular_velocity_xy_reward = exp_squared_norm(
+            base_angular_velocity_xy,
+            mult=-2,
+            weight=0.5,
         )
-        base_angular_velocity_z_reward = (
-            np.exp(
-                np.square(
-                    base_angular_velocity_z - np.zeros_like(base_angular_velocity_z)
-                )
-                * -2
-            )
-            * 0.5
+        base_angular_velocity_z_reward = exp_squared_norm(
+            base_angular_velocity_z,
+            mult=-2,
+            weight=0.5,
         )
-        joint_positions_reward = (
-            -magnitude_sqr_n(joint_positions - animation_joint_positions) * 15.0
+        joint_positions_reward = fd_first_order_squared_norm(
+            joint_positions,
+            animation_joint_positions,
+            weight=15.0,
         )
-        joint_velocities_reward = (
-            -magnitude_sqr_n(joint_velocities - animation_joint_velocities) * 0.1
+        joint_velocities_reward = fd_first_order_squared_norm(
+            joint_velocities,
+            animation_joint_velocities,
+            weight=0.01,
         )
-        joint_efforts_reward = (
-            -magnitude_sqr_n(joint_efforts - np.zeros_like(joint_efforts)) * 0.001
+        joint_efforts_reward = fd_first_order_squared_norm(
+            joint_efforts,
+            np.zeros_like(joint_efforts),
+            weight=0.001,
         )
         # joint accelerations reward
-        joint_action_rate_reward = (
-            -magnitude_sqr_n(self.actions_buf - self.last_actions_buf[0]) * 1.5
+        joint_action_rate_reward = fd_first_order_squared_norm(
+            self.actions_buf,
+            self.last_actions_buf[0],
+            weight=1.0,
         )
-        joint_action_acceleration_reward = (
-            -magnitude_sqr_n(
-                self.actions_buf
-                - 2 * self.last_actions_buf[0]
-                + self.last_actions_buf[1]
-            )
-            * 0.45
-        )  # not sure why this is the formula, but it comes from Disney
+        joint_action_acceleration_reward = fd_second_order_squared_norm(
+            self.actions_buf,
+            self.last_actions_buf[0],
+            self.last_actions_buf[1],
+            weight=0.45,
+        )
 
         self.rewards_buf = (
             base_linear_velocity_xy_reward
@@ -305,11 +308,10 @@ class NewtonIdleTask(NewtonBaseTask):
             + joint_action_acceleration_reward
         )
 
-        heights = positions[:, 2]
+        gravity_on_z = projected_gravities[:, 2]
         self.rewards_buf = np.where(
-            heights <= self.reset_height, -20.0, self.rewards_buf
+            gravity_on_z >= 0.0, self.rewards_buf - 10.0, self.rewards_buf
         )
-        self.rewards_buf = np.where(heights >= 1.0, -2.0, self.rewards_buf)
 
         # TODO: should this be here?
         self.rewards_buf = np.clip(

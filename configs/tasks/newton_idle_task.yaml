@@ -5,7 +5,7 @@ seed: 14321
 
 n_envs: 96
 timesteps_per_env: 100_000
-base_lr: 3e-5
+base_lr: 6e-7
 episode_length: 500
 
 newton:

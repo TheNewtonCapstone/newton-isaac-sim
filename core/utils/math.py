@@ -69,23 +69,3 @@ def quat_slerp_n(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
     qc[3] = a[3] * ratio_a + b[3] * ratio_b
 
     return qc
-
-
-def difference_length_squared_n(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    diff = a - b
-
-    return np.sum(diff * diff, axis=1)
-
-
-def difference_length_n(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    diff = a - b
-
-    return np.linalg.norm(diff)
-
-
-def magnitude_sqr_n(a: np.ndarray, axis: int = 1) -> np.ndarray:
-    return np.sum(a * a, axis=axis)
-
-
-def length_n(a: np.ndarray) -> np.ndarray:
-    return np.linalg.norm(a)

@@ -3,7 +3,6 @@
   <component name="Black">
     <option name="enabledOnReformat" value="true" />
     <option name="enabledOnSave" value="true" />
-    <option name="executionMode" value="BINARY" />
     <option name="pathToExecutable" value="$USER_HOME$/miniconda3/envs/isaac-sim/bin/black" />
     <option name="sdkName" value="isaac-sim" />
   </component>

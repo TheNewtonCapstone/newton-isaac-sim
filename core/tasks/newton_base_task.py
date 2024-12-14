@@ -76,7 +76,7 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
         )
         self.logger.record(
             "observations/projected_gravities",
-            np.linalg.norm(agent_observations["projected_gravities"], axis=1).mean(),
+            agent_observations["projected_gravities"][:, -1].mean(),
         )
 
         return True
