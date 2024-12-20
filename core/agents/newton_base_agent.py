@@ -4,6 +4,7 @@ import torch
 from core.agents import BaseAgent
 from core.controllers import VecJointsController
 from core.sensors import VecIMU
+from core.sensors.contact import VecContact
 from core.types import Actions, Observations
 from core.universe import Universe
 
@@ -14,6 +15,7 @@ class NewtonBaseAgent(BaseAgent):
         num_agents: int,
         imu: VecIMU,
         joints_controller: VecJointsController,
+        contact_sensor: VecContact,
     ) -> None:
         super().__init__(num_agents)
 
@@ -21,6 +23,7 @@ class NewtonBaseAgent(BaseAgent):
 
         self.imu: VecIMU = imu
         self.joints_controller: VecJointsController = joints_controller
+        self.contact_sensor: VecContact = contact_sensor
 
     @abstractmethod
     def construct(self, universe: Universe) -> None:
@@ -36,9 +39,13 @@ class NewtonBaseAgent(BaseAgent):
     @abstractmethod
     def get_observations(self) -> Observations:
         imu_data_tensor = self.imu.get_data()
-        imu_data_numpy = {}
+        contact_data_tensor = self.contact_sensor.get_data()
+        data_numpy = {}
 
         for key, value in imu_data_tensor.items():
-            imu_data_numpy[key] = value.cpu().numpy()
+            data_numpy[key] = value.cpu().numpy()
 
-        return imu_data_numpy
+        for key, value in contact_data_tensor.items():
+            data_numpy[key] = value.cpu().numpy()
+
+        return data_numpy

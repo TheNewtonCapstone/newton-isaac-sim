@@ -2,7 +2,11 @@ import numpy as np
 
 
 def squared_norm(a: np.ndarray, weight: float = 1.0) -> np.ndarray:
-    return np.sum(a ** 2, axis=-1) * weight
+    return np.sum(a ** 2, axis=1) * weight
+
+
+def squared(a: np.ndarray, weight: float = 1.0) -> np.ndarray:
+    return a ** 2 * weight
 
 
 def fd_first_order_squared_norm(
@@ -23,7 +27,11 @@ def fd_second_order_squared_norm(
 
 
 def exp_squared_norm(a: np.ndarray, mult: float = 1.0, weight: float = 1.0) -> np.ndarray:
-    return np.exp(squared_norm(a), mult) * weight
+    return np.exp(mult * squared_norm(a)) * weight
+
+
+def exp_squared(a: np.ndarray, mult: float = 1.0, weight: float = 1.0) -> np.ndarray:
+    return np.exp(mult * squared(a)) * weight
 
 
 def exp_fd_first_order_squared_norm(

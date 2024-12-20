@@ -229,6 +229,7 @@ def main():
     from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
 
     from core.sensors import VecIMU
+    from core.sensors.contact import VecContact
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -260,10 +261,16 @@ def main():
         noise_function=lambda x: x,
     )
 
+    contact_sensor = VecContact(
+        universe=universe,
+        num_contact_sensors_per_agent=4,
+    )
+
     newton_agent = NewtonVecAgent(
         num_agents=num_envs,
         imu=imu,
         joints_controller=joints_controller,
+        contact_sensor=contact_sensor,
     )
 
     animation_engine = AnimationEngine(

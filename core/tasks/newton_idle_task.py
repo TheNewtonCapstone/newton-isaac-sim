@@ -102,23 +102,11 @@ class NewtonIdleTask(NewtonBaseTask):
         #   the agent for getting closer to the desired positions.
 
         obs_buf = self._get_observations()
-        self._calculate_rewards()
+        self._update_rewards_and_dones()
 
         # only now can we save the actions (after gathering observations & rewards)
         self.last_actions_buf[1, :, :] = self.last_actions_buf[0, :, :]
         self.last_actions_buf[0, :, :] = self.actions_buf.copy()
-
-        gravity_on_z = self.env.get_observations()["projected_gravities"][:, 2]
-        # terminated
-        self.dones_buf = np.where(
-            gravity_on_z >= 0.0, True, False
-        )  # when we're not upright
-
-        self.dones_buf = np.where(
-            self.progress_buf > self.max_episode_length,
-            not self.playing,
-            self.dones_buf,
-        )  # truncated
 
         # creates a new np array with only the indices of the environments that are done
         resets = self.dones_buf.nonzero()[0].flatten()
@@ -178,7 +166,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         return obs_buf
 
-    def _calculate_rewards(self) -> None:
+    def _update_rewards_and_dones(self) -> None:
         # TODO: rework rewards for Newton*Tasks
         #   The current reward function is missing many features, all in comments below
 
@@ -186,8 +174,17 @@ class NewtonIdleTask(NewtonBaseTask):
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]
         projected_gravities = obs["projected_gravities"]
+        in_contact_with_ground = obs["in_contacts"]
 
         joints_order = self.agent.joints_controller.art_view.joint_names
+        has_flipped = projected_gravities[:, 2] > 0.0
+
+        # ensures that the agent has time to stabilize before being terminated
+        terminated_by_no_contact = np.logical_and(
+            # if no paws are in contact with the ground
+            (1 - in_contact_with_ground).all(axis=1),
+            self.progress_buf > 5,
+        )
 
         # base position
         # base orientation
@@ -240,7 +237,25 @@ class NewtonIdleTask(NewtonBaseTask):
             .numpy()
         )  # [-1, 1] unitless
 
+        # DONES
+
+        # terminated agents (i.e. they failed)
+        terminated = np.logical_or(has_flipped, terminated_by_no_contact)
+
+        # truncated agents (i.e. they reached the max episode length)
+        truncated = np.logical_and(
+            self.progress_buf >= self.max_episode_length,
+            not self.playing,
+        )
+
+        # when it's either terminated or truncated, the agent is done
+        self.dones_buf = np.logical_or(terminated, truncated)
+
+        # REWARDS
+
         from core.utils.rl import (
+            squared_norm,
+            exp_squared,
             exp_squared_norm,
             fd_first_order_squared_norm,
             fd_second_order_squared_norm,
@@ -253,8 +268,8 @@ class NewtonIdleTask(NewtonBaseTask):
             mult=-8.0,
             weight=1.0,
         )
-        base_linear_velocity_z_reward = exp_squared_norm(
-            base_angular_velocity_z,
+        base_linear_velocity_z_reward = exp_squared(
+            base_linear_velocity_z,
             mult=-8.0,
             weight=1.0,
         )
@@ -263,7 +278,7 @@ class NewtonIdleTask(NewtonBaseTask):
             mult=-2,
             weight=0.5,
         )
-        base_angular_velocity_z_reward = exp_squared_norm(
+        base_angular_velocity_z_reward = exp_squared(
             base_angular_velocity_z,
             mult=-2,
             weight=0.5,
@@ -278,9 +293,8 @@ class NewtonIdleTask(NewtonBaseTask):
             animation_joint_velocities,
             weight=0.01,
         )
-        joint_efforts_reward = fd_first_order_squared_norm(
+        joint_efforts_reward = squared_norm(
             joint_efforts,
-            np.zeros_like(joint_efforts),
             weight=0.001,
         )
         # joint accelerations reward
@@ -295,6 +309,16 @@ class NewtonIdleTask(NewtonBaseTask):
             self.last_actions_buf[1],
             weight=0.45,
         )
+        in_contacts_reward = np.where(
+            in_contact_with_ground.all(axis=1),
+            1.0,
+            0.0,
+        )
+        survival_reward = np.where(
+            terminated,
+            0.0,
+            20.0,
+        )
 
         self.rewards_buf = (
             base_linear_velocity_xy_reward
@@ -306,14 +330,10 @@ class NewtonIdleTask(NewtonBaseTask):
             + joint_efforts_reward
             + joint_action_rate_reward
             + joint_action_acceleration_reward
+            + in_contacts_reward
+            + survival_reward
         )
 
-        gravity_on_z = projected_gravities[:, 2]
-        self.rewards_buf = np.where(
-            gravity_on_z >= 0.0, self.rewards_buf - 10.0, self.rewards_buf
-        )
-
-        # TODO: should this be here?
         self.rewards_buf = np.clip(
             self.rewards_buf,
             self.reward_space.low,

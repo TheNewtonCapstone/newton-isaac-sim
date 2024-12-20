@@ -18,7 +18,7 @@ sim_params:
   enable_scene_query_support: False # true to interact with the scene with the mouse (doesn't work with GPU dynamics)
   enable_enhanced_determinism: False # true for deterministic simulation, more computationally expensive
 
-  use_fabric: True # true for fabric, NVIDIA's interop layer between Hydra & PhysX
+  use_fabric: True # true for fabric, NVIDIA's interop layer between Hydra & PhysX; false for USD only
   enable_ccd: False # true for continuous collision detection, needs to be enabled on each rigid body & pair filter
 
   # Solver parameters

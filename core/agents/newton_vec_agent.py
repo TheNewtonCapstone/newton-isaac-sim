@@ -8,7 +8,8 @@ class NewtonVecAgent(NewtonBaseAgent):
     def construct(self, universe: Universe) -> None:
         super().construct(universe)
 
-        self.base_path_expr = self.path + "/Newton_*/base"
+        self.base_path_expr = self.path + "/Newton_.*/base"
+        root_path_expr = self.path + "/Newton_.*"
         self.path = self.path + "/Newton_0"
 
         import omni.isaac.core.utils.stage as stage_utils
@@ -40,6 +41,11 @@ class NewtonVecAgent(NewtonBaseAgent):
 
         self.imu.construct(self.base_path_expr)
         self.joints_controller.construct(self.base_path_expr)
+        self.contact_sensor.construct(
+            "contact_sensor",
+            root_path_expr,
+            "/.*_LOWER_LEG/collisions/contact_sensor_transform",
+        )
 
         self._universe.reset()
 
