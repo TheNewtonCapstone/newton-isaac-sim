@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import torch
 from core.agents import NewtonBaseAgent
@@ -98,7 +98,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
 
         return self.get_observations()
 
-    def reset(self, indices: Indices = None) -> Observations:
+    def reset(self, indices: Optional[Indices] = None) -> Observations:
         super().reset(indices)
 
         return self.get_observations()

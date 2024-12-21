@@ -107,23 +107,6 @@ def find_matching_prims(prim_path_regex: str) -> list[Usd.Prim]:
     return output_prims
 
 
-def find_matching_prim_paths(prim_path_regex: str) -> list[str]:
-    """Find all the matching prim paths in the stage based on input regex expression.
-
-    Args:
-        prim_path_regex: The regex expression for prim path.
-        stage: The stage where the prim exists. Defaults to None, in which case the current stage is used.
-
-    Returns:
-        A list of prim paths that match input expression.
-
-    Raises:
-        ValueError: If the prim path is not global (i.e: does not start with '/').
-    """
-
-    return [prim.GetPath().pathString for prim in find_matching_prims(prim_path_regex)]
-
-
 def find_matching_prims_count(prim_path_regex: str) -> int:
     """Find the number of matching prims in the stage based on input regex expression.
 

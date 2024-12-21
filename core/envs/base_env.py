@@ -50,13 +50,14 @@ class BaseEnv(ABC):
         return self.get_observations()
 
     @abstractmethod
-    def reset(self, indices: Indices = None) -> Observations:
+    def reset(self, indices: Optional[Indices] = None) -> Observations:
         assert (
             self._is_constructed
         ), f"{self.__class__.__name__} not constructed: tried to reset!"
 
         if indices is None:
             self._universe.reset()
+            self._universe.step()
 
         return self.get_observations()
 

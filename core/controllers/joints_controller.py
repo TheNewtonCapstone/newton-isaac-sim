@@ -95,8 +95,9 @@ class VecJointsController:
         self._articulation_view = ArticulationView(
             self.path_expr,
             name="joints_controller_art_view",
+            reset_xform_properties=False,
         )
-        self.universe.add(self._articulation_view)
+        self.universe.add_prim(self._articulation_view)
 
         self.universe.reset()
 
@@ -117,10 +118,15 @@ class VecJointsController:
             self._noise_function,
         )
 
-        # TODO
         self._articulation_view.set_joint_position_targets(self._target_joint_positions)
 
-    def reset(self, joint_positions: Tensor, indices: Indices = None) -> None:
+    def reset(
+        self,
+        joint_positions: Tensor,
+        joint_velocities: Tensor,
+        joint_efforts: Tensor,
+        indices: Optional[Indices] = None,
+    ) -> None:
         assert (
             self._is_constructed
         ), "Joints controller not constructed: tried to reset!"
@@ -131,7 +137,7 @@ class VecJointsController:
                 device=self.universe.device,
             )
         else:
-            indices = torch.from_numpy(indices).to(device=self.universe.device)
+            indices = indices.to(device=self.universe.device)
 
         joint_positions = joint_positions.to(device=self.universe.device)
 
@@ -140,9 +146,19 @@ class VecJointsController:
             self.box_joint_constraints,
         )
 
-        self._articulation_view.set_joint_positions(
-            positions=self._target_joint_positions,
-            indices=indices,
+        self._articulation_view.set_joint_position_targets(
+            self._target_joint_positions,
+            indices,
+        )
+
+        self._articulation_view.set_joint_velocities(
+            joint_velocities,
+            indices,
+        )
+
+        self._articulation_view.set_joint_efforts(
+            joint_efforts,
+            indices,
         )
 
     def normalize_joint_positions(self, joint_positions: Tensor) -> Tensor:

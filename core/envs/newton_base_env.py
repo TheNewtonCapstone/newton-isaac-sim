@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import List
+from typing import List, Optional
 
 import torch
 from core.agents import NewtonBaseAgent
@@ -52,7 +52,7 @@ class NewtonBaseEnv(BaseEnv):
         return self.get_observations()
 
     @abstractmethod
-    def reset(self, indices: Indices = None) -> Observations:
+    def reset(self, indices: Optional[Indices] = None) -> Observations:
         self.domain_randomizer.on_reset(
             indices
         )  # DR should always happen before any physics reset

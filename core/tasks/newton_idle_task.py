@@ -109,9 +109,9 @@ class NewtonIdleTask(NewtonBaseTask):
         self.last_actions_buf[0, :, :] = self.actions_buf.copy()
 
         # creates a new np array with only the indices of the environments that are done
-        resets = self.dones_buf.nonzero()[0].flatten()
+        resets: np.ndarray = self.dones_buf.nonzero()[0].flatten()
         if len(resets) > 0:
-            self.env.reset(resets)
+            self.env.reset(torch.from_numpy(resets))
 
         # clears the last 2 observations & the progress if any Newton is reset
         obs_buf[resets, :] = 0.0
@@ -163,6 +163,11 @@ class NewtonIdleTask(NewtonBaseTask):
         # of each gait.
         obs_buf[:, 57] = np.cos(2 * np.pi * phase_signal)
         obs_buf[:, 58] = np.sin(2 * np.pi * phase_signal)
+
+        obs_buf = np.nan_to_num(
+            obs_buf,
+            nan=0.0,
+        )
 
         return obs_buf
 
@@ -338,4 +343,9 @@ class NewtonIdleTask(NewtonBaseTask):
             self.rewards_buf,
             self.reward_space.low,
             self.reward_space.high,
+        )
+
+        self.rewards_buf = np.nan_to_num(
+            self.rewards_buf,
+            nan=0.0,
         )

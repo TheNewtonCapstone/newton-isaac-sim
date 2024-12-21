@@ -31,5 +31,6 @@ def big_bang(
     from core.universe import Universe
 
     _universe = Universe(app_settings["headless"], sim_app, world_settings)
+    _universe.reset(soft=False)
 
     return _universe

@@ -1,8 +1,9 @@
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import torch
 from core.types import ContactData
 from core.universe import Universe
+from omni.isaac.core.prims import RigidPrimView
 from torch import Tensor
 
 
@@ -12,14 +13,10 @@ class VecContact:
         universe: Universe,
         num_contact_sensors_per_agent: int = 1,
     ):
-        from omni.isaac.sensor import ContactSensor
-
-        self.universe: Universe = universe
+        self._universe: Universe = universe
         self.path_expr: str = ""
-        self.transform_path_expr: str = ""
         self.paths: List[List[str]] = []
-        self.transform_paths: List[List[str]] = []
-        self.sensors: List[ContactSensor] = []
+        self._rigid_prim_view: Optional[RigidPrimView] = None
 
         self.num_contact_sensors_per_agent: int = num_contact_sensors_per_agent
         self.num_contact_sensors: int = 0
@@ -31,89 +28,65 @@ class VecContact:
 
         self._contacts: Tensor = torch.zeros(
             (self.num_contact_sensors, self.num_contact_sensors_per_agent),
-            device=self.universe.device,
+            device=self._universe.device,
             dtype=torch.bool,
         )
         self._forces: Tensor = torch.zeros_like(self._contacts, dtype=torch.float)
 
     def construct(
         self,
-        sensor_name: str,
-        body_path_expr: str,
-        relative_transform_path_expr: str,
+        path_expr: str,
     ) -> None:
         assert (
             not self._is_constructed
         ), "Contact sensor already constructed: tried to construct!"
 
-        from core.utils.usd import (
-            path_expr_to_paths,
-            get_parent_expr_path_from_expr_path,
-            get_parent_path_from_path,
+        self.path_expr = path_expr
+
+        from core.utils.usd import find_matching_prims_count
+
+        num_agents = (
+            find_matching_prims_count(self.path_expr)
+            // self.num_contact_sensors_per_agent
         )
 
-        self.transform_path_expr = body_path_expr + relative_transform_path_expr
-        self.path_expr = (
-            get_parent_expr_path_from_expr_path(self.transform_path_expr)
-            + f"/{sensor_name}"
+        self._rigid_prim_view = RigidPrimView(
+            prim_paths_expr=self.path_expr,
+            name="contact_sensor_view",
+            track_contact_forces=True,
+            disable_stablization=False,
+            reset_xform_properties=False,
         )
-
-        self.transform_paths = path_expr_to_paths(
-            body_path_expr,
-            relative_transform_path_expr,
-        )
-
-        from omni.isaac.sensor import ContactSensor
-        from omni.isaac.core.utils.prims import get_prim_attribute_value
-
-        for i, children_transform_paths in enumerate(self.transform_paths):
-            self.paths.append([""] * len(children_transform_paths))
-
-            for j, transform_path in enumerate(children_transform_paths):
-                sensor_path = (
-                    get_parent_path_from_path(transform_path) + f"/{sensor_name}"
-                )
-
-                sensor_translation = get_prim_attribute_value(
-                    prim_path=transform_path,
-                    attribute_name="xformOp:translate",
-                )
-
-                sensor = ContactSensor(
-                    prim_path=sensor_path,
-                    name=f"{sensor_name}_{i}_{j}",
-                    translation=sensor_translation,
-                    radius=0.03,
-                )
-                self.universe.add(sensor)
-
-                self.sensors.append(sensor)
-                self.paths[i][j] = sensor_path
-
-        assert (
-            len(self.paths[0]) == self.num_contact_sensors_per_agent
-        ), "Given number of contact sensors per agent does not match the number found!"
+        self._universe.add_prim(self._rigid_prim_view)
 
         # propagate physics changes
-        self.universe.reset()
+        self._universe.reset()
 
-        self.num_contact_sensors = len(self.paths)
+        assert (
+            self._rigid_prim_view.count
+            == num_agents * self.num_contact_sensors_per_agent
+        ), (
+            f"Number of contact sensors ({self._rigid_prim_view.count}) does not match the number of agents "
+            f"({num_agents}) * number of contact sensors per agent ({self.num_contact_sensors_per_agent})"
+        )
+
+        self.num_contact_sensors = (
+            self._rigid_prim_view.count // self.num_contact_sensors_per_agent
+        )
 
         self._is_constructed = True
 
-        # required to fill the tensors with the correct number of IMUs
+        # required to fill the tensors with the correct number of sensors
         self.reset()
 
-    def reset(self) -> ContactData:
+    def reset(self) -> None:
         self._contacts: Tensor = torch.zeros(
             (self.num_contact_sensors, self.num_contact_sensors_per_agent),
-            device=self.universe.device,
+            device=self._universe.device,
             dtype=torch.bool,
         )
 
         self._forces: Tensor = torch.zeros_like(self._contacts, dtype=torch.float)
-
-        return self.get_data()
 
     def get_data(self) -> ContactData:
         raw_data = self.get_raw_data()
@@ -133,11 +106,14 @@ class VecContact:
             self._is_constructed
         ), "Contact sensor not constructed: tried to update data!"
 
-        for i, sensor in enumerate(self.sensors):
-            reading: Dict = sensor.get_current_frame()
+        physics_dt = self._universe.current_time - self._last_update_time
+        self._last_update_time = self._universe.current_time
 
-            x = i // self.num_contact_sensors_per_agent
-            y = i % self.num_contact_sensors_per_agent
+        if physics_dt == 0.0:
+            return
 
-            self._contacts[x, y] = reading["in_contact"]
-            self._forces[x, y] = reading["force"]
+        net_forces = self._rigid_prim_view.get_net_contact_forces(dt=physics_dt)
+        net_forces = net_forces.view(-1, self.num_contact_sensors_per_agent, 3)
+
+        self._contacts = torch.linalg.norm(net_forces, dim=-1) > 0.0
+        self._forces = torch.linalg.norm(net_forces, dim=-1)

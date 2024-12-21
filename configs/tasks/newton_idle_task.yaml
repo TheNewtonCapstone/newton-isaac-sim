@@ -40,4 +40,4 @@ ppo:
   use_sde: False
   sde_sample_freq: -1
 
-  target_kl: 0.01
+  target_kl: None

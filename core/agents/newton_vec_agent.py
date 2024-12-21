@@ -41,11 +41,7 @@ class NewtonVecAgent(NewtonBaseAgent):
 
         self.imu.construct(self.base_path_expr)
         self.joints_controller.construct(self.base_path_expr)
-        self.contact_sensor.construct(
-            "contact_sensor",
-            root_path_expr,
-            "/.*_LOWER_LEG/collisions/contact_sensor_transform",
-        )
+        self.contact_sensor.construct(root_path_expr + "/.*_LOWER_LEG")
 
         self._universe.reset()
 

@@ -49,6 +49,14 @@ class Universe(SimulationContext):
     def has_gui(self) -> bool:
         return not self.headless
 
+    @property
+    def use_fabric_physics(self) -> bool:
+        return self._world_settings["sim_params"]["use_fabric"]
+
+    @property
+    def use_usd_physics(self) -> bool:
+        return not self.use_fabric_physics
+
     def step(self, render: bool = False) -> None:
         """Steps the simulation. This behaves exactly like IsaacLab SimulationContext's step function.
 
@@ -93,20 +101,23 @@ class Universe(SimulationContext):
         #  e.g. rl, physics, etc.)
         omni.log.info("Universe reset", "newton.core.universe")
 
-        super().reset(soft=soft)
-
         # From Isaac Lab (SimulationContext): https://github.com/isaac-sim/IsaacLab/blob/main/source/extensions/omni.isaac.lab/omni/isaac/lab/sim/simulation_context.py#L423
         # perform additional rendering steps to warm up replicator buffers
         # this is only needed for the first time we set the simulation
         if not soft:
-            # ensures all the "scene.add" calls are processed
+            if not self.is_stopped():
+                self.stop()
+
+            self.initialize_physics()
+
+            # ensures all the "_scene.add" calls are processed
             self._scene._finalize(self.physics_sim_view)
             self._scene.post_reset()
 
             for _ in range(2):
                 self.render()
 
-    def add(self, prim: XFormPrim | XFormPrimView):
+    def add_prim(self, prim: XFormPrim | XFormPrimView):
         self._scene.add(prim)
 
     def update_app_no_sim(self) -> None:
@@ -176,6 +187,7 @@ class Universe(SimulationContext):
         return self.stage
 
     async def _initialize_stage_async(self, *args, **kwargs) -> Usd.Stage:
+        # avoids usage within the Omniverse Extensions workflow
         assert (
             False
         ), "Async initialization is not supported: please run this in Standalone mode!"
@@ -195,8 +207,14 @@ class Universe(SimulationContext):
         # set parameters not directly supported by the SimulationContext constructor
         # -- Continuous Collision Detection (CCD)
         # ref: https://nvidia-omniverse.github.io/PhysX/physx/5.4.1/docs/AdvancedCollisionDetection.html?highlight=ccd#continuous-collision-detection
-        self._physics_context.enable_ccd(
+        self.get_physics_context().enable_ccd(
             self._world_settings["sim_params"]["enable_ccd"]
+        )
+
+        # -- Global Contact Processing
+        self.set_carb_setting(
+            "/physics/disableContactProcessing",
+            self._world_settings["sim_params"]["disable_contact_processing"],
         )
 
         # -- Improved determinism by PhysX
