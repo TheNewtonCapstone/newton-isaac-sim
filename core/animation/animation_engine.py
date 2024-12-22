@@ -1,52 +1,23 @@
 from typing import Dict, Optional, List
 
-from attr import dataclass
-
 import torch
 from core.types import (
     Settings,
     Progress,
 )
-
-
-@dataclass
-class BoneData:
-    name: str
-    position: torch.Tensor
-    orientation: torch.Tensor
-    relative_angle: float
-
-
-ArmatureData = Dict[str, BoneData]
-
-
-@dataclass
-class Keyframe:
-    frame: float
-    data: ArmatureData
-
-
-@dataclass
-class AnimationClip:
-    name: str
-    framerate: int
-    duration: int
-    duration_in_seconds: float
-    keyframes: List[Keyframe]
+from .types import AnimationClip, Keyframe, BoneData, ArmatureData
 
 
 class AnimationEngine:
     def __init__(
         self,
         clips: Dict[str, Settings],
-        step_dt: float,
     ):
         self.current_clip_name: Optional[str] = None
 
         self.clip_configs: Dict[str, Settings] = clips
         self.clips: Dict[str, AnimationClip] = {}
 
-        self._step_dt: float = step_dt
         self._is_constructed: bool = False
 
     @property
@@ -65,24 +36,33 @@ class AnimationEngine:
 
         self.current_clip_name = current_clip
 
+        frame_dt = 1 / self.clip_configs[current_clip]["framerate"]
+
         for clip_name, clip_settings in self.clip_configs.items():
+            saved_keyframes: List[Settings] = clip_settings["keyframes"]
             keyframes: List[Keyframe] = []
 
-            for keyframe_settings in clip_settings["keyframes"]:
+            for keyframe_settings in saved_keyframes:
                 frame: int = keyframe_settings["frame"]
+                saved_data: List[Settings] = keyframe_settings["data"]
+
                 data: Dict[str, BoneData] = {}
 
-                for bone_data in keyframe_settings["data"]:
+                for i, bone_data in enumerate(saved_data):
                     bone_name: str = bone_data["bone"]
                     position: torch.Tensor = torch.tensor(bone_data["position"])
                     orientation: torch.Tensor = torch.tensor(bone_data["orientation"])
+
                     relative_angle: float = bone_data["relative_angle"]
+                    previous_relative_angle: float = saved_keyframes[frame - 1]["data"][i]["relative_angle"]
+                    relative_angle_velocity: float = (relative_angle - previous_relative_angle) / frame_dt
 
                     data[bone_name] = BoneData(
                         name=bone_name,
                         position=position,
                         orientation=orientation,
                         relative_angle=relative_angle,
+                        relative_angle_velocity=relative_angle_velocity,
                     )
 
                 keyframe = Keyframe(
@@ -92,7 +72,7 @@ class AnimationEngine:
 
                 keyframes.append(keyframe)
 
-            duration_in_seconds = clip_settings["duration"] / clip_settings["framerate"]
+            duration_in_seconds = clip_settings["duration"] * frame_dt
 
             self.clips[clip_name] = AnimationClip(
                 name=clip_name,
@@ -111,64 +91,30 @@ class AnimationEngine:
     #   This will be useful for calculating the relative angle velocity and move current newton_idle_task logic
     #   to AnimationEngine, where it should be!
 
-    def get_current_clip_data_ordered(
+    def get_multiple_clip_data_at_seconds(
         self,
-        progress: float,
+        seconds: Progress,
         joints_order: List[str],
         interpolate: bool = True,
     ) -> torch.Tensor:
         """
         Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
         Args:
-            progress: The progress of the current episode, in the range [0, max_episode_length] for an agent.
+            seconds: The progress of the current episode, in seconds, for every vectorized agent.
             joints_order: List of joint names in the order they should be returned.
             interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
 
         Returns:
-            A tensor with shape (num_bones, 8) containing the joint positions, orientations and relative angles for the agent.
+            A tensor with shape (num_agents, num_bones, 9) containing the joint positions, orientations, relative angles and relative angle velocities for each agent.
         """
-        clip_data = self.get_current_clip_data(progress, interpolate)
-
-        num_bones = len(clip_data)
-        result = torch.zeros((num_bones, 8))
-
-        for j, bone_name in enumerate(joints_order):
-            if bone_name not in clip_data:
-                continue
-
-            bone_data = clip_data[bone_name]
-            result[j, :] = torch.cat(
-                [
-                    bone_data.position,
-                    bone_data.orientation,
-                    torch.tensor([bone_data.relative_angle]),
-                ]
-            )
-
-        return result
-
-    def get_current_clip_datas_ordered(
-        self,
-        progress: Progress,
-        joints_order: List[str],
-        interpolate: bool = True,
-    ) -> torch.Tensor:
-        """
-        Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
-        Args:
-            progress: The progress of the current episode, in the range [0, max_episode_length] for every vectorized agent.
-            joints_order: List of joint names in the order they should be returned.
-            interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
-
-        Returns:
-            A tensor with shape (num_agents, num_bones, 8) containing the joint positions, orientations and relative angles for each agent.
-        """
-        clip_datas = self.get_current_clip_datas(progress, interpolate)
+        clip_datas = self.get_clip_data_at_seconds(
+            self.current_clip_name, seconds, interpolate,
+        )
 
         num_agents = len(clip_datas)
         num_bones = len(clip_datas[0])
 
-        result = torch.zeros((num_agents, num_bones, 8))
+        result = torch.zeros((num_agents, num_bones, 9))
 
         for i, clip_data in enumerate(clip_datas):
             for j, bone_name in enumerate(joints_order):
@@ -181,71 +127,39 @@ class AnimationEngine:
                         bone_data.position,
                         bone_data.orientation,
                         torch.tensor([bone_data.relative_angle]),
+                        torch.tensor([bone_data.relative_angle_velocity]),
                     ],
                 )
 
         return result
 
-    def get_current_clip_datas(
-        self,
-        progress: Progress,
-        interpolate: bool = True,
-    ) -> List[ArmatureData]:
-        """
-        Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
-        Args:
-            progress: The progress of the current episode, in number of steps done, for every vectorized agent.
-            interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
-
-        Returns:
-            A list of armature data for each agent.
-        """
-        return self.get_clip_datas(self.current_clip_name, progress, interpolate)
-
-    def get_clip_datas(
+    def get_clip_data_at_seconds(
         self,
         clip_name: str,
-        progress: Progress,
+        second: Progress,
         interpolate: bool = True,
     ) -> List[ArmatureData]:
         """
         Get the armature data for the given clip at the given progress. Optionally interpolates between keyframes.
         Args:
             clip_name: The name of the clip to get data from.
-            progress: The progress of the current episode, in number of steps done, for every vectorized agent.
+            second: The progress of the current episode, in seconds, for every vectorized agent.
             interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
 
         Returns:
             A list of armature data for each agent.
         """
         clip: AnimationClip = self.clips[clip_name]
-        progress_in_seconds = progress.cpu() * self._step_dt
-        frames = progress_in_seconds * clip.framerate
+        frames = second.cpu() * clip.framerate
 
         data = []
 
         for frame in frames:
-            data.append(self.get_clip_data(clip_name, frame, interpolate))
+            data.append(self.get_clip_data_at_frame(clip_name, frame, interpolate))
 
         return data
 
-    def get_current_clip_data(
-        self,
-        frame: float,
-        interpolate: bool = True,
-    ) -> ArmatureData:
-        """
-        Get the armature data for the current clip at the given frame. Optionally interpolates between keyframes.
-        Args:
-            frame: The frame to get data from (doesn't have to be within clip bounds). If it's not within bounds, this function will assume it's looping.
-            interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
-
-        Returns:
-            Armature data for the current clip.
-        """
-        return self.get_clip_data(self.current_clip_name, frame, interpolate)
-
-    def get_clip_data(
+    def get_clip_data_at_frame(
         self,
         clip_name: str,
         frame: float,
@@ -291,12 +205,18 @@ class AnimationEngine:
                 next_bone_data.relative_angle,
                 frame % 1,
             )
+            relative_angle_velocity = lerp(
+                bone_data.relative_angle_velocity,
+                next_bone_data.relative_angle_velocity,
+                frame % 1,
+            )
 
             interpolated_data[bone_name] = BoneData(
                 name=bone_name,
                 position=position,
                 orientation=orientation,
                 relative_angle=relative_angle,
+                relative_angle_velocity=relative_angle_velocity,
             )
 
         return interpolated_data

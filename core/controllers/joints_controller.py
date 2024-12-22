@@ -2,40 +2,45 @@ from typing import Optional, List
 
 import numpy as np
 import torch
-from core.types import NoiseFunction, Indices, JointsConstraints
+from core.types import (
+    NoiseFunction,
+    Indices,
+    JointsPositionLimits,
+    JointsVelocityLimits,
+)
 from core.universe import Universe
 from gymnasium.spaces import Box
 from omni.isaac.core.articulations import ArticulationView
 from torch import Tensor
 
 
-def dict_to_box_constraints(joint_constraints: JointsConstraints) -> Box:
-    joint_names = list(joint_constraints.keys())
+def dict_to_box_limits(
+    joint_limits: JointsPositionLimits | JointsVelocityLimits,
+) -> Box:
+    joint_names = list(joint_limits.keys())
 
-    low_joint_constraints = np.zeros(
-        (len(joint_names)),
-        dtype=np.float32,
-    )
-    high_joint_constraints = np.zeros_like(low_joint_constraints)
+    low_joint_limits = np.zeros((len(joint_names)))
+    high_joint_limits = np.zeros_like(low_joint_limits)
 
     # Ensures that the joint constraints are in the correct order
     for i, joint_name in enumerate(joint_names):
-        constraint = joint_constraints[joint_name]
+        limits = joint_limits[joint_name]
+        is_limits_list = isinstance(limits, list)
 
-        low_joint_constraints[i] = constraint[0]
-        high_joint_constraints[i] = constraint[1]
+        low_joint_limits[i] = limits[0] if is_limits_list else -limits
+        high_joint_limits[i] = limits[1] if is_limits_list else limits
 
     box_joint_constraints = Box(
-        low=low_joint_constraints,
-        high=high_joint_constraints,
+        low=low_joint_limits,
+        high=high_joint_limits,
         dtype=np.float32,
     )
 
     return box_joint_constraints
 
 
-def apply_joint_constraints(
-    box_joint_constraints: Box,
+def apply_joint_position_limits(
+    box_joint_position_limits: Box,
     prim_paths: List[str],
     joint_names: List[str],
 ) -> None:
@@ -53,8 +58,10 @@ def apply_joint_constraints(
             if not rev_joint:
                 continue  # Skip if joint is not a RevoluteJoint
 
-            rev_joint.CreateLowerLimitAttr().Set(box_joint_constraints.low[j].item())
-            rev_joint.GetUpperLimitAttr().Set(box_joint_constraints.high[j].item())
+            rev_joint.CreateLowerLimitAttr().Set(
+                box_joint_position_limits.low[j].item()
+            )
+            rev_joint.GetUpperLimitAttr().Set(box_joint_position_limits.high[j].item())
 
 
 class VecJointsController:
@@ -62,7 +69,8 @@ class VecJointsController:
         self,
         universe: Universe,
         noise_function: NoiseFunction,
-        joint_constraints: JointsConstraints,
+        joint_position_limits: JointsPositionLimits,
+        joint_velocity_limits: JointsPositionLimits,
     ):
         self.path_expr: str = ""
 
@@ -71,8 +79,11 @@ class VecJointsController:
 
         self._noise_function: NoiseFunction = noise_function
         self._target_joint_positions: Tensor = torch.zeros(0)
-        self.joint_constraints: JointsConstraints = joint_constraints
-        self.box_joint_constraints: Box = dict_to_box_constraints(joint_constraints)
+
+        self._joint_position_limits: JointsPositionLimits = joint_position_limits
+        self._box_joint_position_limits: Box = dict_to_box_limits(joint_position_limits)
+        self._joint_velocity_limits: JointsPositionLimits = joint_velocity_limits
+        self._box_joint_velocity_limits: Box = dict_to_box_limits(joint_velocity_limits)
 
         self._is_constructed: bool = False
 
@@ -105,10 +116,16 @@ class VecJointsController:
 
         self._universe.reset()
 
-        apply_joint_constraints(
-            self.box_joint_constraints,
+        apply_joint_position_limits(
+            self._box_joint_position_limits,
             self._articulation_view.prim_paths,
             self._articulation_view.joint_names,
+        )
+
+        self._articulation_view.set_max_joint_velocities(
+            torch.from_numpy(self._box_joint_velocity_limits.high).to(
+                device=self._universe.device,
+            )
         )
 
         self._is_constructed = True
@@ -118,7 +135,7 @@ class VecJointsController:
 
         self._target_joint_positions = self._process_joint_actions(
             joint_actions,
-            self.box_joint_constraints,
+            self._box_joint_position_limits,
             self._noise_function,
         )
 
@@ -147,7 +164,7 @@ class VecJointsController:
 
         self._target_joint_positions = self._process_joint_actions(
             joint_positions,
-            self.box_joint_constraints,
+            self._box_joint_position_limits,
         )
 
         self._articulation_view.set_joint_positions(
@@ -177,10 +194,10 @@ class VecJointsController:
 
         joint_positions_normalized = map_range(
             joint_positions,
-            torch.from_numpy(self.box_joint_constraints.low).to(
+            torch.from_numpy(self._box_joint_position_limits.low).to(
                 joint_positions.device,
             ),
-            torch.from_numpy(self.box_joint_constraints.high).to(
+            torch.from_numpy(self._box_joint_position_limits.high).to(
                 joint_positions.device,
             ),
             -1.0,
@@ -188,6 +205,30 @@ class VecJointsController:
         )
 
         return joint_positions_normalized
+
+    def normalize_joint_velocities(self, joint_velocities: Tensor) -> Tensor:
+        """
+        Args:
+            joint_velocities: The joint velocities to be normalized (in degrees).
+
+        Returns:
+            The normalized joint velocities.
+        """
+        from core.utils.math import map_range
+
+        joint_velocities_normalized = map_range(
+            joint_velocities,
+            torch.from_numpy(self._box_joint_velocity_limits.low).to(
+                joint_velocities.device,
+            ),
+            torch.from_numpy(self._box_joint_velocity_limits.high).to(
+                joint_velocities.device,
+            ),
+            -1.0,
+            1.0,
+        )
+
+        return joint_velocities_normalized
 
     def get_normalized_joint_positions(self) -> Tensor:
         """
@@ -205,7 +246,7 @@ class VecJointsController:
         # TODO: Normalize joint velocities according to their actual limits
         #   As opposed to using the joints' constraints
 
-        return self.normalize_joint_positions(self.get_joint_velocities_deg())
+        return self.normalize_joint_velocities(self.get_joint_velocities_deg())
 
     def get_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_positions())

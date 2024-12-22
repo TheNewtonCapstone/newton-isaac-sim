@@ -202,11 +202,11 @@ class NewtonIdleTask(NewtonBaseTask):
         )
 
         # base position
-        # base orientation
         base_linear_velocity_xy = linear_velocities[:, :2]
         base_linear_velocity_z = linear_velocities[:, 2]
         base_angular_velocity_xy = angular_velocities[:, :2]
         base_angular_velocity_z = angular_velocities[:, 2]
+
         joint_positions = (
             self.agent.joints_controller.get_normalized_joint_positions()
         )  # [-1, 1] unitless
@@ -217,18 +217,9 @@ class NewtonIdleTask(NewtonBaseTask):
         joint_efforts = (
             self.agent.joints_controller.art_view.get_measured_joint_efforts()
         )  # in Nm
-        last_animation_joint_data = (
-            self.animation_engine.get_current_clip_datas_ordered(
-                torch.where(
-                    self.progress_buf == 0,
-                    self.max_episode_length - 1,
-                    self.progress_buf - 1,
-                ),
-                dof_ordered_names,
-            )
-        )
-        animation_joint_data = self.animation_engine.get_current_clip_datas_ordered(
-            self.progress_buf,
+
+        animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
+            self.progress_buf * self.rl_step_dt,
             dof_ordered_names,
         )
         # we use the joint controller here, because it contains all the required information
@@ -238,9 +229,8 @@ class NewtonIdleTask(NewtonBaseTask):
             ).to(device=self.device)
         )  # [-1, 1] unitless
         animation_joint_velocities = (
-            self.agent.joints_controller.normalize_joint_positions(
-                (animation_joint_data[:, :, 7] - last_animation_joint_data[:, :, 7])
-                / self.rl_step_dt
+            self.agent.joints_controller.normalize_joint_velocities(
+                animation_joint_data[:, :, 8]
             ).to(device=self.device)
         )  # [-1, 1] unitless
 

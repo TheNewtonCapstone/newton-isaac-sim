@@ -246,7 +246,8 @@ def main():
 
     joints_controller = VecJointsController(
         universe=universe,
-        joint_constraints=robot_config["joints"]["constraints"],
+        joint_position_limits=robot_config["joints"]["limits"]["positions"],
+        joint_velocity_limits=robot_config["joints"]["limits"]["velocities"],
         noise_function=lambda x: x,
     )
 
@@ -264,7 +265,6 @@ def main():
 
     animation_engine = AnimationEngine(
         clips=animation_clips_config,
-        step_dt=control_step_dt,
     )
 
     domain_randomizer = NewtonBaseDomainRandomizer(
@@ -301,13 +301,13 @@ def main():
         # this is very specific to Newton, because we know that it takes joint positions and the animation engine
         # provides that exactly; a different robot or different control mode would probably require a different approach
         while universe.is_playing:
-            joint_data = animation_engine.get_current_clip_data_ordered(
-                universe.current_time_step_index // control_step_dt,
+            joint_data = animation_engine.get_multiple_clip_data_at_seconds(
+                torch.tensor([universe.current_time]),
                 joints_names,
             )
 
             # index 7 is the joint position (angle in degrees)
-            joint_positions = joint_data[:, 7]
+            joint_positions = joint_data[0, :, 7]
 
             # TODO: Investigate if there's a way to simplify joint_normalization
             #   since the system expects a [-1, 1] range, we normalize the joint positions to their limits; it is

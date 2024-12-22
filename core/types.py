@@ -15,7 +15,8 @@ class ContactData(TypedDict):
 
 # Motors
 JointsPositions = torch.Tensor
-JointsConstraints = Dict[str, Tuple[float, float]]
+JointsPositionLimits = Dict[str, List[float]]
+JointsVelocityLimits = Dict[str, float]
 
 # RL
 Actions = torch.Tensor
