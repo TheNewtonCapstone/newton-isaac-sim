@@ -91,8 +91,6 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         self._universe.reset()
 
     def step(self, actions: Actions) -> None:
-        self.agent.step(actions)  # has to be before the simulation advances
-
         super().step(actions)  # advances the simulation by one step
 
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:

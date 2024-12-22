@@ -296,14 +296,14 @@ def main():
 
         animation_engine.construct(current_animation)
 
-        joints_names = joints_controller.art_view.joint_names
+        ordered_dof_names = joints_controller.art_view.dof_names
 
         # this is very specific to Newton, because we know that it takes joint positions and the animation engine
         # provides that exactly; a different robot or different control mode would probably require a different approach
         while universe.is_playing:
             joint_data = animation_engine.get_multiple_clip_data_at_seconds(
                 torch.tensor([universe.current_time]),
-                joints_names,
+                ordered_dof_names,
             )
 
             # index 7 is the joint position (angle in degrees)
@@ -415,6 +415,11 @@ def main():
         inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
     )
 
+    # TODO: Improve the way we save runs
+    #   Maybe have a database? Or a file that keeps track of all runs with some metadata, like the date, the agent used,
+    #   the task, the environment, etc. We would also have a way to easily load the last run, or a specific run.
+    #   labels: enhancement
+
     from core.utils.path import build_child_path_with_prefix
 
     task_runs_directory = "runs"
@@ -502,6 +507,11 @@ def main():
         model.save(f"{task_runs_directory}/{task_name}_1/model.zip")
 
         exit(1)
+
+    # TODO: Add mechanism to easily select a checkpoint to play
+    #   We can do an interactive CLI, autocomplete for options or an easier way to select the last checkpoint to play
+    #   in the CLI from the runs directory.
+    #   labels: enhancement, qol
 
     if playing:
         from core.utils.path import get_folder_from_path

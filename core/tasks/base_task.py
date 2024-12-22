@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from typing import Any, List, Optional, Sequence, Type
 
+import numpy as np
 import torch
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecEnv
@@ -100,20 +101,28 @@ class BaseTask(VecEnv):
     def __str__(self):
         return f"BaseTask: {self.num_envs} environments, {self.num_observations} observations, {self.num_actions} actions"
 
-    # TODO: assert that the task is (and is not, depending) constructed
     @abstractmethod
     def construct(self, universe: Universe) -> None:
-        pass
+        assert not self._is_constructed, "Task already constructed: tried to construct!"
 
     # Gymnasium methods (required from VecEnv)
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:
-        pass
+        assert self._is_constructed, "Task not constructed: tried to step"
+
+        return (
+            np.arange(self.num_envs),
+            np.arange(self.num_envs),
+            np.zeros(self.num_envs),
+            self.infos_buf,
+        )
 
     @abstractmethod
     def reset(self) -> VecEnvObs:
-        pass
+        assert self._is_constructed, "Task not constructed: tried to reset"
+
+        return {}
 
     def close(self) -> None:
         pass

@@ -144,6 +144,4 @@ class NewtonBaseTask(BaseTask):
 
     @abstractmethod
     def reset(self) -> VecEnvObs:
-        super().reset()
-
-        return {}
+        return super().reset()

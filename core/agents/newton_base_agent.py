@@ -1,10 +1,8 @@
 from abc import abstractmethod
 
-import torch
 from core.agents import BaseAgent
 from core.controllers import VecJointsController
-from core.sensors import VecIMU
-from core.sensors.contact import VecContact
+from core.sensors import VecIMU, VecContact
 from core.types import Actions, EnvObservations
 from core.universe import Universe
 

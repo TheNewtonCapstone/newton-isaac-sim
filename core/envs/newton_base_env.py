@@ -43,7 +43,9 @@ class NewtonBaseEnv(BaseEnv):
 
     @abstractmethod
     def step(self, actions: Actions) -> None:
-        self.domain_randomizer.on_step()  # DR should always happen before any physics step
+        self.agent.step(actions)  # agent should always step before any physics step
+
+        self.domain_randomizer.on_step()  # same goes for DR
 
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
         for _ in range(self._inverse_control_frequency):

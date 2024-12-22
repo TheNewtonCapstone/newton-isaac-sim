@@ -4,8 +4,16 @@ from typing import Dict, Any, Callable, List, Optional, Tuple, TypedDict
 import numpy as np
 import torch
 
+
 # Sensors
-IMUData = Dict[str, torch.Tensor]
+class IMUData(TypedDict):
+    positions: torch.Tensor
+    rotations: torch.Tensor
+    linear_velocities: torch.Tensor
+    linear_accelerations: torch.Tensor
+    angular_accelerations: torch.Tensor
+    angular_velocities: torch.Tensor
+    projected_gravities: torch.Tensor
 
 
 class ContactData(TypedDict):
