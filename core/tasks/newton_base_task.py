@@ -21,8 +21,8 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 
         self.check_freq: int = check_freq
         self.save_path: str = save_path
-        self.best_mean_reward: float = -np.inf
-        self.cumulative_reward: Tensor = torch.zeros((1,))
+        self.best_median_reward: float = -np.inf
+        self.cumulative_rewards: Tensor = torch.zeros((0,))
 
     def _init_callback(self) -> None:
         if self.save_path is not None:
@@ -38,53 +38,45 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 
         # Saves best cumulative rewards
         if can_check:
-            self.cumulative_reward = torch.where(
-                task.dones_buf.cpu(),
-                torch.zeros_like(self.cumulative_reward),
-                self.cumulative_reward + task.rewards_buf.mean().cpu().item(),
+            self.cumulative_rewards = torch.where(
+                task.dones_buf,
+                torch.zeros_like(task.rewards_buf),
+                self.cumulative_rewards + task.rewards_buf,
             )
 
         if (
             can_check
             and can_save
-            and self.cumulative_reward.mean().item() > self.best_mean_reward
+            and self.cumulative_rewards.median().item() > self.best_median_reward
         ):
-            self.best_mean_reward = self.cumulative_reward.mean().item()
-            self.logger.record("rewards/best_mean", self.best_mean_reward)
+            self.best_median_reward = self.cumulative_rewards.median().item()
+            self.logger.record("rewards/best_median", self.best_median_reward)
 
             self.model.save(
-                f"{self.logger.dir}/{self.save_path}_rew_{self.best_mean_reward:.2f}"
+                f"{self.logger.dir}/{self.save_path}_rew_{self.best_median_reward:.2f}"
             )
 
         # TODO: better metrics about the agent's state & the animation engine
-        agent_observations = task.agent.get_observations()
+        env_observations = task.env.get_observations()
 
-        self.logger.record(
-            "observations/positions",
-            torch.linalg.norm(agent_observations["positions"], dim=1).mean().item(),
-        )
-        self.logger.record(
-            "observations/linear_accelerations",
-            torch.linalg.norm(agent_observations["linear_accelerations"], dim=1)
-            .mean()
-            .item(),
-        )
-        self.logger.record(
-            "observations/linear_velocities",
-            torch.linalg.norm(agent_observations["linear_velocities"], dim=1)
-            .mean()
-            .item(),
-        )
-        self.logger.record(
-            "observations/angular_velocities",
-            torch.linalg.norm(agent_observations["angular_velocities"], dim=1)
-            .mean()
-            .item(),
-        )
-        self.logger.record(
-            "observations/projected_gravities",
-            agent_observations["projected_gravities"][:, -1].mean().item(),
-        )
+        for k, v in env_observations.items():
+            # we really only care about the z component of gravity
+            if "gravities" in k:
+                self.logger.record(f"observations/{k}", v[:, -1].mean().item())
+                continue
+
+            # if it's a bool (i.e. contact data), we want to know the percentage of contacts
+            if v.dtype == torch.bool:
+                self.logger.record(
+                    f"observations/{k}",
+                    v.to(dtype=torch.float32).mean(dim=-1).mean().item(),
+                )
+                continue
+
+            self.logger.record(
+                f"observations/{k}",
+                torch.linalg.norm(v, dim=-1).mean().item(),
+            )
 
         return True
 

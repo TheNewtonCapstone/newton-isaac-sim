@@ -21,9 +21,7 @@ class BaseTaskCallback(BaseCallback):
     def _on_step(self) -> bool:
         task: BaseTask = self.training_env
 
-        self.logger.record("rewards/mean", task.rewards_buf.mean().item())
         self.logger.record("rewards/median", torch.median(task.rewards_buf).item())
-        self.logger.record("rewards/sum", task.rewards_buf.sum().item())
 
         self.logger.record("progress/mean", task.progress_buf.mean().item())
 
