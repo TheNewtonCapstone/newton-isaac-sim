@@ -88,6 +88,8 @@ class NewtonIdleTask(NewtonBaseTask):
     def construct(self, universe: Universe) -> None:
         super().construct(universe)
 
+        self._is_constructed = True
+
     def step_wait(self) -> VecEnvStepReturn:
         super().step_wait()
 
