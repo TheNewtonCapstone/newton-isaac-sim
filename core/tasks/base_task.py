@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from typing import Any, List, Optional, Sequence, Type
 
+import torch
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import VecEnv
 from stable_baselines3.common.vec_env.base_vec_env import (
@@ -10,7 +11,6 @@ from stable_baselines3.common.vec_env.base_vec_env import (
 )
 
 import gymnasium
-import numpy as np
 from core.agents import BaseAgent
 from core.envs import BaseEnv
 from core.types import Progress, Rewards, Dones, Actions, Infos
@@ -21,9 +21,7 @@ class BaseTaskCallback(BaseCallback):
     def _on_step(self) -> bool:
         task: BaseTask = self.training_env
 
-        self.logger.record("rewards/mean", task.rewards_buf.mean().item())
-        self.logger.record("rewards/median", np.median(task.rewards_buf).item())
-        self.logger.record("rewards/sum", task.rewards_buf.sum().item())
+        self.logger.record("rewards/median", torch.median(task.rewards_buf).item())
 
         self.logger.record("progress/mean", task.progress_buf.mean().item())
 
@@ -35,6 +33,7 @@ class BaseTaskCallback(BaseCallback):
 class BaseTask(VecEnv):
     def __init__(
         self,
+        name: str,
         training_env: BaseEnv,
         playing_env: BaseEnv,
         agent: BaseAgent,
@@ -42,10 +41,12 @@ class BaseTask(VecEnv):
         device: str,
         playing: bool,
         max_episode_length: int,
+        rl_step_dt: float,
         observation_space: gymnasium.spaces.Space,
         action_space: gymnasium.spaces.Box,
         reward_space: gymnasium.spaces.Box,
     ):
+        self.name: str = name
         self.device: str = device
         self.playing: bool = playing
 
@@ -58,16 +59,31 @@ class BaseTask(VecEnv):
 
         self.num_envs: int = num_envs
         self.max_episode_length: int = max_episode_length
+        self.rl_step_dt: float = rl_step_dt
 
         self.num_observations: int = self.observation_space.shape[0]
         self.num_actions: int = self.action_space.shape[0]
 
-        self.actions_buf: Actions = np.zeros(
-            (self.num_envs, self.num_actions), dtype=np.float32
+        self.actions_buf: Actions = torch.zeros(
+            (self.num_envs, self.num_actions),
+            dtype=torch.float32,
+            device=self.device,
         )
-        self.rewards_buf: Rewards = np.zeros(self.num_envs, dtype=np.float32)
-        self.dones_buf: Dones = np.zeros(self.num_envs, dtype=bool)
-        self.progress_buf: Progress = np.zeros(self.num_envs, dtype=np.float32)
+        self.rewards_buf: Rewards = torch.zeros(
+            self.num_envs,
+            dtype=torch.float32,
+            device=self.device,
+        )
+        self.dones_buf: Dones = torch.zeros(
+            self.num_envs,
+            dtype=torch.bool,
+            device=self.device,
+        )
+        self.progress_buf: Progress = torch.zeros(
+            self.num_envs,
+            dtype=torch.float32,
+            device=self.device,
+        )
         self.infos_buf: Infos = [{} for _ in range(self.num_envs)]
 
         self.render_mode: str = "human"
@@ -105,8 +121,8 @@ class BaseTask(VecEnv):
     def seed(self, seed: Optional[int] = None) -> Sequence[None | int]:
         pass
 
-    def step_async(self, actions: np.ndarray) -> None:
-        self.actions_buf = actions
+    def step_async(self, actions: Actions) -> None:
+        self.actions_buf = torch.from_numpy(actions).to(self.device)
         return
 
     # Helper methods (shouldn't need to be overridden and most likely won't be called directly)

@@ -1,10 +1,12 @@
-import torch
+import numpy as np
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
 
-import numpy as np
+import torch
 from core.agents import NewtonBaseAgent
+from core.animation import AnimationEngine
 from core.envs import NewtonBaseEnv
 from core.tasks import NewtonBaseTask, NewtonBaseTaskCallback
+from core.types import Observations
 from core.universe import Universe
 from gymnasium.spaces import Box
 
@@ -29,49 +31,53 @@ class NewtonIdleTask(NewtonBaseTask):
         training_env: NewtonBaseEnv,
         playing_env: NewtonBaseEnv,
         agent: NewtonBaseAgent,
+        animation_engine: AnimationEngine,
         num_envs: int,
         device: str,
         playing: bool,
         max_episode_length: int,
+        rl_step_dt: float,
     ):
-        agent_joints_low: np.ndarray = agent.joints_controller.joint_constraints.low
-        agent_joints_high: np.ndarray = agent.joints_controller.joint_constraints.high
-
         self.observation_space: Box = Box(
             low=np.array(
-                [-1.0] * 3
-                + [-np.Inf] * 7
-                + agent_joints_low.tolist()  # twice because we give past actions (target positions) + current positions
-                + agent_joints_low.tolist()
-                + [-np.Inf] * 12,
+                [-10.0] * 3  # for the projected gravity
+                + [-np.Inf] * 6  # for linear & angular velocities
+                + [-1.0] * 12  # for the joint positions
+                + [-np.Inf] * 12  # for the joint velocities
+                + [-1.0] * 24  # for the previous 2 actions
+                + [-1.0] * 2,  # for the transformed phase signal
             ),
             high=np.array(
-                [1.0] * 3
-                + [np.Inf] * 7
-                + agent_joints_high.tolist()
-                + agent_joints_high.tolist()
-                + [np.Inf] * 12,
+                [10.0] * 3  # for the projected gravity
+                + [np.Inf] * 6  # for linear & angular velocities
+                + [1.0] * 12  # for the joint positions
+                + [np.Inf] * 12  # for the joint velocities
+                + [1.0] * 24  # for the previous 2 actions
+                + [1.0] * 2  # for the transformed phase signal,
             ),
         )
 
         self.action_space: Box = Box(
-            low=agent_joints_low.copy(),
-            high=agent_joints_high.copy(),
+            low=np.array([-1.0] * 12),
+            high=np.array([1.0] * 12),
         )
 
         self.reward_space: Box = Box(
-            low=np.array([-10.0]),
-            high=np.array([1.0]),
+            low=np.array([-np.Inf]),
+            high=np.array([np.Inf]),
         )
 
         super().__init__(
+            "newton_idle",
             training_env,
             playing_env,
             agent,
+            animation_engine,
             num_envs,
             device,
             playing,
             max_episode_length,
+            rl_step_dt,
             self.observation_space,
             self.action_space,
             self.reward_space,
@@ -87,139 +93,254 @@ class NewtonIdleTask(NewtonBaseTask):
 
         self.env.step(self.actions_buf)
 
-        obs = self._get_observations()
-        heights = obs["positions"][:, 2]
+        # TODO: Integrate the animation engine into the Newton*Tasks
+        #   Update the observations & reward function accordingly
+        #   From what I currently understand, we add two observations to the observation space:
+        #    - The phase signal (0-1) of the phase progress, transformed by cos(2*pi*progress) & sin(2*pi*progress)
+        #   This would allow the model to recognize the periodicity of the animation and hopefully learn the intricacies
+        #   of each gait.
+        #   The reward function would compare desired joint positions with the current joint positions, and reward
+        #   the agent for getting closer to the desired positions.
 
-        obs_buf: np.ndarray = np.zeros(
-            (self.num_envs, self.num_observations), dtype=np.float32
-        )
-        obs_buf[:, :3] = obs["projected_gravities"]
-        obs_buf[:, 3:6] = obs["linear_accelerations"]
-        obs_buf[:, 6:9] = obs["angular_velocities"]
-        obs_buf[:, 9] = heights
-        obs_buf[:, 10:22] = self.actions_buf
-        obs_buf[:, 22:34] = (
-            self.agent.joints_controller.art_view.get_joint_positions().cpu().numpy()
-        )
-        obs_buf[:, 34:46] = (
-            self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
-        )
+        obs_buf = self._get_observations()
+        self._update_rewards_and_dones()
 
-        self._calculate_rewards()
-
-        self.last_actions_buf = self.actions_buf.copy()
-
-        # terminated
-        self.dones_buf = np.where(heights <= self.reset_height, True, False)
-        # self.dones_buf = np.where(heights >= 1.0, True, self.dones_buf)
-
-        self.dones_buf = np.where(
-            self.progress_buf >= self.max_episode_length,
-            True,
-            self.dones_buf,
-        )  # truncated
+        # only now can we save the actions (after gathering observations & rewards)
+        self.last_actions_buf[1, :, :] = self.last_actions_buf[0, :, :]
+        self.last_actions_buf[0, :, :] = self.actions_buf.clone()
 
         # creates a new np array with only the indices of the environments that are done
-        resets = self.dones_buf.nonzero()[0].flatten()
+        resets: torch.Tensor = self.dones_buf.nonzero().squeeze(1)
         if len(resets) > 0:
             self.env.reset(resets)
 
         # clears the last 2 observations & the progress if any Newton is reset
         obs_buf[resets, :] = 0.0
         self.progress_buf[resets] = 0
-        self.last_actions_buf[resets, :] = 0.0
+        self.last_actions_buf[:, resets, :] = 0.0
 
         return (
-            obs_buf.copy(),
-            self.rewards_buf.copy(),
-            self.dones_buf.copy(),
+            obs_buf.cpu().numpy(),
+            self.rewards_buf.cpu().numpy(),
+            self.dones_buf.cpu().numpy(),
             self.infos_buf,
         )
 
     def reset(self) -> VecEnvObs:
         super().reset()
 
-        obs = self._get_observations()
-
-        obs_buf: np.ndarray = np.zeros(
-            (self.num_envs, self.num_observations), dtype=np.float32
-        )
-
-        obs_buf[:, :3] = obs["projected_gravities"]
-        obs_buf[:, 3:6] = obs["linear_accelerations"]
-        obs_buf[:, 6:9] = obs["angular_velocities"]
-        obs_buf[:, 9] = obs["positions"][:, 2]
-        obs_buf[:, 10:22] = self.actions_buf
-        obs_buf[:, 22:34] = (
-            self.agent.joints_controller.art_view.get_joint_positions().cpu().numpy()
-        )
-        obs_buf[:, 34:46] = (
-            self.agent.joints_controller.art_view.get_joint_velocities().cpu().numpy()
-        )
+        obs_buf = self._get_observations()
 
         self.env.reset()
 
-        # we want to return the last observation of the previous episode
+        # we want to return the last observation of the previous episode, according to the STB3 documentation
+        return obs_buf.cpu().numpy()
+
+    def _get_observations(self) -> Observations:
+        obs = self.env.get_observations()
+
+        phase_signal = self.progress_buf / self.max_episode_length
+
+        obs_buf: Observations = torch.zeros(
+            (self.num_envs, self.num_observations),
+            dtype=torch.float32,
+        )
+        obs_buf[:, :3] = obs["projected_gravities"]
+        obs_buf[:, 3:6] = obs["linear_velocities"]
+        obs_buf[:, 6:9] = obs["angular_velocities"]
+        obs_buf[:, 9:21] = self.agent.joints_controller.get_normalized_joint_positions()
+        obs_buf[:, 21:33] = self.agent.joints_controller.get_joint_velocities_deg()
+
+        # 1st & 2nd set of past actions, we don't care about just-applied actions
+        obs_buf[:, 33:57] = self.last_actions_buf.reshape(
+            (self.num_envs, self.num_actions * 2)
+        )
+
+        # From what I currently understand, we add two observations to the observation space:
+        #  - The phase signal (0-1) of the phase progress, transformed by cos(2*pi*progress) & sin(2*pi*progress)
+        # This would allow the model to recognize the periodicity of the animation and hopefully learn the intricacies
+        # of each gait.
+        obs_buf[:, 57] = torch.cos(2 * torch.pi * phase_signal)
+        obs_buf[:, 58] = torch.sin(2 * torch.pi * phase_signal)
+
+        obs_buf = torch.nan_to_num(
+            obs_buf,
+            nan=0.0,
+        )
+
         return obs_buf
 
-    def _get_observations(self) -> VecEnvObs:
-        # TODO: make this function return an observation np.ndarray instead of a dict
-        env_observations = self.env.get_observations()
-
-        return env_observations
-
-    def _calculate_rewards(self) -> None:
+    def _update_rewards_and_dones(self) -> None:
         # TODO: rework rewards for Newton*Tasks
+        #   The current reward function is missing many features, all in comments below
 
-        obs = self._get_observations()
-        positions = obs["positions"]
+        obs = self.env.get_observations()
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]
-        joint_accelerations = (
-            self.agent.joints_controller.art_view.get_applied_joint_efforts()
-            .cpu()
-            .numpy()
+        world_gravities = obs["world_gravities"]
+        world_gravities_norm = world_gravities / torch.linalg.vector_norm(
+            world_gravities,
+            dim=1,
+            keepdim=True,
         )
+        projected_gravities = obs["projected_gravities"]
+        projected_gravities_norm = projected_gravities / torch.linalg.vector_norm(
+            projected_gravities,
+            dim=1,
+            keepdim=True,
+        )
+        in_contact_with_ground = obs["in_contacts"]
+
+        dof_ordered_names = self.agent.joints_controller.art_view.dof_names
+        has_flipped = projected_gravities_norm[:, 2] > 0.0
+
+        terminated_by_no_contact = torch.logical_and(
+            # if no paws are in contact with the ground
+            (~in_contact_with_ground).all(dim=1),
+            # ensures that the agent has time to stabilize
+            (self.progress_buf > 5).to(self.device),
+        )
+
+        # base position
+        base_linear_velocity_xy = linear_velocities[:, :2]
+        base_linear_velocity_z = linear_velocities[:, 2]
+        base_angular_velocity_xy = angular_velocities[:, :2]
+        base_angular_velocity_z = angular_velocities[:, 2]
+
         joint_positions = (
-            self.agent.joints_controller.art_view.get_joint_positions().cpu().numpy()
+            self.agent.joints_controller.get_normalized_joint_positions()
+        )  # [-1, 1] unitless
+        joint_velocities = (
+            self.agent.joints_controller.get_normalized_joint_velocities()
+        )  # [-1, 1] unitless
+        # joint_accelerations
+        joint_efforts = (
+            self.agent.joints_controller.art_view.get_measured_joint_efforts()
+        )  # in Nm
+
+        animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
+            self.progress_buf * self.rl_step_dt,
+            dof_ordered_names,
+        )
+        # we use the joint controller here, because it contains all the required information
+        animation_joint_positions = (
+            self.agent.joints_controller.normalize_joint_positions(
+                animation_joint_data[:, :, 7]
+            ).to(device=self.device)
+        )  # [-1, 1] unitless
+        animation_joint_velocities = (
+            self.agent.joints_controller.normalize_joint_velocities(
+                animation_joint_data[:, :, 8]
+            ).to(device=self.device)
+        )  # [-1, 1] unitless
+
+        # DONES
+
+        # terminated agents (i.e. they failed)
+        terminated = torch.logical_or(has_flipped, terminated_by_no_contact)
+
+        # truncated agents (i.e. they reached the max episode length)
+        truncated = torch.logical_and(
+            (self.progress_buf >= self.max_episode_length).to(self.device),
+            torch.tensor([not self.playing], device=self.device),
         )
 
-        heights = positions[:, 2]
+        # when it's either terminated or truncated, the agent is done
+        self.dones_buf = torch.logical_or(terminated, truncated)
 
-        # TODO: rework reward weights into configurations
-        linear_velocity_xy_reward = (
-            np.exp(-np.sum(np.square(linear_velocities[:, :2])) * 4.0) * 1.0
+        # REWARDS
+
+        from core.utils.rl import (
+            squared_norm,
+            exp_squared,
+            exp_squared_norm,
+            exp_squared_dot,
+            fd_first_order_squared_norm,
+            fd_second_order_squared_norm,
         )
-        linear_velocity_z_reward = np.square(linear_velocities[:, 2]) * -0.03
-        angular_velocity_z_reward = (
-            np.exp(-np.square(angular_velocities[:, 2]) * 4.0) * 0.5
+
+        # base position reward
+        base_orientation_reward = exp_squared_dot(
+            projected_gravities_norm,
+            world_gravities_norm,
+            mult=-20.0,
+            weight=1.0,
         )
-
-        action_rate_reward = (
-            np.sum(np.square(self.actions_buf - self.last_actions_buf)) * -0.006
+        base_linear_velocity_xy_reward = exp_squared_norm(
+            base_linear_velocity_xy,
+            mult=-8.0,
+            weight=1.0,
         )
-
-        joint_acceleration_reward = np.sum(np.square(joint_accelerations)) * -0.0003
-
-        # cosmetic_reward = np.sum(np.abs(joint_positions)) * -0.06
+        base_linear_velocity_z_reward = exp_squared(
+            base_linear_velocity_z,
+            mult=-8.0,
+            weight=1.0,
+        )
+        base_angular_velocity_xy_reward = exp_squared_norm(
+            base_angular_velocity_xy,
+            mult=-2,
+            weight=0.5,
+        )
+        base_angular_velocity_z_reward = exp_squared(
+            base_angular_velocity_z,
+            mult=-2,
+            weight=0.5,
+        )
+        joint_positions_reward = fd_first_order_squared_norm(
+            joint_positions,
+            animation_joint_positions,
+            weight=10.0,
+        )
+        joint_velocities_reward = fd_first_order_squared_norm(
+            joint_velocities,
+            animation_joint_velocities,
+            weight=0.01,
+        )
+        joint_efforts_reward = squared_norm(
+            joint_efforts,
+            weight=0.001,
+        )
+        # joint accelerations reward
+        joint_action_rate_reward = fd_first_order_squared_norm(
+            self.actions_buf,
+            self.last_actions_buf[0],
+            weight=1.0,
+        )
+        joint_action_acceleration_reward = fd_second_order_squared_norm(
+            self.actions_buf,
+            self.last_actions_buf[0],
+            self.last_actions_buf[1],
+            weight=0.45,
+        )
+        in_contacts_reward = in_contact_with_ground.sum(dim=-1)  # 1 reward per contact
+        survival_reward = torch.where(
+            terminated,
+            0.0,
+            2.0,
+        )
 
         self.rewards_buf = (
-            linear_velocity_xy_reward
-            + linear_velocity_z_reward
-            + angular_velocity_z_reward
-            + action_rate_reward
-            + joint_acceleration_reward
-            # + cosmetic_reward
+            base_orientation_reward
+            + base_linear_velocity_xy_reward
+            + base_linear_velocity_z_reward
+            + base_angular_velocity_xy_reward
+            + base_angular_velocity_z_reward
+            + joint_positions_reward
+            + joint_velocities_reward
+            + joint_efforts_reward
+            + joint_action_rate_reward
+            + joint_action_acceleration_reward
+            + in_contacts_reward
+            + survival_reward
         )
 
-        self.rewards_buf = np.where(
-            heights <= self.reset_height, -2.0, self.rewards_buf
-        )
-        # self.rewards_buf = np.where(heights >= 1.0, -2.0, self.rewards_buf)
-
-        # TODO: should this be here?
-        self.rewards_buf = np.clip(
+        self.rewards_buf = torch.nan_to_num(
             self.rewards_buf,
-            self.reward_space.low,
-            self.reward_space.high,
+            nan=0.0,
+        )
+
+        self.rewards_buf = torch.clip(
+            self.rewards_buf,
+            torch.from_numpy(self.reward_space.low).to(self.device),
+            torch.from_numpy(self.reward_space.high).to(self.device),
         )

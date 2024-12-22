@@ -2,16 +2,17 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from core.globals import AGENTS_PATH
-from core.types import Observations, Actions
+from core.types import EnvObservations, Actions
 from core.universe import Universe
-from omni.isaac.core import World
 
 
 class BaseAgent(ABC):
     def __init__(self, num_agents: int) -> None:
+        assert num_agents > 0, f"Number of agents must be greater than 0: {num_agents}"
+
         self.path: str = ""
         self.num_agents: int = num_agents
-        self.universe: Optional[Universe] = None
+        self._universe: Optional[Universe] = None
 
         self._is_constructed: bool = False
 
@@ -22,7 +23,7 @@ class BaseAgent(ABC):
         ), f"{self.__class__.__name__} already constructed: tried to construct!"
 
         self.path = AGENTS_PATH
-        self.universe = universe
+        self._universe = universe
 
         from omni.isaac.core.utils.prims import create_prim
 
@@ -32,7 +33,7 @@ class BaseAgent(ABC):
         )
 
     @abstractmethod
-    def step(self, actions: Actions) -> Observations:
+    def step(self, actions: Actions) -> EnvObservations:
         assert (
             self._is_constructed
         ), f"{self.__class__.__name__} not constructed: tried to step!"
@@ -40,7 +41,7 @@ class BaseAgent(ABC):
         return self.get_observations()
 
     @abstractmethod
-    def get_observations(self) -> Observations:
+    def get_observations(self) -> EnvObservations:
         assert (
             self._is_constructed
         ), f"{self.__class__.__name__} not constructed: tried to get observations!"

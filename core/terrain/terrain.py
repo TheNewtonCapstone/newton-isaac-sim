@@ -157,20 +157,26 @@ class BaseTerrainBuilder(ABC):
         position: Tensor,
     ) -> str:
         from core.utils.usd import find_matching_prims
-        from omni.isaac.core.prims.xform_prim import XFormPrim
-        from omni.isaac.core.utils.prims import define_prim
+        from omni.isaac.core.utils.prims import (
+            define_prim,
+            create_prim,
+            is_prim_path_valid,
+        )
         from pxr import UsdPhysics, PhysxSchema
+        import numpy as np
 
         # generate an informative and unique name from the type of builder
-        prim_path_expr = f"{base_path}/{builder_name}/terrain_.*"
+        builder_group_prim_path = f"{base_path}/{builder_name}"
+        prim_path_expr = f"{builder_group_prim_path}/terrain_.*"
         num_of_existing_terrains = len(find_matching_prims(prim_path_expr))
         prim_path = f"{base_path}/{builder_name}/terrain_{num_of_existing_terrains}"
-
         num_faces = triangles.shape[0]
-        mesh = define_prim(prim_path, "Mesh")
-        mesh.GetAttribute("points").Set(vertices.numpy())
-        mesh.GetAttribute("faceVertexIndices").Set(triangles.flatten().numpy())
-        mesh.GetAttribute("faceVertexCounts").Set([3] * num_faces)
+
+        if not is_prim_path_valid(builder_group_prim_path):
+            define_prim(
+                builder_group_prim_path,
+                prim_type="Scope",
+            )
 
         centered_position = [
             position[0] - size[0] / 2,
@@ -178,18 +184,28 @@ class BaseTerrainBuilder(ABC):
             position[2],
         ]
 
-        terrain = XFormPrim(
-            prim_path=prim_path,
-            name="terrain",
-            position=centered_position,
+        # creates the terrain's root prim
+        create_prim(
+            prim_path,
+            prim_type="Xform",
+            position=np.asarray(centered_position),
         )
 
-        UsdPhysics.CollisionAPI.Apply(terrain.prim)
+        # creates the mesh prim, that actually collides
+        mesh_prim = create_prim(
+            prim_path + "/mesh",
+            prim_type="Mesh",
+            scale=[1, 1, 1],
+            attributes={
+                "points": vertices.numpy(),
+                "faceVertexIndices": triangles.flatten().numpy(),
+                "faceVertexCounts": np.asarray([3] * num_faces),
+                "subdivisionScheme": "bilinear",
+            },
+        )
 
-        # Contact offset needs to be set to a relatively large (~0.1) value to prevent objects clipping through
-        # for more info, check: https://docs.omniverse.nvidia.com/extensions/latest/ext_physics/rigid-bodies.html
-        physx_collision_api = PhysxSchema.PhysxCollisionAPI.Apply(terrain.prim)
-        physx_collision_api.GetContactOffsetAttr().Set(0.1)
-        physx_collision_api.GetRestOffsetAttr().Set(0.01)
+        # ensure that we have all the necessary APIs
+        collision_api = UsdPhysics.CollisionAPI.Apply(mesh_prim)
+        collision_api.CreateCollisionEnabledAttr(True)
 
         return prim_path

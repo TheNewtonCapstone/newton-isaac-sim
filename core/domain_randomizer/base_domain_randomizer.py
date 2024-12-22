@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from core.agents import BaseAgent
 from core.types import Settings, Indices
@@ -11,7 +11,6 @@ class BaseDomainRandomizer(ABC):
         self,
         seed: int,
         agent: BaseAgent,
-        # TODO: think about how to construct the domain randomizers appropriately (without circular imports)
         randomizer_settings: Settings,
     ):
         self.seed: int = seed

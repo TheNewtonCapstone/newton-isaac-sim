@@ -337,6 +337,15 @@
       <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extsPhysics/omni.physx" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extsPhysics/omni.usd.schema.physx" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extsPhysics/omni.physics.tensors" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extsPhysics/omni.physx.fabric" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extscache/omni.kit.viewport.utility-1.0.17+10a4b5c0" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extscache/omni.kit.viewport.window-107.0.6+10a4b5c0" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extscache/omni.kit.widget.viewport-106.1.0+10a4b5c0" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extscache/omni.ui-2.25.22+10a4b5c0.lx64.r.cp310" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/exts/omni.isaac.version" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extsPhysics/omni.physx.tensors" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extsPhysics/omni.usdphysics" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extscache/omni.timeline-1.0.10+10a4b5c0.lx64.r.cp310" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="isaac-sim" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

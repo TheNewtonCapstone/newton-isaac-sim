@@ -1,1 +1,1 @@
-from .universe import *
+from .universe import Universe

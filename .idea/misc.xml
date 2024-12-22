@@ -3,6 +3,7 @@
   <component name="Black">
     <option name="enabledOnReformat" value="true" />
     <option name="enabledOnSave" value="true" />
+    <option name="pathToExecutable" value="$USER_HOME$/miniconda3/envs/isaac-sim/bin/black" />
     <option name="sdkName" value="isaac-sim" />
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="isaac-sim" project-jdk-type="Python SDK" />

@@ -1,7 +1,9 @@
 import re
-from typing import Any
-from pxr import Usd
+from typing import Any, List
+
 from pxr.UsdShade import Material
+
+from pxr import Usd
 
 
 def get_or_define_material(material_prim_path: str) -> Material:
@@ -17,7 +19,7 @@ def get_or_define_material(material_prim_path: str) -> Material:
         ValueError: If the material API cannot be applied to the prim.
     """
 
-    from omni.isaac.core.utils.prims import define_prim, is_prim_path_valid
+    from omni.isaac.core.utils.prims import is_prim_path_valid
     from omni.isaac.core.utils.stage import get_current_stage
     from pxr import UsdShade
 
@@ -45,7 +47,6 @@ def get_or_apply_api(prim: Usd.Prim, api_type: Any) -> Usd.APISchemaBase:
     """
 
     from omni.isaac.core.utils.stage import get_current_stage
-    from pxr import Usd
 
     # get API if it already exists
     api = api_type.Get(get_current_stage(), prim.GetPath())
@@ -55,17 +56,18 @@ def get_or_apply_api(prim: Usd.Prim, api_type: Any) -> Usd.APISchemaBase:
     # apply API
     api = api_type.Apply(prim)
     if not api:
-        raise ValueError(f"Failed to apply API '{api_type.__name__}' to prim '{prim.GetPath()}'.")
+        raise ValueError(
+            f"Failed to apply API '{api_type.__name__}' to prim '{prim.GetPath()}'."
+        )
 
     return api
 
 
-def find_matching_prims(prim_path_regex: str, stage: Any | None = None) -> list[Any]:
+def find_matching_prims(prim_path_regex: str) -> list[Usd.Prim]:
     """Find all the matching prims in the stage based on input regex expression.
 
     Args:
         prim_path_regex: The regex expression for prim path.
-        stage: The stage where the prim exists. Defaults to None, in which case the current stage is used.
 
     Returns:
         A list of prims that match input expression.
@@ -78,11 +80,12 @@ def find_matching_prims(prim_path_regex: str, stage: Any | None = None) -> list[
 
     # check prim path is global
     if not prim_path_regex.startswith("/"):
-        raise ValueError(f"Prim path '{prim_path_regex}' is not global. It must start with '/'.")
+        raise ValueError(
+            f"Prim path '{prim_path_regex}' is not global. It must start with '/'."
+        )
 
     # get current stage
-    if stage is None:
-        stage = get_current_stage()
+    stage = get_current_stage()
 
     # need to wrap the token patterns in '^' and '$' to prevent matching anywhere in the string
     tokens = prim_path_regex.split("/")[1:]
@@ -102,3 +105,91 @@ def find_matching_prims(prim_path_regex: str, stage: Any | None = None) -> list[
             output_prims = []
 
     return output_prims
+
+
+def find_matching_prims_count(prim_path_regex: str) -> int:
+    """Find the number of matching prims in the stage based on input regex expression.
+
+    Args:
+        prim_path_regex: The regex expression for prim path.
+        stage: The stage where the prim exists. Defaults to None, in which case the current stage is used.
+
+    Returns:
+        The number of prims that match input expression.
+
+    Raises:
+        ValueError: If the prim path is not global (i.e: does not start with '/').
+    """
+
+    return len(find_matching_prims(prim_path_regex))
+
+
+def path_expr_to_paths(
+        root_path_expr: str,
+        child_path_expr: str,
+) -> List[List[str]]:
+    """Convert a path expression to a list of paths (2-deep).
+
+    Args:
+        root_path_expr: Path expression for the root prims.
+        child_path_expr: Path expression for the child prims (within the root).
+
+    Returns:
+        A list of lists of paths, where each inner list contains the paths of the children of a root prim,
+        in order of discovery.
+    """
+    root_prims_count = find_matching_prims_count(root_path_expr)
+    children_prims_paths = find_matching_prim_paths(root_path_expr + child_path_expr)
+    children_prims_count = len(children_prims_paths)
+    children_per_root_count = children_prims_count // root_prims_count
+
+    full_prim_paths = [[] for _ in range(root_prims_count)]
+
+    for i in range(len(children_prims_paths)):
+        full_prim_paths[i // children_per_root_count].append(children_prims_paths[i])
+
+    return full_prim_paths
+
+
+def get_parent_prim_from_path(prim_path: str) -> Usd.Prim:
+    """Get the parent prim from the prim path.
+
+    Args:
+        prim_path: The prim path.
+
+    Returns:
+        The parent prim of the prim path.
+    """
+
+    from omni.isaac.core.utils.stage import get_current_stage
+
+    stage = get_current_stage()
+    prim = stage.GetPrimAtPath(prim_path)
+
+    return prim.GetParent()
+
+
+def get_parent_path_from_path(prim_path: str) -> str:
+    """Get the parent path from the prim path.
+
+    Args:
+        prim_path: The prim path.
+
+    Returns:
+        The parent path of the prim path.
+    """
+
+    return get_parent_prim_from_path(prim_path).GetPath().pathString
+
+
+def get_parent_expr_path_from_expr_path(prim_path: str) -> str:
+    """Get the parent path from a prim's expression path.
+
+    Args:
+        prim_path: The prim's expression path; the prim does not need to exist.
+
+    Returns:
+        The parent's expression path of the prim path.
+    """
+
+    return "/".join(prim_path.split("/")[:-1])

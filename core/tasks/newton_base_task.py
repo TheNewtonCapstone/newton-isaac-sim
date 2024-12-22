@@ -21,8 +21,8 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 
         self.check_freq: int = check_freq
         self.save_path: str = save_path
-        self.best_mean_reward: float = -np.inf
-        self.cumulative_reward: Tensor = torch.zeros((1,))
+        self.best_median_reward: float = -np.inf
+        self.cumulative_rewards: Tensor = torch.zeros((0,))
 
     def _init_callback(self) -> None:
         if self.save_path is not None:
@@ -38,50 +38,45 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 
         # Saves best cumulative rewards
         if can_check:
-            self.cumulative_reward = np.where(
+            self.cumulative_rewards = torch.where(
                 task.dones_buf,
-                np.zeros_like(self.cumulative_reward),
-                self.cumulative_reward + task.rewards_buf.mean().item(),
+                torch.zeros_like(task.rewards_buf),
+                self.cumulative_rewards + task.rewards_buf,
             )
 
         if (
             can_check
             and can_save
-            and self.cumulative_reward.mean().item() > self.best_mean_reward
+            and self.cumulative_rewards.median().item() > self.best_median_reward
         ):
-            self.best_mean_reward = self.cumulative_reward.mean().item()
+            self.best_median_reward = self.cumulative_rewards.median().item()
+            self.logger.record("rewards/best_median", self.best_median_reward)
+
             self.model.save(
-                f"{self.logger.dir}/{self.save_path}_rew_{self.best_mean_reward:.2f}"
+                f"{self.logger.dir}/{self.save_path}_rew_{self.best_median_reward:.2f}"
             )
 
-        self.logger.record(
-            "rewards/cumulative",
-            self.cumulative_reward.mean().item(),
-        )
-        self.logger.record("rewards/best_mean", self.best_mean_reward)
-
         # TODO: better metrics about the agent's state & the animation engine
-        agent_observations = task.agent.get_observations()
-        self.logger.record(
-            "observations/positions",
-            np.linalg.norm(agent_observations["positions"].mean()),
-        )
-        self.logger.record(
-            "observations/linear_accelerations",
-            np.linalg.norm(agent_observations["linear_accelerations"].mean()),
-        )
-        self.logger.record(
-            "observations/linear_velocities",
-            np.linalg.norm(agent_observations["linear_velocities"].mean()),
-        )
-        self.logger.record(
-            "observations/angular_velocities",
-            np.linalg.norm(agent_observations["angular_velocities"].mean()),
-        )
-        self.logger.record(
-            "observations/projected_gravities",
-            np.linalg.norm(agent_observations["projected_gravities"].mean()),
-        )
+        env_observations = task.env.get_observations()
+
+        for k, v in env_observations.items():
+            # we really only care about the z component of gravity
+            if "gravities" in k:
+                self.logger.record(f"observations/{k}", v[:, -1].mean().item())
+                continue
+
+            # if it's a bool (i.e. contact data), we want to know the percentage of contacts
+            if v.dtype == torch.bool:
+                self.logger.record(
+                    f"observations/{k}",
+                    v.to(dtype=torch.float32).mean(dim=-1).mean().item(),
+                )
+                continue
+
+            self.logger.record(
+                f"observations/{k}",
+                torch.linalg.norm(v, dim=-1).mean().item(),
+            )
 
         return True
 
@@ -89,19 +84,23 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 class NewtonBaseTask(BaseTask):
     def __init__(
         self,
+        name: str,
         training_env: NewtonBaseEnv,
         playing_env: NewtonBaseEnv,
         agent: NewtonBaseAgent,
+        animation_engine: AnimationEngine,
         num_envs: int,
         device: str,
         playing: bool,
         max_episode_length: int,
+        rl_step_dt: float,
         observation_space: Space,
         action_space: Box,
         reward_space: Box,
     ):
 
         super().__init__(
+            name,
             training_env,
             playing_env,
             agent,
@@ -109,6 +108,7 @@ class NewtonBaseTask(BaseTask):
             device,
             playing,
             max_episode_length,
+            rl_step_dt,
             observation_space,
             action_space,
             reward_space,
@@ -118,10 +118,12 @@ class NewtonBaseTask(BaseTask):
         self.playing_env: NewtonBaseEnv = playing_env
         self.agent: NewtonBaseAgent = agent
 
-        self.animation_engine: AnimationEngine = AnimationEngine()  # TODO
-        self.last_actions_buf: Actions = np.zeros(
-            (self.num_envs, self.num_actions), dtype=np.float32
-        )
+        self.animation_engine: AnimationEngine = animation_engine
+        self.last_actions_buf: Actions = torch.zeros(
+            (2, self.num_envs, self.num_actions),
+            dtype=torch.float32,
+            device=self.device,
+        )  # 2 sets of past actions, 0: t - 1, 1: t - 2
 
     @abstractmethod
     def construct(self, universe: Universe) -> None:
@@ -131,6 +133,8 @@ class NewtonBaseTask(BaseTask):
             self.playing_env.construct(universe)
         else:
             self.training_env.construct(universe)
+
+        self.animation_engine.construct(self.name)
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:
