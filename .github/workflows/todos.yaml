@@ -17,5 +17,5 @@ jobs:
       - name: "TODO to Issue"
         uses: "alstr/todo-to-issue-action@v5"
         with:
-          CLOSE_ISSUES: true
+          CLOSE_ISSUES: false
           AUTO_ASSIGN: true

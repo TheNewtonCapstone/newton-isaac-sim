@@ -4,7 +4,6 @@ policy: "MlpPolicy"
 seed: 14321
 
 n_envs: 96
-<<<<<<<< HEAD:configs/tasks/newton_idle_task.yaml
 timesteps_per_env: 100_000
 base_lr: 3e-6
 episode_length: 500
@@ -14,14 +13,6 @@ newton:
 
   # TODO: Add gains as a configuration parameter
   #   Even with our custom actuators, we still need to tune the gains somewhat and having it as a configuration parameter would be nice
-========
-timesteps_per_env: 500_000
-base_lr: 3e-4
-episode_length: 5000
-
-newton:
-  inverse_control_frequency: 4  # we're aiming for a total compute budget of 2 times the physics timestep (0.005s * 4 = 0.02s)
->>>>>>>> master:configs/newton_idle_task.yaml
 
 delay:
   enabled: False
