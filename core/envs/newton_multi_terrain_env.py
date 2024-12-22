@@ -70,7 +70,6 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                     [
                         terrain_spawn_position[0],
                         terrain_spawn_position[1],
-                        # TODO: make this a better computed value
                         0.4 + self.terrain_builds[i].height,
                     ]
                 )

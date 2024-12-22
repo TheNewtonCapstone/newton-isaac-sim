@@ -54,7 +54,6 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         num_to_reset = indices.shape[0]
 
-        # TODO: decide where the reset positions and rotations should come from
         self._rigid_prim_view.set_world_poses(
             positions=self.initial_positions[indices],
             orientations=self.initial_orientations[indices],
