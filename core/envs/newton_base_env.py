@@ -6,7 +6,7 @@ from core.agents import NewtonBaseAgent
 from core.domain_randomizer import NewtonBaseDomainRandomizer
 from core.envs import BaseEnv
 from core.terrain import BaseTerrainBuilder
-from core.types import Observations, Actions, Indices
+from core.types import EnvObservations, Actions, Indices
 from core.universe import Universe
 from torch import Tensor
 
@@ -42,17 +42,15 @@ class NewtonBaseEnv(BaseEnv):
         super().construct(universe)
 
     @abstractmethod
-    def step(self, actions: Actions) -> Observations:
+    def step(self, actions: Actions) -> None:
         self.domain_randomizer.on_step()  # DR should always happen before any physics step
 
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
         for _ in range(self._inverse_control_frequency):
             super().step(actions)  # advances the simulation by one step
 
-        return self.get_observations()
-
     @abstractmethod
-    def reset(self, indices: Optional[Indices] = None) -> Observations:
+    def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
         self.domain_randomizer.on_reset(
             indices
         )  # DR should always happen before any physics reset
@@ -62,5 +60,19 @@ class NewtonBaseEnv(BaseEnv):
         return self.get_observations()
 
     @abstractmethod
-    def get_observations(self) -> Observations:
-        return self.agent.get_observations()
+    def get_observations(self) -> EnvObservations:
+        env_obs = self.agent.get_observations()
+
+        gravity_direction, gravity_magnitude = (
+            self._universe.get_physics_context().get_gravity()
+        )
+
+        env_obs["world_gravities"] = (
+            torch.tensor(
+                gravity_direction,
+                device=self._universe.device,
+            )
+            * gravity_magnitude
+        ).repeat(self.num_envs, 1)
+
+        return env_obs

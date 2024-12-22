@@ -5,7 +5,7 @@ from core.agents import BaseAgent
 from core.controllers import VecJointsController
 from core.sensors import VecIMU
 from core.sensors.contact import VecContact
-from core.types import Actions, Observations
+from core.types import Actions, EnvObservations
 from core.universe import Universe
 
 
@@ -33,19 +33,18 @@ class NewtonBaseAgent(BaseAgent):
     def step(self, actions: Actions) -> None:
         super().step(actions)
 
-        new_joint_positions = torch.from_numpy(actions).to(self._universe.device)
-        self.joints_controller.step(new_joint_positions)
+        self.joints_controller.step(actions)
 
     @abstractmethod
-    def get_observations(self) -> Observations:
+    def get_observations(self) -> EnvObservations:
         imu_data_tensor = self.imu.get_data()
         contact_data_tensor = self.contact_sensor.get_data()
         data_numpy = {}
 
         for key, value in imu_data_tensor.items():
-            data_numpy[key] = value.cpu().numpy()
+            data_numpy[key] = value
 
         for key, value in contact_data_tensor.items():
-            data_numpy[key] = value.cpu().numpy()
+            data_numpy[key] = value
 
         return data_numpy

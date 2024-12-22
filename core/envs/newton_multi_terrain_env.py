@@ -5,7 +5,7 @@ from core.agents import NewtonBaseAgent
 from core.domain_randomizer import NewtonBaseDomainRandomizer
 from core.envs import NewtonBaseEnv
 from core.terrain import BaseTerrainBuilder
-from core.types import Observations, Actions, Indices
+from core.types import EnvObservations, Actions, Indices
 from core.universe import Universe
 
 
@@ -91,17 +91,15 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
 
         self._universe.reset()
 
-    def step(self, actions: Actions) -> Observations:
+    def step(self, actions: Actions) -> None:
         self.agent.step(actions)  # has to be before the simulation advances
 
         super().step(actions)  # advances the simulation by one step
 
-        return self.get_observations()
-
-    def reset(self, indices: Optional[Indices] = None) -> Observations:
+    def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
         super().reset(indices)
 
         return self.get_observations()
 
-    def get_observations(self) -> Observations:
+    def get_observations(self) -> EnvObservations:
         return super().get_observations()

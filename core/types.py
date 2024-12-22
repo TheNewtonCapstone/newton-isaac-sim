@@ -18,14 +18,15 @@ JointsPositions = torch.Tensor
 JointsConstraints = Dict[str, Tuple[float, float]]
 
 # RL
-Actions = np.ndarray
-Rewards = np.ndarray
-Dones = np.ndarray
-Progress = np.ndarray
+Actions = torch.Tensor
+Rewards = torch.Tensor
+Dones = torch.Tensor
+Progress = torch.Tensor
 
 Infos = List[Dict[str, Any]]
 
-Observations = Dict[str, np.ndarray]
+EnvObservations = Dict[str, torch.Tensor]
+Observations = torch.Tensor
 
 # Math
 NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
@@ -36,5 +37,5 @@ NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
 Settings = Dict[str, Any]
 Indices = torch.Tensor
 
-Matter = Tuple[argparse.Namespace, Settings, Settings, Settings, Dict[
+Matter = Tuple[argparse.Namespace, Settings, Settings, Settings, Settings, Dict[
     str, Settings], str, bool, bool, bool, bool, bool, bool, bool, bool, int, float]

@@ -1,17 +1,19 @@
 from typing import Dict, Optional, List
 
-import numpy as np
 from attr import dataclass
+
+import torch
 from core.types import (
     Settings,
+    Progress,
 )
 
 
 @dataclass
 class BoneData:
     name: str
-    position: np.ndarray
-    orientation: np.ndarray
+    position: torch.Tensor
+    orientation: torch.Tensor
     relative_angle: float
 
 
@@ -72,8 +74,8 @@ class AnimationEngine:
 
                 for bone_data in keyframe_settings["data"]:
                     bone_name: str = bone_data["bone"]
-                    position: np.ndarray = np.array(bone_data["position"])
-                    orientation: np.ndarray = np.array(bone_data["orientation"])
+                    position: torch.Tensor = torch.tensor(bone_data["position"])
+                    orientation: torch.Tensor = torch.tensor(bone_data["orientation"])
                     relative_angle: float = bone_data["relative_angle"]
 
                     data[bone_name] = BoneData(
@@ -114,7 +116,7 @@ class AnimationEngine:
         progress: float,
         joints_order: List[str],
         interpolate: bool = True,
-    ) -> np.ndarray:
+    ) -> torch.Tensor:
         """
         Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
         Args:
@@ -123,23 +125,23 @@ class AnimationEngine:
             interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
 
         Returns:
-            A numpy array with shape (num_bones, 8) containing the joint positions, orientations and relative angles for the agent.
+            A tensor with shape (num_bones, 8) containing the joint positions, orientations and relative angles for the agent.
         """
         clip_data = self.get_current_clip_data(progress, interpolate)
 
         num_bones = len(clip_data)
-        result = np.zeros((num_bones, 8))
+        result = torch.zeros((num_bones, 8))
 
         for j, bone_name in enumerate(joints_order):
             if bone_name not in clip_data:
                 continue
 
             bone_data = clip_data[bone_name]
-            result[j] = np.concatenate(
+            result[j, :] = torch.cat(
                 [
                     bone_data.position,
                     bone_data.orientation,
-                    [bone_data.relative_angle],
+                    torch.tensor([bone_data.relative_angle]),
                 ]
             )
 
@@ -147,10 +149,10 @@ class AnimationEngine:
 
     def get_current_clip_datas_ordered(
         self,
-        progress: np.ndarray,
+        progress: Progress,
         joints_order: List[str],
         interpolate: bool = True,
-    ) -> np.ndarray:
+    ) -> torch.Tensor:
         """
         Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
         Args:
@@ -159,14 +161,14 @@ class AnimationEngine:
             interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
 
         Returns:
-            A numpy array with shape (num_agents, num_bones, 8) containing the joint positions, orientations and relative angles for each agent.
+            A tensor with shape (num_agents, num_bones, 8) containing the joint positions, orientations and relative angles for each agent.
         """
         clip_datas = self.get_current_clip_datas(progress, interpolate)
 
         num_agents = len(clip_datas)
         num_bones = len(clip_datas[0])
 
-        result = np.zeros((num_agents, num_bones, 8))
+        result = torch.zeros((num_agents, num_bones, 8))
 
         for i, clip_data in enumerate(clip_datas):
             for j, bone_name in enumerate(joints_order):
@@ -174,18 +176,20 @@ class AnimationEngine:
                     continue
 
                 bone_data = clip_data[bone_name]
-                result[i, j] = np.concatenate(
+                result[i, j, :] = torch.cat(
                     [
                         bone_data.position,
                         bone_data.orientation,
-                        [bone_data.relative_angle],
-                    ]
+                        torch.tensor([bone_data.relative_angle]),
+                    ],
                 )
 
         return result
 
     def get_current_clip_datas(
-        self, progress: np.ndarray, interpolate: bool = True
+        self,
+        progress: Progress,
+        interpolate: bool = True,
     ) -> List[ArmatureData]:
         """
         Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
@@ -201,7 +205,7 @@ class AnimationEngine:
     def get_clip_datas(
         self,
         clip_name: str,
-        progress: np.ndarray,
+        progress: Progress,
         interpolate: bool = True,
     ) -> List[ArmatureData]:
         """
@@ -215,7 +219,7 @@ class AnimationEngine:
             A list of armature data for each agent.
         """
         clip: AnimationClip = self.clips[clip_name]
-        progress_in_seconds = progress * self._step_dt
+        progress_in_seconds = progress.cpu() * self._step_dt
         frames = progress_in_seconds * clip.framerate
 
         data = []
@@ -270,14 +274,22 @@ class AnimationEngine:
         for bone_name, bone_data in this_keyframe.data.items():
             next_bone_data = next_keyframe.data[bone_name]
 
-            from core.utils.math import lerp, quat_slerp_n
+            from core.utils.math import lerp, quat_slerp_t
 
-            position = lerp(bone_data.position, next_bone_data.position, frame % 1)
-            orientation = quat_slerp_n(
-                bone_data.orientation, next_bone_data.orientation, frame % 1
+            position = lerp(
+                bone_data.position,
+                next_bone_data.position,
+                frame % 1,
+            )
+            orientation = quat_slerp_t(
+                bone_data.orientation,
+                next_bone_data.orientation,
+                frame % 1,
             )
             relative_angle = lerp(
-                bone_data.relative_angle, next_bone_data.relative_angle, frame % 1
+                bone_data.relative_angle,
+                next_bone_data.relative_angle,
+                frame % 1,
             )
 
             interpolated_data[bone_name] = BoneData(

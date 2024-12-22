@@ -48,9 +48,13 @@ def apply_joint_constraints(
         for j, joint_name in enumerate(joint_names):
             joint_path = f"{prim_path}/{joint_name}"
 
-            joint_limits = UsdPhysics.RevoluteJoint.Get(stage, joint_path)
-            joint_limits.CreateLowerLimitAttr().Set(box_joint_constraints.low[j].item())
-            joint_limits.GetUpperLimitAttr().Set(box_joint_constraints.high[j].item())
+            rev_joint = UsdPhysics.RevoluteJoint.Get(stage, joint_path)
+
+            if not rev_joint:
+                continue  # Skip if joint is not a RevoluteJoint
+
+            rev_joint.CreateLowerLimitAttr().Set(box_joint_constraints.low[j].item())
+            rev_joint.GetUpperLimitAttr().Set(box_joint_constraints.high[j].item())
 
 
 class VecJointsController:
@@ -62,7 +66,7 @@ class VecJointsController:
     ):
         self.path_expr: str = ""
 
-        self.universe: Universe = universe
+        self._universe: Universe = universe
         self._articulation_view: Optional[ArticulationView] = None
 
         self._noise_function: NoiseFunction = noise_function
@@ -97,9 +101,9 @@ class VecJointsController:
             name="joints_controller_art_view",
             reset_xform_properties=False,
         )
-        self.universe.add_prim(self._articulation_view)
+        self._universe.add_prim(self._articulation_view)
 
-        self.universe.reset()
+        self._universe.reset()
 
         apply_joint_constraints(
             self.box_joint_constraints,
@@ -134,19 +138,19 @@ class VecJointsController:
         if indices is None:
             indices = torch.arange(
                 self._articulation_view.count,
-                device=self.universe.device,
+                device=self._universe.device,
             )
         else:
-            indices = indices.to(device=self.universe.device)
+            indices = indices.to(device=self._universe.device)
 
-        joint_positions = joint_positions.to(device=self.universe.device)
+        joint_positions = joint_positions.to(device=self._universe.device)
 
         self._target_joint_positions = self._process_joint_actions(
             joint_positions,
             self.box_joint_constraints,
         )
 
-        self._articulation_view.set_joint_position_targets(
+        self._articulation_view.set_joint_positions(
             self._target_joint_positions,
             indices,
         )
@@ -172,9 +176,13 @@ class VecJointsController:
         from core.utils.math import map_range
 
         joint_positions_normalized = map_range(
-            joint_positions.cpu(),
-            torch.from_numpy(self.box_joint_constraints.low),
-            torch.from_numpy(self.box_joint_constraints.high),
+            joint_positions,
+            torch.from_numpy(self.box_joint_constraints.low).to(
+                joint_positions.device,
+            ),
+            torch.from_numpy(self.box_joint_constraints.high).to(
+                joint_positions.device,
+            ),
             -1.0,
             1.0,
         )
@@ -222,25 +230,25 @@ class VecJointsController:
             The processed joint positions (in radians).
         """
         low_constraints_t = torch.from_numpy(box_joint_constraints.low).to(
-            device=self.universe.device
+            device=self._universe.device
         )
         high_constraints_t = torch.from_numpy(box_joint_constraints.high).to(
-            device=self.universe.device
+            device=self._universe.device
         )
 
-        joint_positions = torch.zeros_like(joint_actions)
+        joint_positions = torch.zeros_like(joint_actions).to(self._universe.device)
 
-        for i, _ in enumerate(joint_actions):
+        for i, _ in enumerate(joint_positions):
+            joint_positions[i] = torch.clamp(
+                joint_actions[i],
+                min=-1.0,
+                max=1.0,
+            )
+
             joint_positions[i] = torch.lerp(
                 low_constraints_t,
                 high_constraints_t,
-                (joint_actions[i] + 1) / 2,
-            )
-
-            joint_positions[i] = torch.clamp(
-                joint_positions[i],
-                min=low_constraints_t,
-                max=high_constraints_t,
+                (joint_positions[i] + 1) / 2,
             )
 
             if noise_function is not None:

@@ -25,10 +25,10 @@ def setup_argparser() -> argparse.ArgumentParser:
         default=False,
     )
     parser.add_argument(
-        "--pid-control",
-        action="store_true",
-        help="Run the simulation with pid control (no RL).",
-        default=False,
+        "--robot-config",
+        type=str,
+        help="Path to the configuration file for the current robot.",
+        default="configs/robots/newton.yaml",
     )
     parser.add_argument(
         "--rl-config",
@@ -107,6 +107,7 @@ def setup() -> Optional[Matter]:
 
     # General Configs
     cli_args, _ = parser.parse_known_args()
+    robot_config = load_config(cli_args.robot_config)
     rl_config = load_config(cli_args.rl_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
@@ -161,6 +162,7 @@ def setup() -> Optional[Matter]:
 
     return (
         cli_args,
+        robot_config,
         rl_config,
         world_config,
         randomization_config,
@@ -188,6 +190,7 @@ def main():
 
     (
         cli_args,
+        robot_config,
         rl_config,
         world_config,
         randomization_config,
@@ -241,23 +244,9 @@ def main():
         noise_function=lambda x: x,
     )
 
-    joints_constraints = {
-        "FR_HAA": (-45, 45),
-        "FL_HAA": (-45, 45),
-        "HR_HAA": (-45, 45),
-        "HL_HAA": (-45, 45),
-        "FR_HFE": (-90, 90),
-        "HR_HFE": (-90, 90),
-        "FL_HFE": (-90, 90),
-        "HL_HFE": (-90, 90),
-        "FR_KFE": (-180, 180),
-        "FL_KFE": (-180, 180),
-        "HR_KFE": (-180, 180),
-        "HL_KFE": (-180, 180),
-    }
     joints_controller = VecJointsController(
         universe=universe,
-        joint_constraints=joints_constraints,
+        joint_constraints=robot_config["joints"]["constraints"],
         noise_function=lambda x: x,
     )
 
@@ -324,11 +313,11 @@ def main():
             #   since the system expects a [-1, 1] range, we normalize the joint positions to their limits; it is
             #   redundant since we'll undo the normalization later in the controller, so it might warrant a change
             joint_actions = newton_agent.joints_controller.normalize_joint_positions(
-                torch.from_numpy(joint_positions)
+                joint_positions
             )
 
             # we wrap it in an array to make it 2D (it's a vectorized env)
-            env.step(np.array([joint_actions], dtype=np.float32))
+            env.step(joint_actions.unsqueeze(0))
 
         exit(1)
 
@@ -475,7 +464,7 @@ def main():
         #   set of functions, instead of classes, since it's a small configuration. We could also offer a wrapper around
         #   PPO (and eventually A2C) to allow for easy customization of the network.
 
-        policy_kwargs = dict(activation_fn=torch.nn.ELU, net_arch=[512, 512, 512])
+        policy_kwargs = dict(activation_fn=torch.nn.ELU, net_arch=[1024, 1024, 1024])
 
         model = PPO(
             rl_config["policy"],

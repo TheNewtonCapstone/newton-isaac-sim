@@ -211,6 +211,9 @@ class Universe(SimulationContext):
             self._world_settings["sim_params"]["enable_ccd"]
         )
 
+        # -- Gravity
+        self.get_physics_context().set_gravity(-9.81)
+
         # -- Global Contact Processing
         self.set_carb_setting(
             "/physics/disableContactProcessing",

@@ -38,10 +38,10 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 
         # Saves best cumulative rewards
         if can_check:
-            self.cumulative_reward = np.where(
-                task.dones_buf,
-                np.zeros_like(self.cumulative_reward),
-                self.cumulative_reward + task.rewards_buf.mean().item(),
+            self.cumulative_reward = torch.where(
+                task.dones_buf.cpu(),
+                torch.zeros_like(self.cumulative_reward),
+                self.cumulative_reward + task.rewards_buf.mean().cpu().item(),
             )
 
         if (
@@ -58,25 +58,32 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 
         # TODO: better metrics about the agent's state & the animation engine
         agent_observations = task.agent.get_observations()
+
         self.logger.record(
             "observations/positions",
-            np.linalg.norm(agent_observations["positions"], axis=1).mean(),
+            torch.linalg.norm(agent_observations["positions"], dim=1).mean().item(),
         )
         self.logger.record(
             "observations/linear_accelerations",
-            np.linalg.norm(agent_observations["linear_accelerations"], axis=1).mean(),
+            torch.linalg.norm(agent_observations["linear_accelerations"], dim=1)
+            .mean()
+            .item(),
         )
         self.logger.record(
             "observations/linear_velocities",
-            np.linalg.norm(agent_observations["linear_velocities"], axis=1).mean(),
+            torch.linalg.norm(agent_observations["linear_velocities"], dim=1)
+            .mean()
+            .item(),
         )
         self.logger.record(
             "observations/angular_velocities",
-            np.linalg.norm(agent_observations["angular_velocities"], axis=1).mean(),
+            torch.linalg.norm(agent_observations["angular_velocities"], dim=1)
+            .mean()
+            .item(),
         )
         self.logger.record(
             "observations/projected_gravities",
-            agent_observations["projected_gravities"][:, -1].mean(),
+            agent_observations["projected_gravities"][:, -1].mean().item(),
         )
 
         return True
@@ -120,8 +127,10 @@ class NewtonBaseTask(BaseTask):
         self.agent: NewtonBaseAgent = agent
 
         self.animation_engine: AnimationEngine = animation_engine
-        self.last_actions_buf: Actions = np.zeros(
-            (2, self.num_envs, self.num_actions), dtype=np.float32
+        self.last_actions_buf: Actions = torch.zeros(
+            (2, self.num_envs, self.num_actions),
+            dtype=torch.float32,
+            device=self.device,
         )  # 2 sets of past actions, 0: t - 1, 1: t - 2
 
     @abstractmethod

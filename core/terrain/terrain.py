@@ -208,11 +208,4 @@ class BaseTerrainBuilder(ABC):
         collision_api = UsdPhysics.CollisionAPI.Apply(mesh_prim)
         collision_api.CreateCollisionEnabledAttr(True)
 
-        # contact offset needs to be set to a relatively large (~0.1) value to prevent objects clipping through (without
-        # enabling CCD)
-        # for more info, check: https://docs.omniverse.nvidia.com/extensions/latest/ext_physics/rigid-bodies.html
-        physx_collision_api = PhysxSchema.PhysxCollisionAPI.Apply(mesh_prim)
-        physx_collision_api.CreateContactOffsetAttr(0.1)
-        physx_collision_api.CreateRestOffsetAttr(0.01)
-
         return prim_path
