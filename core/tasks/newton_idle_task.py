@@ -93,15 +93,6 @@ class NewtonIdleTask(NewtonBaseTask):
 
         self.env.step(self.actions_buf)
 
-        # TODO: Integrate the animation engine into the Newton*Tasks
-        #   Update the observations & reward function accordingly
-        #   From what I currently understand, we add two observations to the observation space:
-        #    - The phase signal (0-1) of the phase progress, transformed by cos(2*pi*progress) & sin(2*pi*progress)
-        #   This would allow the model to recognize the periodicity of the animation and hopefully learn the intricacies
-        #   of each gait.
-        #   The reward function would compare desired joint positions with the current joint positions, and reward
-        #   the agent for getting closer to the desired positions.
-
         obs_buf = self._get_observations()
         self._update_rewards_and_dones()
 
@@ -171,9 +162,6 @@ class NewtonIdleTask(NewtonBaseTask):
         return obs_buf
 
     def _update_rewards_and_dones(self) -> None:
-        # TODO: rework rewards for Newton*Tasks
-        #   The current reward function is missing many features, all in comments below
-
         obs = self.env.get_observations()
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]

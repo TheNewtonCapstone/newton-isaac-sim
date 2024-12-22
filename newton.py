@@ -384,7 +384,6 @@ def main():
         inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
     )
 
-    # TODO: add a proper separate playing environment
     playing_env = NewtonMultiTerrainEnv(
         agent=newton_agent,
         num_envs=num_envs,
