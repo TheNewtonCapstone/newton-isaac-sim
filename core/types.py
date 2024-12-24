@@ -1,7 +1,6 @@
 import argparse
-from typing import Dict, Any, Callable, List, Optional, Tuple, TypedDict
+from typing import Dict, Any, Callable, List, Tuple, TypedDict, Optional
 
-import numpy as np
 import torch
 
 
@@ -44,7 +43,29 @@ NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
 
 # Meta
 Settings = Dict[str, Any]
+SettingsCollection = Dict[str, Settings]
 Indices = torch.Tensor
 
-Matter = Tuple[argparse.Namespace, Settings, Settings, Settings, Settings, Dict[
-    str, Settings], str, bool, bool, bool, bool, bool, bool, bool, bool, int, float]
+Matter = Tuple[
+    argparse.Namespace,
+    Settings,
+    Settings,
+    Settings,
+    Settings,
+    SettingsCollection,
+    str,
+    str,
+    SettingsCollection,
+    Optional[str],
+    str,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    int,
+    float,
+]
