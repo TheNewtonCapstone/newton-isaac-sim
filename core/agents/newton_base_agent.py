@@ -6,6 +6,10 @@ from core.sensors import VecIMU, VecContact
 from core.types import Actions, EnvObservations
 from core.universe import Universe
 
+# TODO: Add a command controller to the NewtonBaseAgent
+#   It would allow for control of the agent's movement through a keyboard or a controller. Any Task would be able to
+#   read the commands and use them as they see fit (i.e. to train).
+
 
 class NewtonBaseAgent(BaseAgent):
     def __init__(
