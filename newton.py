@@ -189,10 +189,10 @@ def checkpoint_select(
 ) -> Optional[Tuple[Settings, str]]:
     from core.utils.checkpoints import (
         save_runs_library,
-        build_runs_settings_from_runs_folder,
+        build_runs_library_from_runs_folder,
     )
 
-    runs_settings: Settings = build_runs_settings_from_runs_folder(runs_dir)
+    runs_settings: Settings = build_runs_library_from_runs_folder(runs_dir)
 
     save_runs_library(runs_settings, runs_dir)
 
@@ -294,7 +294,7 @@ def setup() -> Optional[Matter]:
 
     # Checkpoint
 
-    runs_settings: Settings = {}
+    runs_library: Settings = {}
     runs_dir: str = cli_args.checkpoints_dir
     current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
 
@@ -309,7 +309,7 @@ def setup() -> Optional[Matter]:
             return None
 
         if checkpoint_select_result is not None:
-            runs_settings, current_checkpoint_path = checkpoint_select_result
+            runs_library, current_checkpoint_path = checkpoint_select_result
 
     # Configs
 
@@ -351,7 +351,7 @@ def setup() -> Optional[Matter]:
         animation_clips_config,
         current_animation,
         runs_dir,
-        runs_settings,
+        runs_library,
         current_checkpoint_path,
         mode_name,
         training,
@@ -617,9 +617,16 @@ def main():
 
     from core.utils.checkpoints import (
         get_unused_run_id,
+        create_runs_library,
     )
 
     new_checkpoint_id = get_unused_run_id(runs_library)
+
+    if new_checkpoint_id is None:
+        runs_library = create_runs_library(runs_dir)
+
+        new_checkpoint_id = get_unused_run_id(runs_library)
+
     run_name = f"newton_idle_{new_checkpoint_id}"
 
     # task used for either training or playing
@@ -705,11 +712,6 @@ def main():
         model.save(f"{runs_dir}/{run_name}_0/model.zip")
 
         exit(1)
-
-    # TODO: Add mechanism to easily select a checkpoint to play
-    #   We can do an interactive CLI, autocomplete for options or an easier way to select the last checkpoint to play
-    #   in the CLI from the runs directory.
-    #   labels: enhancement, qol
 
     if playing:
         from core.utils.path import get_folder_from_path

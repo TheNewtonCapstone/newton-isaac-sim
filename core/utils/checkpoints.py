@@ -30,14 +30,16 @@ def find_all_runs_subfolders(library_folder: str) -> list[str]:
     return [folder for folder in folders if does_folder_contain_run(os.path.join(library_folder, folder))]
 
 
-def create_runs_library(runs_folder: str) -> None:
+def create_runs_library(runs_folder: str) -> Settings:
     os.makedirs(runs_folder, exist_ok=True)
 
-    runs_settings = build_runs_settings_from_runs_folder(runs_folder)
-    save_runs_library(runs_settings, runs_folder)
+    runs_library = build_runs_library_from_runs_folder(runs_folder)
+    save_runs_library(runs_library, runs_folder)
+
+    return runs_library
 
 
-def build_runs_settings_from_runs_folder(runs_folder: str) -> Settings:
+def build_runs_library_from_runs_folder(runs_folder: str) -> Settings:
     run_regex = re.compile(RUN_REGEX_STR)
     tensorboard_regex = re.compile(TENSORBOARD_REGEX_STR)
 
@@ -97,8 +99,12 @@ def build_runs_settings_from_runs_folder(runs_folder: str) -> Settings:
     return dict(sorted(run_settings.items()))
 
 
-def get_unused_run_id(runs_library: Settings) -> int:
+def get_unused_run_id(runs_library: Settings) -> Optional[int]:
     run_ids = [run["id"] for run in runs_library.values()]
+
+    if len(run_ids) == 0:
+        return None
+
     run_ids.sort()
 
     return int(run_ids[-1]) + 1

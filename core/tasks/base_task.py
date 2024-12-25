@@ -19,6 +19,24 @@ from core.universe import Universe
 
 
 class BaseTaskCallback(BaseCallback):
+    def _init_callback(self) -> None:
+        task: BaseTask = self.training_env
+
+        self.logger.record("meta/name", task.name)
+        self.logger.record("meta/agent/name", task.agent.__class__.__name__)
+
+        self.logger.record("meta/device", task.device)
+
+        self.logger.record("meta/num_envs", task.num_envs)
+        self.logger.record("meta/max_episode_length", task.max_episode_length)
+        self.logger.record("meta/rl_step_dt", task.rl_step_dt)
+
+        self.logger.record("meta/observation_space", task.observation_space)
+        self.logger.record("meta/num_observations", task.num_observations)
+        self.logger.record("meta/action_space", task.action_space)
+        self.logger.record("meta/num_actions", task.num_actions)
+        self.logger.record("meta/reward_space", task.reward_space)
+
     def _on_step(self) -> bool:
         task: BaseTask = self.training_env
 
@@ -89,7 +107,7 @@ class BaseTask(VecEnv):
 
         self.render_mode: str = "human"
 
-        super(BaseTask, self).__init__(
+        super().__init__(
             num_envs=num_envs,
             observation_space=observation_space,
             action_space=action_space,
@@ -112,8 +130,8 @@ class BaseTask(VecEnv):
         assert self._is_constructed, "Task not constructed: tried to step"
 
         return (
-            np.arange(self.num_envs),
-            np.arange(self.num_envs),
+            np.zeros(self.num_envs),
+            np.zeros(self.num_envs),
             np.zeros(self.num_envs),
             self.infos_buf,
         )
@@ -138,16 +156,13 @@ class BaseTask(VecEnv):
 
     def get_attr(self, attr_name: str, indices: VecEnvIndices = None) -> List[Any]:
         """Return attribute from vectorized environment (see base class)."""
-        target_envs = self._get_target_envs(indices)
-        return [getattr(env_i, attr_name) for env_i in target_envs]
+        return [getattr(self, attr_name)]
 
     def set_attr(
         self, attr_name: str, value: Any, indices: VecEnvIndices = None
     ) -> None:
-        """Set attribute inside vectorized environments (see base class)."""
-        target_envs = self._get_target_envs(indices)
-        for env_i in target_envs:
-            setattr(env_i, attr_name, value)
+        """Generally sets attribute inside vectorized environments (see base class). Unused."""
+        pass
 
     def env_method(
         self,
@@ -156,24 +171,15 @@ class BaseTask(VecEnv):
         indices: VecEnvIndices = None,
         **method_kwargs,
     ) -> List[Any]:
-        """Call instance methods of vectorized environments."""
-        target_envs = self._get_target_envs(indices)
-        print(f"Calling {method_name} on {len(target_envs)} environments")
-        return [
-            getattr(env_i, method_name)(*method_args, **method_kwargs)
-            for env_i in target_envs
-        ]
+        """Generally calls instance methods of vectorized environments. Unused."""
+        return []
 
     def env_is_wrapped(
         self, wrapper_class: Type[gymnasium.Wrapper], indices: VecEnvIndices = None
     ) -> List[bool]:
-        """Check if worker environments are wrapped with a given wrapper"""
-        target_envs = self._get_target_envs(indices)
-        # Import here to avoid a circular import
-        from stable_baselines3.common import env_util
-
-        return [env_util.is_wrapped(env_i, wrapper_class) for env_i in target_envs]
+        """Generally checks if worker environments are wrapped with a given wrapper. Unused."""
+        return [False]
 
     def _get_target_envs(self, indices: VecEnvIndices) -> List[gymnasium.Env]:
-        indices = self._get_indices(indices)
-        return [self.envs[i] for i in indices]
+        """Generally gets the worker environments that should be targeted by given indices. Unused."""
+        return [self]
