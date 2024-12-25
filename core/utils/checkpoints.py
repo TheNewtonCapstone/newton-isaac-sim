@@ -1,15 +1,15 @@
 import os.path
 import re
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
-import yaml
 from core.types import Settings
 
-CHECKPOINT_REGEX_STR = r"([a-zA-Z_]*)_([0-9]*)(?:_)?(?:rew_([-.0-9]*))?(?:_)?(?:step_([-.0-9]*))?"
+RUN_REGEX_STR = r"([a-zA-Z_]*)_([0-9]*)(?:_)?(?:rew_([-.0-9]*))?(?:_)?(?:step_([-.0-9]*))?"
 TENSORBOARD_REGEX_STR = r"events\.out\.tfevents\.([0-9]*)"
+TENSORBOARD_FILE_NAME_START = "events.out.tfevents"
 
 
-def does_folder_contain_checkpoint(folder: str) -> bool:
+def does_folder_contain_run(folder: str) -> bool:
     # we check if there's a file with that starts with "events.out.tfevents" in the folder
 
     if not os.path.isdir(folder):
@@ -18,89 +18,103 @@ def does_folder_contain_checkpoint(folder: str) -> bool:
     files = os.listdir(folder)
 
     for file in files:
-        if file.startswith("events.out.tfevents"):
+        if file.startswith(TENSORBOARD_FILE_NAME_START):
             return True
 
     return False
 
 
-def find_all_checkpoint_folders(library_folder: str) -> list[str]:
+def find_all_runs_subfolders(library_folder: str) -> list[str]:
     folders = os.listdir(library_folder)
 
-    return [folder for folder in folders if does_folder_contain_checkpoint(os.path.join(library_folder, folder))]
+    return [folder for folder in folders if does_folder_contain_run(os.path.join(library_folder, folder))]
 
 
-def build_checkpoint_settings_from_library_folder(library_folder: str) -> Settings:
-    checkpoint_regex = re.compile(CHECKPOINT_REGEX_STR)
+def create_runs_library(runs_folder: str) -> None:
+    os.makedirs(runs_folder, exist_ok=True)
+
+    runs_settings = build_runs_settings_from_runs_folder(runs_folder)
+    save_runs_library(runs_settings, runs_folder)
+
+
+def build_runs_settings_from_runs_folder(runs_folder: str) -> Settings:
+    run_regex = re.compile(RUN_REGEX_STR)
     tensorboard_regex = re.compile(TENSORBOARD_REGEX_STR)
 
-    checkpoint_settings: Settings = {}
+    run_settings: Settings = {}
 
-    for checkpoint_folder in find_all_checkpoint_folders(library_folder):
-        checkpoint_files = os.listdir(os.path.join(library_folder, checkpoint_folder))
+    for run_folder in find_all_runs_subfolders(runs_folder):
+        run_files = os.listdir(os.path.join(runs_folder, run_folder))
 
-        if checkpoint_regex.match(checkpoint_folder) is None:
+        if run_regex.match(run_folder) is None:
             continue
 
-        checkpoint_matches: Tuple = checkpoint_regex.findall(checkpoint_folder)[0]
-        checkpoint_id: int = int(checkpoint_matches[1])
-        checkpoint_name: str = f"{checkpoint_matches[0]}_{checkpoint_id:03}"
+        run_matches: Tuple = run_regex.findall(run_folder)[0]
+        run_id: int = int(run_matches[1])
+        run_name: str = f"{run_matches[0]}_{run_id:03}"
         date: int = -1
         count: int = -1
-        saves: List[Settings] = []
+        checkpoints: List[Settings] = []
 
-        for file in checkpoint_files:
-            if file.startswith("events.out.tfevents"):
+        for file in run_files:
+            if file.startswith(TENSORBOARD_FILE_NAME_START):
                 date = int(tensorboard_regex.match(file).group(1))
                 continue
 
             count += 1
 
             if file.endswith(".zip"):
-                saves.append({
+                checkpoints.append({
                     "reward": -1,
                     "step": -1,
-                    "path": f"{library_folder}/{checkpoint_folder}/{file}",
+                    "path": f"{runs_folder}/{run_folder}/{file}",
                 })
                 continue
 
-            if checkpoint_regex.match(file) is None:
+            if run_regex.match(file) is None:
                 continue
 
-            save_matches: Tuple = checkpoint_regex.findall(file)[0]
+            save_matches: Tuple = run_regex.findall(file)[0]
             reward: float = float(save_matches[2]) if save_matches[2] != "" else -1
             step: int = int(save_matches[3]) if save_matches[3] != "" else -1
 
-            saves.append({
+            checkpoints.append({
                 "reward": reward,
                 "step": step,
-                "path": f"{library_folder}/{checkpoint_folder}/{file}",
+                "path": f"{runs_folder}/{run_folder}/{file}",
             })
 
-        saves.sort(key=lambda x: x["reward"], reverse=False)
+        checkpoints.sort(key=lambda x: x["reward"], reverse=False)
 
-        checkpoint_settings[checkpoint_name] = {
-            "id": checkpoint_id,
+        run_settings[run_name] = {
+            "id": run_id,
             "date": date,
-            "path": f"{library_folder}/{checkpoint_folder}",
+            "path": f"{runs_folder}/{run_folder}",
             "count": count,
-            "saves": saves,
+            "checkpoints": checkpoints,
         }
 
-    return dict(sorted(checkpoint_settings.items()))
+    return dict(sorted(run_settings.items()))
 
 
-def does_checkpoints_library_exist(library_folder: str) -> bool:
-    return os.path.exists(os.path.join(library_folder, "library.yaml"))
+def get_unused_run_id(runs_library: Settings) -> int:
+    run_ids = [run["id"] for run in runs_library.values()]
+    run_ids.sort()
+
+    return int(run_ids[-1]) + 1
 
 
-def load_checkpoints_library(library_folder: str) -> Settings:
+def does_runs_library_exist(runs_folder: str) -> bool:
+    return os.path.exists(os.path.join(runs_folder, "library.yaml"))
+
+
+def load_runs_library(runs_folder: str) -> Settings:
     from .config import load_config
 
-    return load_config(os.path.join(library_folder, "library.yaml"))
+    return load_config(os.path.join(runs_folder, "library.yaml"))
 
 
-def save_checkpoints_library(library: Settings, library_folder: str) -> None:
+def save_runs_library(library: Settings, runs_folder: str) -> None:
     from .config import save_config
 
-    save_config(library, os.path.join(library_folder, "library.yaml"))
+    save_config(library, os.path.join(runs_folder, "library.yaml"))

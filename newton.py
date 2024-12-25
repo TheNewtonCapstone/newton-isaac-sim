@@ -183,25 +183,23 @@ def animation_select(
 
 
 def checkpoint_select(
-    checkpoint_dir: str,
+    runs_dir: str,
     current_checkpoint_name: Optional[str],
     required: bool,
 ) -> Optional[Tuple[Settings, str]]:
     from core.utils.checkpoints import (
-        save_checkpoints_library,
-        build_checkpoint_settings_from_library_folder,
+        save_runs_library,
+        build_runs_settings_from_runs_folder,
     )
 
-    checkpoints_library: Settings = build_checkpoint_settings_from_library_folder(
-        checkpoint_dir
-    )
+    runs_settings: Settings = build_runs_settings_from_runs_folder(runs_dir)
 
-    save_checkpoints_library(checkpoints_library, checkpoint_dir)
+    save_runs_library(runs_settings, runs_dir)
 
-    if current_checkpoint_name and current_checkpoint_name in checkpoints_library:
+    if current_checkpoint_name and current_checkpoint_name in runs_settings:
         return (
-            checkpoints_library,
-            checkpoints_library[current_checkpoint_name]["saves"][-1]["path"],
+            runs_settings,
+            runs_settings[current_checkpoint_name]["saves"][-1]["path"],
         )
 
     from bullet import Input, YesNo
@@ -216,19 +214,19 @@ def checkpoint_select(
             return None
 
     cli = Input(
-        prompt="Please enter a checkpoint name: ",
-        default=list(checkpoints_library.keys())[-1],
+        prompt="Please enter a run name: ",
+        default=list(runs_settings.keys())[-1],
         strip=True,
     )
 
     selected_checkpoint_name = ""
 
-    while selected_checkpoint_name not in checkpoints_library:
+    while selected_checkpoint_name not in runs_settings:
         selected_checkpoint_name = cli.launch()
 
     return (
-        checkpoints_library,
-        checkpoints_library[selected_checkpoint_name]["saves"][-1]["path"],
+        runs_settings,
+        runs_settings[selected_checkpoint_name]["saves"][-1]["path"],
     )
 
 
@@ -296,8 +294,8 @@ def setup() -> Optional[Matter]:
 
     # Checkpoint
 
-    checkpoints_library: Settings = {}
-    checkpoints_dir: str = cli_args.checkpoints_dir
+    runs_settings: Settings = {}
+    runs_dir: str = cli_args.checkpoints_dir
     current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
 
     if (training or playing or exporting) and current_checkpoint_path is None:
@@ -311,7 +309,7 @@ def setup() -> Optional[Matter]:
             return None
 
         if checkpoint_select_result is not None:
-            checkpoints_library, current_checkpoint_path = checkpoint_select_result
+            runs_settings, current_checkpoint_path = checkpoint_select_result
 
     # Configs
 
@@ -352,8 +350,8 @@ def setup() -> Optional[Matter]:
         randomization_config,
         animation_clips_config,
         current_animation,
-        checkpoints_dir,
-        checkpoints_library,
+        runs_dir,
+        runs_settings,
         current_checkpoint_path,
         mode_name,
         training,
@@ -384,8 +382,8 @@ def main():
         randomization_config,
         animation_clips_config,
         current_animation,
-        checkpoints_dir,
-        checkpoints_library,
+        runs_dir,
+        runs_library,
         current_checkpoint_path,
         mode_name,
         training,
@@ -617,12 +615,12 @@ def main():
     #   the task, the environment, etc. We would also have a way to easily load the last run, or a specific run.
     #   labels: enhancement
 
-    from core.utils.path import build_child_path_with_prefix
-
-    task_name = build_child_path_with_prefix(
-        rl_config["task_name"],
-        checkpoints_dir,
+    from core.utils.checkpoints import (
+        get_unused_run_id,
     )
+
+    new_checkpoint_id = get_unused_run_id(runs_library)
+    run_name = f"newton_idle_{new_checkpoint_id}"
 
     # task used for either training or playing
     task = NewtonIdleTask(
@@ -638,7 +636,7 @@ def main():
     )
     callback = NewtonBaseTaskCallback(
         check_freq=64,
-        save_path=task_name,
+        save_path=run_name,
     )
 
     task.construct(universe)
@@ -690,7 +688,7 @@ def main():
             use_sde=rl_config["ppo"]["use_sde"],
             sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
             target_kl=rl_config["ppo"]["target_kl"],
-            tensorboard_log=checkpoints_dir,
+            tensorboard_log=runs_dir,
             policy_kwargs=policy_kwargs,
         )
 
@@ -699,12 +697,12 @@ def main():
 
         model.learn(
             total_timesteps=rl_config["timesteps_per_env"] * num_envs,
-            tb_log_name=task_name,
+            tb_log_name=run_name,
             reset_num_timesteps=False,
             progress_bar=True,
             callback=callback,
         )
-        model.save(f"{checkpoints_dir}/{task_name}_1/model.zip")
+        model.save(f"{runs_dir}/{run_name}_0/model.zip")
 
         exit(1)
 
