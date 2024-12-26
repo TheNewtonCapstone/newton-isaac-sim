@@ -1,27 +1,18 @@
 import argparse
-from typing import List, Optional, Dict
+from typing import List, Optional, Tuple
 
-import numpy as np
-from stable_baselines3 import PPO
-from stable_baselines3.common.policies import BasePolicy
-
-import torch
-from core.types import Matter, Settings
-from core.utils.config import load_config
-from core.utils.math import IDENTITY_QUAT
+from core.types import Matter, Settings, SettingsCollection
 
 
 def setup_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="newton.py", description="Entrypoint for any Newton-related actions."
+        prog="newton.py",
+        description="Entrypoint for any Newton-related actions.",
     )
     parser.add_argument(
-        "--headless", action="store_true", help="Run in headless mode.", default=False
-    )
-    parser.add_argument(
-        "--physics",
+        "--headless",
         action="store_true",
-        help="Run the simulation only (no RL).",
+        help="Run in headless mode.",
         default=False,
     )
     parser.add_argument(
@@ -55,10 +46,40 @@ def setup_argparser() -> argparse.ArgumentParser:
         default="assets/newton/animations",
     )
     parser.add_argument(
-        "--checkpoint",
+        "--checkpoints-dir",
         type=str,
-        help="Path to the checkpoint to load for RL.",
+        help="Path to the directory containing checkpoints.",
+        default="runs",
+    )
+    parser.add_argument(
+        "--checkpoint-path",
+        type=str,
+        help="Path to the checkpoint file to load (for RL or exporting).",
         default=None,
+    )
+    parser.add_argument(
+        "--checkpoint-name",
+        type=str,
+        help="Name of the checkpoint to load.",
+        default=None,
+    )
+    parser.add_argument(
+        "--animation-name",
+        type=str,
+        help="Name of the animation to load (for RL or animating).",
+        default=None,
+    )
+    parser.add_argument(
+        "--num-envs",
+        type=int,
+        help="Number of environments to run (will be read from the rl-config if not specified).",
+        default=-1,
+    )
+    parser.add_argument(
+        "--train",
+        action="store_true",
+        help="Train the agent using an optional checkpoint.",
+        default=False,
     )
     parser.add_argument(
         "--play",
@@ -67,16 +88,16 @@ def setup_argparser() -> argparse.ArgumentParser:
         default=False,
     )
     parser.add_argument(
-        "--animation",
-        type=str,
+        "--animate",
+        action="store_true",
         help="Animate the agent using a parsed animation file.",
-        default=None,
+        default=False,
     )
     parser.add_argument(
-        "--num-envs",
-        type=int,
-        help="Number of environments to run (will be read from the rl-config if not specified).",
-        default=-1,
+        "--physics",
+        action="store_true",
+        help="Run the simulation only (no RL).",
+        default=False,
     )
     parser.add_argument(
         "--export-onnx",
@@ -88,50 +109,218 @@ def setup_argparser() -> argparse.ArgumentParser:
     return parser
 
 
-def animation_setting_files_to_clips(
-    files: List[str],
-) -> Dict[str, Settings]:
-    clips = {}
+def mode_select(modes: List[str]) -> Tuple[str, int]:
+    from bullet import Bullet
 
-    for file in files:
-        clip = load_config(file)
-        clips[clip["name"]] = clip
+    cli = Bullet(
+        prompt="Please select a mode:",
+        choices=modes,
+        align=2,
+        margin=1,
+        return_index=True,
+    )
 
-    return clips
+    return cli.launch()
+
+
+# TODO: Implement selection of tasks (e.g. NewtonIdleTask, NewtonWalkTask, etc.)
+#   We can read the tasks from a directory and offer that as a selection to the user.
+def task_select():
+    pass
+
+
+def animation_select(
+    animation_config_dir: str,
+    current_animation_name: Optional[str],
+) -> Optional[Tuple[SettingsCollection, str]]:
+    from core.utils.path import get_files_with_extension
+    from core.utils.config import animation_configs_to_clips_settings
+
+    # discover animations in directory
+    animation_configs_filenames = get_files_with_extension(
+        animation_config_dir, ".yaml"
+    )
+    animation_configs_paths = [
+        f"{animation_config_dir}/{f}" for f in animation_configs_filenames
+    ]
+
+    if len(animation_configs_paths) == 0:
+        print(f"No animation files found in {animation_config_dir}.")
+        return None
+
+    # load animation clips settings from config files
+    animation_clips_settings = animation_configs_to_clips_settings(
+        animation_configs_paths
+    )
+
+    # discard any duplicate animation clips by name, taking the last one
+    animation_clips_settings = {
+        clip["name"]: clip for clip in animation_clips_settings.values()
+    }
+    animation_clips_names = [clip["name"] for clip in animation_clips_settings.values()]
+
+    # use the specified animation if it exists
+    if current_animation_name and current_animation_name in animation_clips_settings:
+        return animation_clips_settings, current_animation_name
+
+    from bullet import Bullet
+
+    # otherwise, ask the user to manually select an animation
+    cli = Bullet(
+        prompt="Please select an animation:",
+        choices=animation_clips_names,
+        align=2,
+        margin=1,
+        return_index=True,
+    )
+
+    selected_animation_name, selected_animation_idx = cli.launch()
+
+    return (
+        animation_clips_settings,
+        list(animation_clips_settings.values())[selected_animation_idx]["name"],
+    )
+
+
+def checkpoint_select(
+    runs_dir: str,
+    current_checkpoint_name: Optional[str],
+    required: bool,
+) -> Optional[Tuple[Settings, str]]:
+    from core.utils.checkpoints import (
+        save_runs_library,
+        build_runs_library_from_runs_folder,
+    )
+
+    runs_settings: Settings = build_runs_library_from_runs_folder(runs_dir)
+
+    save_runs_library(runs_settings, runs_dir)
+
+    if current_checkpoint_name and current_checkpoint_name in runs_settings:
+        return (
+            runs_settings,
+            runs_settings[current_checkpoint_name]["saves"][-1]["path"],
+        )
+
+    from bullet import Input, YesNo
+
+    if not required:
+        cli = YesNo(
+            prompt="Would you like to select a checkpoint? ",
+            default="n",
+        )
+
+        if not cli.launch():
+            return None
+
+    cli = Input(
+        prompt="Please enter a run name: ",
+        default=list(runs_settings.keys())[-1],
+        strip=True,
+    )
+
+    selected_checkpoint_name = ""
+
+    while selected_checkpoint_name not in runs_settings:
+        selected_checkpoint_name = cli.launch()
+
+    return (
+        runs_settings,
+        runs_settings[selected_checkpoint_name]["saves"][-1]["path"],
+    )
 
 
 def setup() -> Optional[Matter]:
-    from core.utils.path import get_files_with_extension
+    from core.utils.config import load_config
 
     parser = setup_argparser()
 
     # General Configs
     cli_args, _ = parser.parse_known_args()
+
+    # Control Flags
+    training = cli_args.train
+    playing = cli_args.play
+    animating = cli_args.animate
+    physics_only = cli_args.physics
+    exporting = cli_args.export_onnx
+
+    _modes = {
+        "Training": training,
+        "Playing": playing,
+        "Animating": animating,
+        "Physics Only": physics_only,
+        "Exporting": exporting,
+    }
+
+    none_selected = sum(_modes.values()) == 0
+    multiple_selected = sum(_modes.values()) > 1
+
+    if multiple_selected:
+        print(
+            "Only one of training, playing, animating, physics or exporting can be set."
+        )
+        return None
+    elif none_selected:
+        mode_name, mode_idx = mode_select(list(_modes.keys()))
+
+        training = mode_idx == 0
+        playing = mode_idx == 1
+        animating = mode_idx == 2
+        physics_only = mode_idx == 3
+        exporting = mode_idx == 4
+    else:
+        _modes_list = list(_modes.values())
+        _modes_flag_idx = _modes_list.index(True)
+
+        mode_name = list(_modes.keys())[_modes_flag_idx]
+
+    # Animation
+
+    animation_clips_config: Settings = {}
+    current_animation: Optional[str] = None
+
+    if animating or training or playing:
+        animation_select_result = animation_select(
+            cli_args.animations_dir,
+            cli_args.animation_name,
+        )
+
+        # We failed to find an animation, exit
+        if animation_select_result is None:
+            return None
+
+        animation_clips_config, current_animation = animation_select_result
+
+    # Checkpoint
+
+    runs_library: Settings = {}
+    runs_dir: str = cli_args.checkpoints_dir
+    current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
+
+    if (training or playing or exporting) and current_checkpoint_path is None:
+        checkpoint_select_result = checkpoint_select(
+            cli_args.checkpoints_dir,
+            cli_args.checkpoint_name,
+            required=not training,
+        )
+
+        if checkpoint_select_result is None and (playing or exporting):
+            return None
+
+        if checkpoint_select_result is not None:
+            runs_library, current_checkpoint_path = checkpoint_select_result
+
+    # Configs
+
     robot_config = load_config(cli_args.robot_config)
     rl_config = load_config(cli_args.rl_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
 
-    # Animations
-    animation_config_dir = cli_args.animations_dir
-    animation_config = [
-        f"{animation_config_dir}/{f}"
-        for f in get_files_with_extension(animation_config_dir, ".yaml")
-    ]
+    # Helper flags
 
-    if len(animation_config) == 0:
-        print(f"No animation files found in {animation_config_dir}.")
-
-    animation_clips_config = animation_setting_files_to_clips(animation_config)
-    current_animation = cli_args.animation
-
-    # Control Flags
-    animating = current_animation is not None
-    physics_only = cli_args.physics
-    exporting = cli_args.export_onnx
-    is_rl = not physics_only and not animating and not exporting
-    playing = is_rl and cli_args.play
-    training = is_rl and not cli_args.play
+    is_rl = training or playing
     headless = (
         cli_args.headless or cli_args.export_onnx
     )  # if we're exporting, don't show the GUI
@@ -149,13 +338,6 @@ def setup() -> Optional[Matter]:
     if interactive:
         world_config["sim_params"]["enable_scene_query_support"] = True
 
-    # ensure proper config reading when encountering None
-    if rl_config["ppo"]["clip_range_vf"] == "None":
-        rl_config["ppo"]["clip_range_vf"] = None
-
-    if rl_config["ppo"]["target_kl"] == "None":
-        rl_config["ppo"]["target_kl"] = None
-
     control_step_dt = (
         rl_config["newton"]["inverse_control_frequency"] * world_config["physics_dt"]
     )
@@ -168,12 +350,16 @@ def setup() -> Optional[Matter]:
         randomization_config,
         animation_clips_config,
         current_animation,
+        runs_dir,
+        runs_library,
+        current_checkpoint_path,
+        mode_name,
+        training,
+        playing,
         animating,
         physics_only,
-        is_rl,
         exporting,
-        playing,
-        training,
+        is_rl,
         interactive,
         headless,
         num_envs,
@@ -196,12 +382,16 @@ def main():
         randomization_config,
         animation_clips_config,
         current_animation,
+        runs_dir,
+        runs_library,
+        current_checkpoint_path,
+        mode_name,
+        training,
+        playing,
         animating,
         physics_only,
-        is_rl,
         exporting,
-        playing,
-        training,
+        is_rl,
         interactive,
         headless,
         num_envs,
@@ -210,9 +400,12 @@ def main():
 
     print(
         f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n",
-        f"{'Exporting ONNX' if exporting else 'Playing' if playing else 'Training' if training else 'Animating' if animating else 'Physiccing'}.\n",
+        f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n",
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
+
+    import torch
+    import numpy as np
 
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
@@ -236,6 +429,8 @@ def main():
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
+
+    from core.utils.math import IDENTITY_QUAT
 
     imu = VecIMU(
         universe=universe,
@@ -296,14 +491,14 @@ def main():
 
         animation_engine.construct(current_animation)
 
-        joints_names = joints_controller.art_view.joint_names
+        ordered_dof_names = joints_controller.art_view.dof_names
 
         # this is very specific to Newton, because we know that it takes joint positions and the animation engine
         # provides that exactly; a different robot or different control mode would probably require a different approach
         while universe.is_playing:
             joint_data = animation_engine.get_multiple_clip_data_at_seconds(
                 torch.tensor([universe.current_time]),
-                joints_names,
+                ordered_dof_names,
             )
 
             # index 7 is the joint position (angle in degrees)
@@ -384,7 +579,6 @@ def main():
         inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
     )
 
-    # TODO: add a proper separate playing environment
     playing_env = NewtonMultiTerrainEnv(
         agent=newton_agent,
         num_envs=num_envs,
@@ -416,12 +610,24 @@ def main():
         inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
     )
 
-    from core.utils.path import build_child_path_with_prefix
+    # TODO: Improve the way we save runs
+    #   Maybe have a database? Or a file that keeps track of all runs with some metadata, like the date, the agent used,
+    #   the task, the environment, etc. We would also have a way to easily load the last run, or a specific run.
+    #   labels: enhancement
 
-    task_runs_directory = "runs"
-    task_name = build_child_path_with_prefix(
-        rl_config["task_name"], task_runs_directory
+    from core.utils.checkpoints import (
+        get_unused_run_id,
+        create_runs_library,
     )
+
+    new_checkpoint_id = get_unused_run_id(runs_library)
+
+    if new_checkpoint_id is None:
+        runs_library = create_runs_library(runs_dir)
+
+        new_checkpoint_id = get_unused_run_id(runs_library)
+
+    run_name = f"newton_idle_{new_checkpoint_id}"
 
     # task used for either training or playing
     task = NewtonIdleTask(
@@ -437,10 +643,13 @@ def main():
     )
     callback = NewtonBaseTaskCallback(
         check_freq=64,
-        save_path=task_name,
+        save_path=run_name,
     )
 
     task.construct(universe)
+
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.policies import BasePolicy
 
     # we're not exporting nor purely simulating, so we're training
     if training:
@@ -486,33 +695,35 @@ def main():
             use_sde=rl_config["ppo"]["use_sde"],
             sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
             target_kl=rl_config["ppo"]["target_kl"],
-            tensorboard_log=task_runs_directory,
+            tensorboard_log=runs_dir,
             policy_kwargs=policy_kwargs,
         )
 
-        if cli_args.checkpoint is not None:
-            model = PPO.load(cli_args.checkpoint, task, device=rl_config["device"])
+        if current_checkpoint_path is not None:
+            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
 
         model.learn(
             total_timesteps=rl_config["timesteps_per_env"] * num_envs,
-            tb_log_name=task_name,
+            tb_log_name=run_name,
             reset_num_timesteps=False,
             progress_bar=True,
             callback=callback,
         )
-        model.save(f"{task_runs_directory}/{task_name}_1/model.zip")
+        model.save(f"{runs_dir}/{run_name}_0/model.zip")
 
         exit(1)
 
     if playing:
         from core.utils.path import get_folder_from_path
 
-        model = PPO.load(cli_args.checkpoint)
+        model = PPO.load(current_checkpoint_path)
 
         actions = model.predict(task.reset()[0], deterministic=True)[0]
         actions = np.array([actions])  # make sure we have a 2D tensor
 
-        log_file = open(f"{get_folder_from_path(cli_args.checkpoint)}/playing.csv", "w")
+        log_file = open(
+            f"{get_folder_from_path(current_checkpoint_path)}/playing.csv", "w"
+        )
         print("time,dt,roll,action1,action2", file=log_file)
 
         while universe.is_playing:
@@ -534,7 +745,7 @@ def main():
     # ----------- #
 
     # Load model from checkpoint
-    model = PPO.load(cli_args.checkpoint, device="cpu")
+    model = PPO.load(current_checkpoint_path, device="cpu")
 
     # Create dummy observations tensor for tracing torch model
     obs_shape = model.observation_space.shape
@@ -557,13 +768,13 @@ def main():
     torch.onnx.export(
         onnxable_model,
         dummy_input,
-        f"{cli_args.checkpoint}.onnx",
+        f"{current_checkpoint_path}.onnx",
         verbose=True,
         input_names=["observations"],
         output_names=["actions"],
     )  # outputs are mu (actions), sigma, value
 
-    print(f"Exported to {cli_args.checkpoint}.onnx!")
+    print(f"Exported to {current_checkpoint_path}.onnx!")
 
 
 if __name__ == "__main__":

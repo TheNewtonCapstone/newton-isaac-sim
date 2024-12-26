@@ -10,6 +10,8 @@ defaults:
     dynamic_friction: 1.0
     restitution: 0.0
 
+  # TODO: Add gravity as a config parameter
+
 # the following overrides what is in assets/physics.usd
 sim_params:
   substeps: 1

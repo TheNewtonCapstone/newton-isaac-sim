@@ -15,7 +15,7 @@ class BaseTaskWrapper(VecEnvWrapper):
 
     @abstractmethod
     def step_async(self, actions: Actions) -> None:
-        super().step_async(actions)
+        super().step_async(actions.cpu().numpy())
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:

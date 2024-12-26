@@ -19,3 +19,5 @@ jobs:
         with:
           CLOSE_ISSUES: false
           AUTO_ASSIGN: true
+          PROJECT: "organization/TheNewtonCapstone/TheNewtonCapstone"
+          PROJECTS_SECRET: "${{ secrets.PROJECTS_SECRET }}"

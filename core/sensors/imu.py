@@ -6,6 +6,9 @@ from core.universe import Universe
 from omni.isaac.core.prims import RigidPrimView
 from torch import Tensor
 
+# TODO: Wrap sensors in a ROS2 node for easy integration
+#   This would allow for easy logging of commands, sensor data, etc. all within the ROS2 ecosystem.
+
 
 class VecIMU:
     def __init__(

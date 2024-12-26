@@ -1,11 +1,18 @@
 import argparse
-from typing import Dict, Any, Callable, List, Optional, Tuple, TypedDict
+from typing import Dict, Any, Callable, List, Tuple, TypedDict, Optional
 
-import numpy as np
 import torch
 
+
 # Sensors
-IMUData = Dict[str, torch.Tensor]
+class IMUData(TypedDict):
+    positions: torch.Tensor
+    rotations: torch.Tensor
+    linear_velocities: torch.Tensor
+    linear_accelerations: torch.Tensor
+    angular_accelerations: torch.Tensor
+    angular_velocities: torch.Tensor
+    projected_gravities: torch.Tensor
 
 
 class ContactData(TypedDict):
@@ -36,7 +43,29 @@ NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
 
 # Meta
 Settings = Dict[str, Any]
+SettingsCollection = Dict[str, Settings]
 Indices = torch.Tensor
 
-Matter = Tuple[argparse.Namespace, Settings, Settings, Settings, Settings, Dict[
-    str, Settings], str, bool, bool, bool, bool, bool, bool, bool, bool, int, float]
+Matter = Tuple[
+    argparse.Namespace,
+    Settings,
+    Settings,
+    Settings,
+    Settings,
+    SettingsCollection,
+    str,
+    str,
+    SettingsCollection,
+    Optional[str],
+    str,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    bool,
+    int,
+    float,
+]

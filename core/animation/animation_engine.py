@@ -84,13 +84,6 @@ class AnimationEngine:
 
         self._is_constructed = True
 
-    # TODO: Rename AnimationEngine functions to more sensible names
-    #   This is getting out of hand
-
-    # TODO: Add a relative_angle velocity getter function
-    #   This will be useful for calculating the relative angle velocity and move current newton_idle_task logic
-    #   to AnimationEngine, where it should be!
-
     def get_multiple_clip_data_at_seconds(
         self,
         seconds: Progress,

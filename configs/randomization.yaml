@@ -1,3 +1,5 @@
+# TODO: Revamp the randomization config to be closer to how the DomainRandomizer works. It's mainly a question of removing some properties and only keeping the ones that are actually used.
+
 randomize: True
 randomization_params:
   frequency: 256   # Define how many environment steps between generating new randomizations

@@ -70,7 +70,6 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
                     [
                         terrain_spawn_position[0],
                         terrain_spawn_position[1],
-                        # TODO: make this a better computed value
                         0.4 + self.terrain_builds[i].height,
                     ]
                 )
@@ -92,8 +91,6 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         self._universe.reset()
 
     def step(self, actions: Actions) -> None:
-        self.agent.step(actions)  # has to be before the simulation advances
-
         super().step(actions)  # advances the simulation by one step
 
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
