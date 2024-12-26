@@ -46,7 +46,13 @@ def setup_argparser() -> argparse.ArgumentParser:
         default="assets/newton/animations",
     )
     parser.add_argument(
-        "--checkpoints-dir",
+        "--animation-name",
+        type=str,
+        help="Name of the animation to load (for RL or animating).",
+        default=None,
+    )
+    parser.add_argument(
+        "--runs-dir",
         type=str,
         help="Path to the directory containing checkpoints.",
         default="runs",
@@ -58,22 +64,28 @@ def setup_argparser() -> argparse.ArgumentParser:
         default=None,
     )
     parser.add_argument(
-        "--checkpoint-name",
+        "--run-name",
         type=str,
-        help="Name of the checkpoint to load.",
+        help="Name of the run to load (for RL or exporting; will select highest reward checkpoint within).",
         default=None,
     )
     parser.add_argument(
-        "--animation-name",
-        type=str,
-        help="Name of the animation to load (for RL or animating).",
-        default=None,
+        "--no-checkpoint",
+        action="store_true",
+        help="Skip any checkpoint loading logic (will fail when playing or exporting).",
+        default=False,
     )
     parser.add_argument(
         "--num-envs",
         type=int,
         help="Number of environments to run (will be read from the rl-config if not specified).",
         default=-1,
+    )
+    parser.add_argument(
+        "--disable-ros2",
+        action="store_true",
+        help="Enable ROS2 support.",
+        default=False,
     )
     parser.add_argument(
         "--train",
@@ -295,12 +307,21 @@ def setup() -> Optional[Matter]:
     # Checkpoint
 
     runs_library: Settings = {}
-    runs_dir: str = cli_args.checkpoints_dir
+    runs_dir: str = cli_args.runs_dir
     current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
+    no_checkpoint = cli_args.no_checkpoint
 
-    if (training or playing or exporting) and current_checkpoint_path is None:
+    if (playing or exporting) and no_checkpoint:
+        print("No checkpoint specified for playing or exporting.")
+        return None
+
+    if (
+        (training or playing or exporting)
+        and current_checkpoint_path is None
+        and not no_checkpoint
+    ):
         checkpoint_select_result = checkpoint_select(
-            cli_args.checkpoints_dir,
+            runs_dir,
             cli_args.checkpoint_name,
             required=not training,
         )
@@ -327,6 +348,7 @@ def setup() -> Optional[Matter]:
     interactive = not headless and (
         physics_only or playing or animating
     )  # interactive means that the user is expected to control the agent in some way
+    enable_ros2 = cli_args.disable_ros2
 
     # override some config with CLI num_envs, if specified
     num_envs = rl_config["n_envs"]
@@ -362,6 +384,7 @@ def setup() -> Optional[Matter]:
         is_rl,
         interactive,
         headless,
+        enable_ros2,
         num_envs,
         control_step_dt,
     )
@@ -394,6 +417,7 @@ def main():
         is_rl,
         interactive,
         headless,
+        enable_ros2,
         num_envs,
         control_step_dt,
     ) = base_matter
@@ -410,7 +434,7 @@ def main():
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
 
-    universe = big_bang({"headless": headless}, world_config)
+    universe = big_bang({"headless": headless}, world_config, disable_ros2=enable_ros2)
 
     # only now can we import the rest of the modules
     from core.universe import Universe

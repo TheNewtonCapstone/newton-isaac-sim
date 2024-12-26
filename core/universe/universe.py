@@ -15,11 +15,13 @@ class Universe(SimulationContext):
         headless: bool,
         sim_app: SimulationApp,
         world_settings: Settings,
+        ros2_disabled: bool = False,
     ):
         self.sim_app: SimulationApp = sim_app
         self._world_settings: Settings = world_settings
 
         self._headless = headless
+        self._ros2_disabled = ros2_disabled
 
         if self.has_gui:
             from omni.kit.viewport.utility import get_active_viewport
@@ -44,6 +46,10 @@ class Universe(SimulationContext):
     @property
     def headless(self) -> bool:
         return self._headless
+
+    @property
+    def ros2_disabled(self) -> bool:
+        return self._ros2_disabled
 
     @property
     def has_gui(self) -> bool:

@@ -66,6 +66,7 @@ Matter = Tuple[
     bool,
     bool,
     bool,
+    bool,
     int,
     float,
 ]

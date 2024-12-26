@@ -25,8 +25,14 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
         self.cumulative_rewards: Tensor = torch.zeros((0,))
 
     def _init_callback(self) -> None:
+        super()._init_callback()
+
+        task: NewtonBaseTask = self.training_env
+
         if self.save_path is not None:
             self.model.save(f"{self.logger.dir}/{self.save_path}")
+
+        self.cumulative_rewards = torch.zeros((task.num_envs,), device=task.device)
 
     def _on_step(self) -> bool:
         super()._on_step()

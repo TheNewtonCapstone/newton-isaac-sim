@@ -9,6 +9,15 @@ if [ "$#" -ne 2 ]; then
     exit 1
 fi
 
+# Check if at root directory of the project
+ROOT_PRJ_DIRECTORY=$(git rev-parse --show-toplevel)
+
+if [ ! -f "scripts/keyframe_extractor.sh" ]; then
+    echo "Please run this script from the root directory of the project (${ROOT_PRJ_DIRECTORY})."
+    exit 1
+fi
+
+
 BLEND_FILE=$1
 OUTPUT_DIR=$2
 if [ ! -f "$BLEND_FILE" ]; then
