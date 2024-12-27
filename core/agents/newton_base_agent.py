@@ -2,7 +2,7 @@ from abc import abstractmethod
 
 from core.agents import BaseAgent
 from core.controllers import VecJointsController
-from core.sensors import VecIMU, VecContact
+from core.sensors import VecContact, VecIMU
 from core.types import Actions, EnvObservations
 from core.universe import Universe
 
@@ -36,6 +36,17 @@ class NewtonBaseAgent(BaseAgent):
         super().step(actions)
 
         self.joints_controller.step(actions)
+
+        if self._universe.ros2_enabled:
+            from core.ros import BaseNode
+
+            # we sync the step of the ROS nodes with the agent's step, therefore the RL step
+
+            if isinstance(self.imu, BaseNode):
+                self.imu.step()
+
+            if isinstance(self.contact_sensor, BaseNode):
+                self.contact_sensor.step()
 
     @abstractmethod
     def get_observations(self) -> EnvObservations:

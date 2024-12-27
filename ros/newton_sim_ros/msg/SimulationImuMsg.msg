@@ -1,12 +1,12 @@
 std_msgs/Header header
 
 geometry_msgs/Vector3 position
-geometry_msgs/Quaternion orientation
+geometry_msgs/Vector3 rotation
 
-geometry_msgs/Vector3 linear_velocities
-geometry_msgs/Vector3 linear_accelerations
+geometry_msgs/Vector3 linear_velocity
+geometry_msgs/Vector3 linear_acceleration
 
-geometry_msgs/Vector3 angular_velocities
-geometry_msgs/Vector3 angular_accelerations
+geometry_msgs/Vector3 angular_velocity
+geometry_msgs/Vector3 angular_acceleration
 
 geometry_msgs/Vector3 projected_gravity

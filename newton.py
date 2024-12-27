@@ -348,7 +348,7 @@ def setup() -> Optional[Matter]:
     interactive = not headless and (
         physics_only or playing or animating
     )  # interactive means that the user is expected to control the agent in some way
-    enable_ros2 = cli_args.disable_ros2
+    enable_ros2 = not cli_args.disable_ros2
 
     # override some config with CLI num_envs, if specified
     num_envs = rl_config["n_envs"]
@@ -434,7 +434,7 @@ def main():
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
 
-    universe = big_bang({"headless": headless}, world_config, disable_ros2=enable_ros2)
+    universe = big_bang({"headless": headless}, world_config, enable_ros2=enable_ros2)
 
     # only now can we import the rest of the modules
     from core.universe import Universe
@@ -456,23 +456,38 @@ def main():
 
     from core.utils.math import IDENTITY_QUAT
 
-    imu = VecIMU(
-        universe=universe,
-        local_position=torch.zeros((num_envs, 3)),
-        local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
-        noise_function=lambda x: x,
-    )
+    if enable_ros2:
+        from core.sensors import ROSVecIMU, ROSVecContact
+
+        imu = ROSVecIMU(
+            universe=universe,
+            local_position=torch.zeros((num_envs, 3)),
+            local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
+            noise_function=lambda x: x,
+        )
+
+        contact_sensor = ROSVecContact(
+            universe=universe,
+            num_contact_sensors_per_agent=4,
+        )
+    else:
+        imu = VecIMU(
+            universe=universe,
+            local_position=torch.zeros((num_envs, 3)),
+            local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
+            noise_function=lambda x: x,
+        )
+
+        contact_sensor = VecContact(
+            universe=universe,
+            num_contact_sensors_per_agent=4,
+        )
 
     joints_controller = VecJointsController(
         universe=universe,
         joint_position_limits=robot_config["joints"]["limits"]["positions"],
         joint_velocity_limits=robot_config["joints"]["limits"]["velocities"],
         noise_function=lambda x: x,
-    )
-
-    contact_sensor = VecContact(
-        universe=universe,
-        num_contact_sensors_per_agent=4,
     )
 
     newton_agent = NewtonVecAgent(
