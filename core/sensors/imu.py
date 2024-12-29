@@ -225,7 +225,11 @@ class VecIMU:
 
         # store pose
         self._positions = positions
+
         rolls, pitches, yaws = get_euler_xyz(orientations, True)
+        rolls = torch.rad2deg(rolls)
+        pitches = torch.rad2deg(pitches)
+        yaws = torch.rad2deg(yaws)
         self._rotations = torch.stack([rolls, pitches, yaws], dim=-1)
 
         # store velocities

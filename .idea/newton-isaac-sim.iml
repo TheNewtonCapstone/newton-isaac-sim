@@ -347,6 +347,7 @@
       <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extsPhysics/omni.usdphysics" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extscache/omni.timeline-1.0.10+10a4b5c0.lx64.r.cp310" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/ros/newton_sim_ros/install/newton_sim_ros/lib/python3.10/site-packages" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/ros/newton_ros/install/newton_ros/lib/python3.10/site-packages" isTestSource="false" />
     </content>
     <orderEntry type="jdk" jdkName="isaac-sim" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

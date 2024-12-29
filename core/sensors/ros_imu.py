@@ -1,11 +1,9 @@
 from rclpy.qos import QoSProfile
-from torch import Tensor
 
 from newton_sim_ros.msg import SimulationImuMsg
+from newton_ros.msg import ImuMsg
 from .imu import VecIMU as BaseVecIMU
 from ..ros import BaseSimRealNode
-from ..types import NoiseFunction
-from ..universe import Universe
 
 
 class ROSVecIMU(BaseVecIMU, BaseSimRealNode):
@@ -32,7 +30,7 @@ class ROSVecIMU(BaseVecIMU, BaseSimRealNode):
             node_name,
             SimulationImuMsg,
             pub_sim_topic,
-            SimulationImuMsg,
+            ImuMsg,
             pub_real_topic,
             namespace,
             pub_period,
@@ -52,6 +50,7 @@ class ROSVecIMU(BaseVecIMU, BaseSimRealNode):
 
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = f"imu_frame_{self._universe.current_time_step_index}"
+
         msg.position.x = data["positions"][0, 0].item()
         msg.position.y = data["positions"][0, 1].item()
         msg.position.z = data["positions"][0, 2].item()
@@ -75,3 +74,17 @@ class ROSVecIMU(BaseVecIMU, BaseSimRealNode):
         msg.projected_gravity.z = data["projected_gravities"][0, 2].item()
 
         self._indexed_publishers[self._pub_sim_topic].publish(msg)
+
+        if self._pub_real_topic is not None:
+            real_msg = ImuMsg()
+
+            real_msg.header.stamp = msg.header.stamp
+            real_msg.header.frame_id = msg.header.frame_id
+
+            real_msg.rotation = msg.rotation
+            real_msg.linear_velocity = msg.linear_velocity
+            real_msg.angular_velocity = msg.angular_velocity
+            real_msg.linear_acceleration = msg.linear_acceleration
+            real_msg.angular_acceleration = msg.angular_acceleration
+
+            self._indexed_publishers[self._pub_real_topic].publish(real_msg)
