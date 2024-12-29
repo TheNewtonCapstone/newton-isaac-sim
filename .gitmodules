@@ -1,0 +1,6 @@
+[submodule "ros/newton_ros"]
+	path = ros/newton_ros
+	url = https://github.com/TheNewtonCapstone/newton_ros
+[submodule "ros/newton_sim_ros"]
+	path = ros/newton_sim_ros
+	url = https://github.com/TheNewtonCapstone/newton_sim_ros
