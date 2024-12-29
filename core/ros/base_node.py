@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Type, Optional
+from typing import Type, List, Dict
 
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
@@ -11,12 +11,12 @@ class BaseNode(Node):
     def __init__(
         self,
         universe: Universe,
-        publishing_msg_type: Type,
         node_name: str,
-        publishing_topic: str,
-        namespace: str = "sim",
-        publishing_frequency: float = 5.0,
-        publishing_qos_profile: QoSProfile = QoSProfile(depth=0),
+        pub_msg_types: List[Type],
+        pub_topics: List[str],
+        namespace: str,
+        pub_period: int,
+        pub_qos_profile: QoSProfile,
     ):
         Node.__init__(
             self,
@@ -27,20 +27,20 @@ class BaseNode(Node):
         self._universe: Universe = universe
         self._time: int = 0
 
-        self._publishing_msg_type = publishing_msg_type
-        self._publishing_topic = publishing_topic
-        self._publishing_frequency = publishing_frequency
-        self._publishing_qos_profile = publishing_qos_profile
+        self._pub_msg_types: List[Type] = pub_msg_types
+        self._pub_topics: List[str] = pub_topics
+        self._pub_period: int = pub_period
+        self._pub_qos_profile: QoSProfile = pub_qos_profile
 
         from rclpy.publisher import Publisher
 
-        self._publisher: Optional[Publisher] = None
+        self._indexed_publishers: Dict[str, Publisher] = {}
 
-        self._is_node_constructed = False
+        self._is_node_constructed: bool = False
 
     @property
-    def publishing_frequency(self) -> float:
-        return self._publishing_frequency
+    def pub_period(self) -> int:
+        return self._pub_period
 
     @property
     def time(self) -> int:
@@ -55,11 +55,14 @@ class BaseNode(Node):
             not self._is_node_constructed
         ), f"BaseNode (from {self.__class__.__name__}) is already constructed: tried to construct!"
 
-        self._publisher = self.create_publisher(
-            self._publishing_msg_type,
-            self._publishing_topic,
-            qos_profile=self._publishing_qos_profile,
-        )
+        for i, topic in enumerate(self._pub_topics):
+            pub = self.create_publisher(
+                self._pub_msg_types[i],
+                topic,
+                qos_profile=self._pub_qos_profile,
+            )
+
+            self._indexed_publishers[topic] = pub
 
         self._is_node_constructed = True
 
@@ -70,7 +73,7 @@ class BaseNode(Node):
 
         self._time += 1
 
-        if self.time % self.publishing_frequency == 0:
+        if self.time % self.pub_period == 0:
             self.publish()
 
     @abstractmethod

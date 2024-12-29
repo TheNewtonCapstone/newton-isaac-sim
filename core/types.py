@@ -42,20 +42,21 @@ NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
 #   I.e. float | torch.Tensor | np.ndarray
 
 # Meta
-Settings = Dict[str, Any]
-SettingsCollection = Dict[str, Settings]
+Config = Dict[str, Any]
+ConfigCollection = Dict[str, Config]
 Indices = torch.Tensor
 
 Matter = Tuple[
     argparse.Namespace,
-    Settings,
-    Settings,
-    Settings,
-    Settings,
-    SettingsCollection,
+    Config,
+    Config,
+    Config,
+    Config,
+    Config,
+    ConfigCollection,
     str,
     str,
-    SettingsCollection,
+    ConfigCollection,
     Optional[str],
     str,
     bool,

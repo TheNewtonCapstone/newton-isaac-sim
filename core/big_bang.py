@@ -1,15 +1,15 @@
 from typing import Optional
 
-from core.types import Settings
+from core.types import Config
 from isaacsim import SimulationApp
 
 _universe: Optional["Universe"] = None
 
 
 def big_bang(
-    app_settings: Settings,
-    world_settings: Settings,
-    enable_ros2: bool = False,
+    app_settings: Config,
+    world_settings: Config,
+    ros_enabled: bool = False,
     experience: str = "./apps/omni.isaac.sim.newton.kit",
 ) -> "Universe":
     """
@@ -17,7 +17,7 @@ def big_bang(
     Args:
         app_settings: The settings for the simulation app (i.e. rendering).
         world_settings: The settings for the world (i.e. physics).
-        enable_ros2: Whether to disable ROS2 bridge and ROS-related functionality.
+        ros_enabled: Whether to disable ROS2 bridge and ROS-related functionality.
         experience: The path to the experience to load (Omniverse Kit).
 
     Returns:
@@ -30,7 +30,7 @@ def big_bang(
 
     sim_app: SimulationApp = SimulationApp(app_settings, experience)
 
-    if enable_ros2:
+    if ros_enabled:
         from omni.isaac.core.utils.extensions import enable_extension
 
         # enable ROS2 bridge extension
@@ -43,10 +43,10 @@ def big_bang(
     from core.universe import Universe
 
     _universe = Universe(
-        app_settings["headless"],
-        sim_app,
-        world_settings,
-        enable_ros2,
+        headless=app_settings["headless"],
+        sim_app=sim_app,
+        world_settings=world_settings,
+        ros_enabled=ros_enabled,
     )
     _universe.reset(soft=False)
 

@@ -2,7 +2,7 @@ import os.path
 import re
 from typing import Tuple, List, Optional
 
-from core.types import Settings
+from core.types import Config
 
 RUN_REGEX_STR = r"([a-zA-Z_]*)_([0-9]*)(?:_)?(?:rew_([-.0-9]*))?(?:_)?(?:step_([-.0-9]*))?"
 TENSORBOARD_REGEX_STR = r"events\.out\.tfevents\.([0-9]*)"
@@ -30,7 +30,7 @@ def find_all_runs_subfolders(library_folder: str) -> list[str]:
     return [folder for folder in folders if does_folder_contain_run(os.path.join(library_folder, folder))]
 
 
-def create_runs_library(runs_folder: str) -> Settings:
+def create_runs_library(runs_folder: str) -> Config:
     os.makedirs(runs_folder, exist_ok=True)
 
     runs_library = build_runs_library_from_runs_folder(runs_folder)
@@ -39,11 +39,11 @@ def create_runs_library(runs_folder: str) -> Settings:
     return runs_library
 
 
-def build_runs_library_from_runs_folder(runs_folder: str) -> Settings:
+def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
     run_regex = re.compile(RUN_REGEX_STR)
     tensorboard_regex = re.compile(TENSORBOARD_REGEX_STR)
 
-    run_settings: Settings = {}
+    run_settings: Config = {}
 
     for run_folder in find_all_runs_subfolders(runs_folder):
         run_files = os.listdir(os.path.join(runs_folder, run_folder))
@@ -56,7 +56,7 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Settings:
         run_name: str = f"{run_matches[0]}_{run_id:03}"
         date: int = -1
         count: int = -1
-        checkpoints: List[Settings] = []
+        checkpoints: List[Config] = []
 
         for file in run_files:
             if file.startswith(TENSORBOARD_FILE_NAME_START):
@@ -99,7 +99,7 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Settings:
     return dict(sorted(run_settings.items()))
 
 
-def get_unused_run_id(runs_library: Settings) -> Optional[int]:
+def get_unused_run_id(runs_library: Config) -> Optional[int]:
     run_ids = [run["id"] for run in runs_library.values()]
 
     if len(run_ids) == 0:
@@ -114,13 +114,13 @@ def does_runs_library_exist(runs_folder: str) -> bool:
     return os.path.exists(os.path.join(runs_folder, "library.yaml"))
 
 
-def load_runs_library(runs_folder: str) -> Settings:
+def load_runs_library(runs_folder: str) -> Config:
     from .config import load_config
 
     return load_config(os.path.join(runs_folder, "library.yaml"))
 
 
-def save_runs_library(library: Settings, runs_folder: str) -> None:
+def save_runs_library(library: Config, runs_folder: str) -> None:
     from .config import save_config
 
     save_config(library, os.path.join(runs_folder, "library.yaml"))

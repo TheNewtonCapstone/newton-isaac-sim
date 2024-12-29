@@ -1,7 +1,7 @@
 from typing import Any
 
 from core.globals import LIGHTS_PATH, PHYSICS_PATH
-from core.types import Settings
+from core.types import Config
 from omni.isaac.core import SimulationContext
 from omni.isaac.core.prims import XFormPrim, XFormPrimView
 from omni.isaac.core.scenes import Scene
@@ -14,14 +14,16 @@ class Universe(SimulationContext):
         self,
         headless: bool,
         sim_app: SimulationApp,
-        world_settings: Settings,
-        ros2_enabled: bool = False,
+        world_settings: Config,
+        ros_enabled: bool = False,
     ):
         self.sim_app: SimulationApp = sim_app
-        self._world_settings: Settings = world_settings
+        self._world_settings: Config = world_settings
+
+        self._control_dt: float = self._world_settings["control_dt"]
 
         self._headless = headless
-        self._ros2_enabled = ros2_enabled
+        self._ros_enabled = ros_enabled
 
         if self.has_gui:
             from omni.kit.viewport.utility import get_active_viewport
@@ -48,8 +50,8 @@ class Universe(SimulationContext):
         return self._headless
 
     @property
-    def ros2_enabled(self) -> bool:
-        return self._ros2_enabled
+    def ros_enabled(self) -> bool:
+        return self._ros_enabled
 
     @property
     def has_gui(self) -> bool:
@@ -62,6 +64,10 @@ class Universe(SimulationContext):
     @property
     def use_usd_physics(self) -> bool:
         return not self.use_fabric_physics
+
+    @property
+    def control_dt(self) -> float:
+        return self._control_dt
 
     def step(self, render: bool = False) -> None:
         """Steps the simulation. This behaves exactly like IsaacLab SimulationContext's step function.

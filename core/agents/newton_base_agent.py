@@ -37,7 +37,7 @@ class NewtonBaseAgent(BaseAgent):
 
         self.joints_controller.step(actions)
 
-        if self._universe.ros2_enabled:
+        if self._universe.ros_enabled:
             from core.ros import BaseNode
 
             # we sync the step of the ROS nodes with the agent's step, therefore the RL step

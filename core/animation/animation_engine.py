@@ -2,7 +2,7 @@ from typing import Dict, Optional, List
 
 import torch
 from core.types import (
-    Settings,
+    Config,
     Progress,
 )
 from .types import AnimationClip, Keyframe, BoneData, ArmatureData
@@ -11,11 +11,11 @@ from .types import AnimationClip, Keyframe, BoneData, ArmatureData
 class AnimationEngine:
     def __init__(
         self,
-        clips: Dict[str, Settings],
+        clips: Dict[str, Config],
     ):
         self.current_clip_name: Optional[str] = None
 
-        self.clip_configs: Dict[str, Settings] = clips
+        self.clip_configs: Dict[str, Config] = clips
         self.clips: Dict[str, AnimationClip] = {}
 
         self._is_constructed: bool = False
@@ -39,12 +39,12 @@ class AnimationEngine:
         frame_dt = 1 / self.clip_configs[current_clip]["framerate"]
 
         for clip_name, clip_settings in self.clip_configs.items():
-            saved_keyframes: List[Settings] = clip_settings["keyframes"]
+            saved_keyframes: List[Config] = clip_settings["keyframes"]
             keyframes: List[Keyframe] = []
 
             for keyframe_settings in saved_keyframes:
                 frame: int = keyframe_settings["frame"]
-                saved_data: List[Settings] = keyframe_settings["data"]
+                saved_data: List[Config] = keyframe_settings["data"]
 
                 data: Dict[str, BoneData] = {}
 
@@ -54,8 +54,12 @@ class AnimationEngine:
                     orientation: torch.Tensor = torch.tensor(bone_data["orientation"])
 
                     relative_angle: float = bone_data["relative_angle"]
-                    previous_relative_angle: float = saved_keyframes[frame - 1]["data"][i]["relative_angle"]
-                    relative_angle_velocity: float = (relative_angle - previous_relative_angle) / frame_dt
+                    previous_relative_angle: float = saved_keyframes[frame - 1]["data"][
+                        i
+                    ]["relative_angle"]
+                    relative_angle_velocity: float = (
+                        relative_angle - previous_relative_angle
+                    ) / frame_dt
 
                     data[bone_name] = BoneData(
                         name=bone_name,
@@ -101,7 +105,9 @@ class AnimationEngine:
             A tensor with shape (num_agents, num_bones, 9) containing the joint positions, orientations, relative angles and relative angle velocities for each agent.
         """
         clip_datas = self.get_clip_data_at_seconds(
-            self.current_clip_name, seconds, interpolate,
+            self.current_clip_name,
+            seconds,
+            interpolate,
         )
 
         num_agents = len(clip_datas)

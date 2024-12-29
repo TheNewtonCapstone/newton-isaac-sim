@@ -1,7 +1,7 @@
 import argparse
 from typing import List, Optional, Tuple
 
-from core.types import Matter, Settings, SettingsCollection
+from core.types import Matter, Config, ConfigCollection
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -36,8 +36,14 @@ def setup_argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--randomization-config",
         type=str,
-        help="Enable domain randomization.",
+        help="Path to the configuration file for domain randomization.",
         default="configs/randomization.yaml",
+    )
+    parser.add_argument(
+        "--ros-config",
+        type=str,
+        help="Path to the configuration file for ROS2.",
+        default="configs/ros.yaml",
     )
     parser.add_argument(
         "--animations-dir",
@@ -80,12 +86,6 @@ def setup_argparser() -> argparse.ArgumentParser:
         type=int,
         help="Number of environments to run (will be read from the rl-config if not specified).",
         default=-1,
-    )
-    parser.add_argument(
-        "--disable-ros2",
-        action="store_true",
-        help="Enable ROS2 support.",
-        default=False,
     )
     parser.add_argument(
         "--train",
@@ -144,9 +144,9 @@ def task_select():
 def animation_select(
     animation_config_dir: str,
     current_animation_name: Optional[str],
-) -> Optional[Tuple[SettingsCollection, str]]:
+) -> Optional[Tuple[ConfigCollection, str]]:
     from core.utils.path import get_files_with_extension
-    from core.utils.config import animation_configs_to_clips_settings
+    from core.utils.config import animation_configs_to_clips_config
 
     # discover animations in directory
     animation_configs_filenames = get_files_with_extension(
@@ -161,7 +161,7 @@ def animation_select(
         return None
 
     # load animation clips settings from config files
-    animation_clips_settings = animation_configs_to_clips_settings(
+    animation_clips_settings = animation_configs_to_clips_config(
         animation_configs_paths
     )
 
@@ -198,13 +198,13 @@ def checkpoint_select(
     runs_dir: str,
     current_checkpoint_name: Optional[str],
     required: bool,
-) -> Optional[Tuple[Settings, str]]:
+) -> Optional[Tuple[Config, str]]:
     from core.utils.checkpoints import (
         save_runs_library,
         build_runs_library_from_runs_folder,
     )
 
-    runs_settings: Settings = build_runs_library_from_runs_folder(runs_dir)
+    runs_settings: Config = build_runs_library_from_runs_folder(runs_dir)
 
     save_runs_library(runs_settings, runs_dir)
 
@@ -289,7 +289,7 @@ def setup() -> Optional[Matter]:
 
     # Animation
 
-    animation_clips_config: Settings = {}
+    animation_clips_config: Config = {}
     current_animation: Optional[str] = None
 
     if animating or training or playing:
@@ -306,7 +306,7 @@ def setup() -> Optional[Matter]:
 
     # Checkpoint
 
-    runs_library: Settings = {}
+    runs_library: Config = {}
     runs_dir: str = cli_args.runs_dir
     current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
     no_checkpoint = cli_args.no_checkpoint
@@ -338,6 +338,7 @@ def setup() -> Optional[Matter]:
     rl_config = load_config(cli_args.rl_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
+    ros_config = load_config(cli_args.ros_config)
 
     # Helper flags
 
@@ -348,7 +349,7 @@ def setup() -> Optional[Matter]:
     interactive = not headless and (
         physics_only or playing or animating
     )  # interactive means that the user is expected to control the agent in some way
-    enable_ros2 = not cli_args.disable_ros2
+    enable_ros = ros_config["enabled"]
 
     # override some config with CLI num_envs, if specified
     num_envs = rl_config["n_envs"]
@@ -370,6 +371,7 @@ def setup() -> Optional[Matter]:
         rl_config,
         world_config,
         randomization_config,
+        ros_config,
         animation_clips_config,
         current_animation,
         runs_dir,
@@ -384,7 +386,7 @@ def setup() -> Optional[Matter]:
         is_rl,
         interactive,
         headless,
-        enable_ros2,
+        enable_ros,
         num_envs,
         control_step_dt,
     )
@@ -403,6 +405,7 @@ def main():
         rl_config,
         world_config,
         randomization_config,
+        ros_config,
         animation_clips_config,
         current_animation,
         runs_dir,
@@ -417,7 +420,7 @@ def main():
         is_rl,
         interactive,
         headless,
-        enable_ros2,
+        enable_ros,
         num_envs,
         control_step_dt,
     ) = base_matter
@@ -434,12 +437,12 @@ def main():
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
 
-    universe = big_bang({"headless": headless}, world_config, enable_ros2=enable_ros2)
+    universe = big_bang({"headless": headless}, world_config, ros_enabled=enable_ros)
 
     # only now can we import the rest of the modules
     from core.universe import Universe
 
-    # to circumvent Python typing restrictions, we type the universe here
+    # to circumvent Python typing restrictions, we type the universe object here
     universe: Universe = universe
 
     from core.envs import NewtonMultiTerrainEnv
@@ -448,39 +451,59 @@ def main():
     from core.terrain.flat_terrain import FlatBaseTerrainBuilder
     from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
 
-    from core.sensors import VecIMU
-    from core.sensors.contact import VecContact
+    from core.sensors import VecIMU, VecContact
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
 
     from core.utils.math import IDENTITY_QUAT
 
-    if enable_ros2:
+    imu = VecIMU(
+        universe=universe,
+        local_position=torch.zeros((num_envs, 3)),
+        local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
+        noise_function=lambda x: x,
+    )
+
+    contact_sensor = VecContact(
+        universe=universe,
+        num_contact_sensors_per_agent=4,
+    )
+
+    if enable_ros:
         from core.sensors import ROSVecIMU, ROSVecContact
+        from core.utils.ros import get_qos_profile_from_node_config
 
+        namespace: str = ros_config["namespace"]
+
+        imu_node_config: Config = ros_config["nodes"]["imu"]
         imu = ROSVecIMU(
-            universe=universe,
-            local_position=torch.zeros((num_envs, 3)),
-            local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
-            noise_function=lambda x: x,
+            vec_imu=imu,
+            node_name=imu_node_config["name"],
+            namespace=namespace,
+            pub_sim_topic=imu_node_config["pub_sim_topic"],
+            pub_real_topic=imu_node_config["pub_real_topic"],
+            pub_period=imu_node_config["pub_period"],
+            pub_qos_profile=get_qos_profile_from_node_config(
+                imu_node_config,
+                "pub_qos",
+                ros_config,
+            ),
         )
 
+        contact_node_config: Config = ros_config["nodes"]["contact"]
         contact_sensor = ROSVecContact(
-            universe=universe,
-            num_contact_sensors_per_agent=4,
-        )
-    else:
-        imu = VecIMU(
-            universe=universe,
-            local_position=torch.zeros((num_envs, 3)),
-            local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
-            noise_function=lambda x: x,
-        )
-
-        contact_sensor = VecContact(
-            universe=universe,
-            num_contact_sensors_per_agent=4,
+            vec_contact=contact_sensor,
+            node_name=contact_node_config["name"],
+            namespace=namespace,
+            pub_sim_topic=contact_node_config["pub_sim_topic"],
+            pub_real_topic=contact_node_config["pub_real_topic"],
+            pub_period=contact_node_config["pub_period"],
+            pub_qos_profile=get_qos_profile_from_node_config(
+                contact_node_config,
+                "pub_qos",
+                ros_config,
+            ),
         )
 
     joints_controller = VecJointsController(

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from core.agents import BaseAgent
-from core.types import Settings, Indices
+from core.types import Config, Indices
 from core.universe import Universe
 
 
@@ -11,14 +11,14 @@ class BaseDomainRandomizer(ABC):
         self,
         seed: int,
         agent: BaseAgent,
-        randomizer_settings: Settings,
+        randomizer_settings: Config,
     ):
         self.seed: int = seed
 
         self._agent: BaseAgent = agent
         self._universe: Optional[Universe] = None
 
-        self.randomizer_settings: Settings = randomizer_settings
+        self.randomizer_settings: Config = randomizer_settings
 
         self._time: int = 0
         self._is_constructed: bool = False

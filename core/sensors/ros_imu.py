@@ -1,39 +1,42 @@
+from rclpy.qos import QoSProfile
 from torch import Tensor
 
 from newton_sim_ros.msg import SimulationImuMsg
 from .imu import VecIMU as BaseVecIMU
-from ..ros import BaseNode
+from ..ros import BaseSimRealNode
 from ..types import NoiseFunction
 from ..universe import Universe
 
 
-class ROSVecIMU(BaseVecIMU, BaseNode):
+class ROSVecIMU(BaseVecIMU, BaseSimRealNode):
     def __init__(
         self,
-        universe: Universe,
-        local_position: Tensor,
-        local_orientation: Tensor,
-        noise_function: NoiseFunction,
-        ros_node_name: str = "imu_node",
+        vec_imu: BaseVecIMU,
+        node_name: str = "imu_node",
         namespace: str = "sim",
-        publishing_topic: str = "/imu",
-        publishing_frequency: float = 5.0,
+        pub_sim_topic: str = "/sim/imu",
+        pub_real_topic: str = "/imu",
+        pub_period: int = 5,
+        pub_qos_profile: QoSProfile = QoSProfile(depth=0),
     ):
         BaseVecIMU.__init__(
             self,
-            universe,
-            local_position,
-            local_orientation,
-            noise_function,
+            vec_imu._universe,
+            vec_imu.local_position,
+            vec_imu.local_orientation,
+            vec_imu._noise_function,
         )
-        BaseNode.__init__(
+        BaseSimRealNode.__init__(
             self,
-            universe,
+            vec_imu._universe,
+            node_name,
             SimulationImuMsg,
-            ros_node_name,
-            publishing_topic,
+            pub_sim_topic,
+            SimulationImuMsg,
+            pub_real_topic,
             namespace,
-            publishing_frequency,
+            pub_period,
+            pub_qos_profile,
         )
 
     def construct(
@@ -41,7 +44,7 @@ class ROSVecIMU(BaseVecIMU, BaseNode):
         path_expr: str,
     ) -> None:
         BaseVecIMU.construct(self, path_expr)
-        BaseNode.construct(self)
+        BaseSimRealNode.construct(self)
 
     def publish(self) -> None:
         data = BaseVecIMU.get_data(self)
@@ -71,4 +74,4 @@ class ROSVecIMU(BaseVecIMU, BaseNode):
         msg.projected_gravity.y = data["projected_gravities"][0, 1].item()
         msg.projected_gravity.z = data["projected_gravities"][0, 2].item()
 
-        self._publisher.publish(msg)
+        self._indexed_publishers[self._pub_sim_topic].publish(msg)

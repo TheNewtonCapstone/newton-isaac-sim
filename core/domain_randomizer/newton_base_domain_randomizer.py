@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 from core.agents import NewtonBaseAgent
 from core.domain_randomizer.base_domain_randomizer import BaseDomainRandomizer
-from core.types import Settings, Indices
+from core.types import Config, Indices
 from core.universe import Universe
 from omni.isaac.core.prims import RigidPrimView
 
@@ -13,7 +13,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         self,
         seed: int,
         agent: NewtonBaseAgent,
-        randomizer_settings: Settings,
+        randomizer_settings: Config,
     ):
         super().__init__(
             seed,
