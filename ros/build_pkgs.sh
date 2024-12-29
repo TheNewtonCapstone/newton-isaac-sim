@@ -9,18 +9,12 @@ if [ -z "$ROS_DISTRO" ]; then
     exit 1
 fi
 
-# Go in each package directory (within the "ros" directory) and build it
-shopt -s nullglob
 
-for dir in ./*/; do
-    cd "$dir" || exit
+# Clean previous ROS2 packages builds
+if [ -d "build" ]; then
+    echo "Cleaning previous build files..."
+    rm -rf "build" "install" "log"
+fi
 
-    if [ -d "build" ]; then
-        echo "Cleaning previous build files in $dir ..."
-        rm -rf "build" "install" "log"
-    fi
-
-    echo "Building package in $dir ..."
-    colcon build --cmake-args -DPython3_EXECUTABLE:INTERNAL="$(which python3)" -DPython3_FIND_STRATEGY=LOCATION -DPython3_FIND_UNVERSIONED_NAMES=FIRST
-    cd - || exit
-done
+# Build ROS2 packages
+colcon build --symlink-install --cmake-args -DPython3_EXECUTABLE:INTERNAL="$(which python3)" -DPython3_FIND_STRATEGY=LOCATION -DPython3_FIND_UNVERSIONED_NAMES=FIRST
