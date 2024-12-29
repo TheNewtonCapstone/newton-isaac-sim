@@ -196,10 +196,10 @@ def animation_select(
 
 def checkpoint_select(
     runs_dir: str,
-    current_checkpoint_name: Optional[str],
+    current_run_name: Optional[str],
     required: bool,
 ) -> Optional[Tuple[Config, str]]:
-    from core.utils.checkpoints import (
+    from core.utils.runs import (
         save_runs_library,
         build_runs_library_from_runs_folder,
     )
@@ -208,10 +208,10 @@ def checkpoint_select(
 
     save_runs_library(runs_settings, runs_dir)
 
-    if current_checkpoint_name and current_checkpoint_name in runs_settings:
+    if current_run_name and current_run_name in runs_settings:
         return (
             runs_settings,
-            runs_settings[current_checkpoint_name]["saves"][-1]["path"],
+            runs_settings[current_run_name]["checkpoints"][-1]["path"],
         )
 
     from bullet import Input, YesNo
@@ -231,14 +231,14 @@ def checkpoint_select(
         strip=True,
     )
 
-    selected_checkpoint_name = ""
+    selected_run_name = ""
 
-    while selected_checkpoint_name not in runs_settings:
-        selected_checkpoint_name = cli.launch()
+    while selected_run_name not in runs_settings:
+        selected_run_name = cli.launch()
 
     return (
         runs_settings,
-        runs_settings[selected_checkpoint_name]["saves"][-1]["path"],
+        runs_settings[selected_run_name]["checkpoints"][-1]["path"],
     )
 
 
@@ -322,7 +322,7 @@ def setup() -> Optional[Matter]:
     ):
         checkpoint_select_result = checkpoint_select(
             runs_dir,
-            cli_args.checkpoint_name,
+            cli_args.run_name,
             required=not training,
         )
 
@@ -677,19 +677,19 @@ def main():
     #   the task, the environment, etc. We would also have a way to easily load the last run, or a specific run.
     #   labels: enhancement
 
-    from core.utils.checkpoints import (
+    from core.utils.runs import (
         get_unused_run_id,
         create_runs_library,
     )
 
-    new_checkpoint_id = get_unused_run_id(runs_library)
+    new_run_id = get_unused_run_id(runs_library)
 
-    if new_checkpoint_id is None:
+    if new_run_id is None:
         runs_library = create_runs_library(runs_dir)
 
-        new_checkpoint_id = get_unused_run_id(runs_library)
+        new_run_id = get_unused_run_id(runs_library)
 
-    run_name = f"newton_idle_{new_checkpoint_id}"
+    run_name = f"newton_idle_{new_run_id}"
 
     # task used for either training or playing
     task = NewtonIdleTask(
