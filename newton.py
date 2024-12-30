@@ -1,6 +1,7 @@
 import argparse
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any, Dict
 
+import yaml
 from core.types import Matter, Settings, SettingsCollection
 
 
@@ -230,6 +231,61 @@ def checkpoint_select(
     )
 
 
+def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
+    from bullet import Bullet
+
+    try:
+        with open(rl_config_file_path, "r") as file:
+            rl_config = yaml.safe_load(file)
+    except Exception as e:
+        print(f"Error reading rl_config file with file path {rl_config_file_path}: {e}")
+        return None
+
+    networks = rl_config.get("networks", {})
+    if not networks:
+        print(f"No networks found in {rl_config_file_path}.")
+        return None
+
+    # Build choices for CLI
+    choices = [
+        f"{name}: Network Architecture: {config['net_arch']}, Activation function: {config['activation_fn']}"
+        for name, config in networks.items()
+    ]
+
+    # CLI for network selection
+    cli = Bullet(
+        prompt="Select a network configuration:",
+        choices=choices,
+        align=2,
+        margin=1,
+    )
+
+    selected_choice = cli.launch()
+
+    # Parse selected network
+    selected_name = selected_choice.split(":")[0].strip()
+    selected_config = networks[selected_name]
+
+    if not selected_config.get("net_arch"):
+        print(f"No network architecture found in {rl_config_file_path}.")
+        return None
+
+    if not selected_config.get("activation_fn"):
+        print(f"No network activation function found in {rl_config_file_path}.")
+        return None
+
+    try:
+        selected_config["activation_fn"] = eval(selected_config["activation_fn"])
+    except Exception as e:
+        print(f"Error evaluating network activation function: {e}")
+        return None
+
+    return {
+        "net_arch": selected_config["net_arch"],
+        "activation_fn": selected_config["activation_fn"],
+    }
+
+
 def setup() -> Optional[Matter]:
     from core.utils.config import load_config
 
@@ -292,11 +348,12 @@ def setup() -> Optional[Matter]:
 
         animation_clips_config, current_animation = animation_select_result
 
-    # Checkpoint
+    # Checkpoint and Network config
 
     runs_library: Settings = {}
     runs_dir: str = cli_args.checkpoints_dir
     current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
+    rl_network_config = {}
 
     if (training or playing or exporting) and current_checkpoint_path is None:
         checkpoint_select_result = checkpoint_select(
@@ -307,6 +364,9 @@ def setup() -> Optional[Matter]:
 
         if checkpoint_select_result is None and (playing or exporting):
             return None
+
+        if checkpoint_select_result is None and training:
+            rl_network_config = network_arch_select(cli_args.rl_config)
 
         if checkpoint_select_result is not None:
             runs_library, current_checkpoint_path = checkpoint_select_result
@@ -348,6 +408,7 @@ def setup() -> Optional[Matter]:
         rl_config,
         world_config,
         randomization_config,
+        rl_network_config,
         animation_clips_config,
         current_animation,
         runs_dir,
@@ -380,6 +441,7 @@ def main():
         rl_config,
         world_config,
         randomization_config,
+        rl_network_config,
         animation_clips_config,
         current_animation,
         runs_dir,
@@ -673,7 +735,9 @@ def main():
         #   set of functions, instead of classes, since it's a small configuration. We could also offer a wrapper around
         #   PPO (and eventually A2C) to allow for easy customization of the network.
 
-        policy_kwargs = dict(activation_fn=torch.nn.ELU, net_arch=[1024, 1024, 1024])
+        print(rl_network_config)
+
+        policy_kwargs = dict(activation_fn=rl_network_config['activation_fn'], net_arch=rl_network_config['net_arch'])
 
         model = PPO(
             rl_config["policy"],
