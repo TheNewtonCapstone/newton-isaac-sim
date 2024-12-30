@@ -3,7 +3,7 @@ device: "cuda"
 policy: "MlpPolicy"
 seed: 14321
 
-n_envs: 96
+n_envs: 4
 timesteps_per_env: 100_000
 base_lr: 3e-6
 episode_length: 500
@@ -41,3 +41,11 @@ ppo:
   sde_sample_freq: -1
 
   target_kl: None
+
+networks:
+  mlp_1:
+    net_arch: [64, 64]
+    activation_fn: torch.nn.ReLU
+  custom_name:
+    net_arch: [256, 256]
+    activation_fn: torch.nn.ELU
