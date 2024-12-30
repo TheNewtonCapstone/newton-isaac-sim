@@ -3,6 +3,7 @@ from typing import List, Optional, Tuple, Any, Dict
 
 import yaml
 from core.types import Matter, Settings, SettingsCollection
+from core.utils.config import load_config
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -234,12 +235,7 @@ def checkpoint_select(
 def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
     from bullet import Bullet
 
-    try:
-        with open(rl_config_file_path, "r") as file:
-            rl_config = yaml.safe_load(file)
-    except Exception as e:
-        print(f"Error reading rl_config file with file path {rl_config_file_path}: {e}")
-        return None
+    rl_config = load_config(rl_config_file_path)
 
     networks = rl_config.get("networks", {})
     if not networks:
@@ -737,7 +733,10 @@ def main():
 
         print(rl_network_config)
 
-        policy_kwargs = dict(activation_fn=rl_network_config['activation_fn'], net_arch=rl_network_config['net_arch'])
+        policy_kwargs = dict(
+            activation_fn=rl_network_config["activation_fn"],
+            net_arch=rl_network_config["net_arch"],
+        )
 
         model = PPO(
             rl_config["policy"],
