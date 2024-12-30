@@ -41,11 +41,3 @@ ppo:
   sde_sample_freq: -1
 
   target_kl: None
-
-networks:
-  mlp_1:
-    net_arch: [64, 64]
-    activation_fn: torch.nn.ReLU
-  custom_name:
-    net_arch: [256, 256]
-    activation_fn: torch.nn.ELU
