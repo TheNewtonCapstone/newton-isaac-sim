@@ -1,9 +1,12 @@
 import argparse
 from typing import List, Optional, Tuple, Any, Dict
-
+import logging
 import yaml
 from core.types import Matter, Settings, SettingsCollection
 from core.utils.config import load_config
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename="myapp.log", level=logging.INFO)
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -28,6 +31,18 @@ def setup_argparser() -> argparse.ArgumentParser:
         type=str,
         help="Path to the configuration file for RL.",
         default="configs/tasks/newton_idle_task.yaml",
+    )
+    parser.add_argument(
+        "--rl-network-config",
+        type=str,
+        help="Path to the network configuration file for RL.",
+        default="configs/rl_networks.yaml",
+    )
+    parser.add_argument(
+        "--rl-network-name",
+        type=str,
+        help="Name of the network configuration to be used (located in the network configration file).",
+        default="default",
     )
     parser.add_argument(
         "--world-config",
@@ -147,7 +162,7 @@ def animation_select(
     ]
 
     if len(animation_configs_paths) == 0:
-        print(f"No animation files found in {animation_config_dir}.")
+        logger.info(f"No animation files found in {animation_config_dir}.")
         return None
 
     # load animation clips settings from config files
@@ -234,12 +249,13 @@ def checkpoint_select(
 
 def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
     from bullet import Bullet
+    import torch.nn
 
     rl_config = load_config(rl_config_file_path)
 
     networks = rl_config.get("networks", {})
     if not networks:
-        print(f"No networks found in {rl_config_file_path}.")
+        logger.info(f"No networks found in {rl_config_file_path}.")
         return None
 
     # Build choices for CLI
@@ -254,26 +270,26 @@ def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
         choices=choices,
         align=2,
         margin=1,
+        return_index=True,
     )
 
-    selected_choice = cli.launch()
+    selected_choice, selected_choice_ind = cli.launch()
 
     # Parse selected network
-    selected_name = selected_choice.split(":")[0].strip()
-    selected_config = networks[selected_name]
+    selected_config = list(networks.values())[selected_choice_ind]
 
     if not selected_config.get("net_arch"):
-        print(f"No network architecture found in {rl_config_file_path}.")
+        logger.info(f"No network architecture found in {rl_config_file_path}.")
         return None
 
     if not selected_config.get("activation_fn"):
-        print(f"No network activation function found in {rl_config_file_path}.")
+        logger.info(f"No network activation function found in {rl_config_file_path}.")
         return None
 
     try:
         selected_config["activation_fn"] = eval(selected_config["activation_fn"])
     except Exception as e:
-        print(f"Error evaluating network activation function: {e}")
+        logger.info(f"Error evaluating network activation function: {e}")
         return None
 
     return {
@@ -309,7 +325,7 @@ def setup() -> Optional[Matter]:
     multiple_selected = sum(_modes.values()) > 1
 
     if multiple_selected:
-        print(
+        logger.info(
             "Only one of training, playing, animating, physics or exporting can be set."
         )
         return None
@@ -362,7 +378,7 @@ def setup() -> Optional[Matter]:
             return None
 
         if checkpoint_select_result is None and training:
-            rl_network_config = network_arch_select(cli_args.rl_config)
+            rl_network_config = network_arch_select(cli_args.rl_network_config)
 
         if checkpoint_select_result is not None:
             runs_library, current_checkpoint_path = checkpoint_select_result
@@ -428,7 +444,7 @@ def main():
     base_matter = setup()
 
     if base_matter is None:
-        print("An error occurred during setup.")
+        logger.info("An error occurred during setup.")
         return
 
     (
@@ -456,7 +472,7 @@ def main():
         control_step_dt,
     ) = base_matter
 
-    print(
+    logger.info(
         f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n",
         f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n",
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
@@ -731,11 +747,11 @@ def main():
         #   set of functions, instead of classes, since it's a small configuration. We could also offer a wrapper around
         #   PPO (and eventually A2C) to allow for easy customization of the network.
 
-        print(rl_network_config)
+        logger.info(rl_network_config)
 
         policy_kwargs = dict(
-            activation_fn=rl_network_config["activation_fn"],
-            net_arch=rl_network_config["net_arch"],
+            activation_fn=rl_network_config.get("activation_fn"),
+            net_arch=rl_network_config.get("net_arch"),
         )
 
         model = PPO(
@@ -787,7 +803,7 @@ def main():
         log_file = open(
             f"{get_folder_from_path(current_checkpoint_path)}/playing.csv", "w"
         )
-        print("time,dt,roll,action1,action2", file=log_file)
+        # logger.info("time,dt,roll,action1,action2", file=log_file)
 
         while universe.is_playing:
             step_return = task.step(actions)
@@ -796,10 +812,10 @@ def main():
             actions = model.predict(observations, deterministic=True)[0]
             actions_string = ",".join([str(ja) for ja in actions[0]])
 
-            print(
-                f"{universe.current_time},{universe.get_physics_dt()},{observations[0][0]},{actions_string}",
-                file=log_file,
-            )
+            # logger.info(
+            #     f"{universe.current_time},{universe.get_physics_dt()},{observations[0][0]},{actions_string}",
+            #     file=log_file,
+            # )
 
         exit(1)
 
@@ -837,7 +853,7 @@ def main():
         output_names=["actions"],
     )  # outputs are mu (actions), sigma, value
 
-    print(f"Exported to {current_checkpoint_path}.onnx!")
+    logger.info(f"Exported to {current_checkpoint_path}.onnx!")
 
 
 if __name__ == "__main__":
