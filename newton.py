@@ -1,6 +1,7 @@
 import argparse
+import logging
 from typing import List, Optional, Tuple, Any, Dict
-
+from core.utils.config import load_config
 from core.types import Matter, Config, ConfigCollection
 
 logger = logging.getLogger(__name__)
@@ -220,6 +221,9 @@ def checkpoint_select(
     )
 
     runs_settings: Config = build_runs_library_from_runs_folder(runs_dir)
+    if not runs_settings:
+        logger.info(f"No runs found in {runs_dir}.")
+        return None
 
     save_runs_library(runs_settings, runs_dir)
 
