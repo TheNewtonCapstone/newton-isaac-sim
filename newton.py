@@ -218,7 +218,7 @@ def checkpoint_select(
     if current_checkpoint_name and current_checkpoint_name in runs_settings:
         return (
             runs_settings,
-            runs_settings[current_checkpoint_name]["saves"][-1]["path"],
+            runs_settings[current_checkpoint_name]["checkpoints"][-1]["path"],
         )
 
     from bullet import Input, YesNo
@@ -232,9 +232,11 @@ def checkpoint_select(
         if not cli.launch():
             return None
 
+    most_recent_checkpoint = str(list(runs_settings.keys())[-1])
+
     cli = Input(
-        prompt="Please enter a run name: ",
-        default=list(runs_settings.keys())[-1],
+        prompt=f"Please enter a run name (format: newton_idle_001): ",
+        default=f"{most_recent_checkpoint}",
         strip=True,
     )
 
@@ -243,9 +245,11 @@ def checkpoint_select(
     while selected_checkpoint_name not in runs_settings:
         selected_checkpoint_name = cli.launch()
 
+    print(selected_checkpoint_name)
+
     return (
         runs_settings,
-        runs_settings[selected_checkpoint_name]["saves"][-1]["path"],
+        runs_settings[selected_checkpoint_name]["checkpoints"][-1]["path"],
     )
 
 
