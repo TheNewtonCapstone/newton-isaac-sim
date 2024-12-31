@@ -5,7 +5,7 @@ from core.types import Matter, Settings, SettingsCollection
 from core.utils.config import load_config
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename="myapp.log", level=logging.INFO)
+logging.basicConfig(filename="newton.log", level=logging.INFO)
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -258,7 +258,7 @@ def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
     networks = rl_config.get("networks", {})
     if not networks:
         logger.info(f"No networks found in {rl_config_file_path}.")
-        return None
+        return {}
 
     # Build choices for CLI
     choices = [
@@ -282,17 +282,17 @@ def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
 
     if not selected_config.get("net_arch"):
         logger.info(f"No network architecture found in {rl_config_file_path}.")
-        return None
+        return {}
 
     if not selected_config.get("activation_fn"):
         logger.info(f"No network activation function found in {rl_config_file_path}.")
-        return None
+        return {}
 
     try:
         selected_config["activation_fn"] = eval(selected_config["activation_fn"])
     except Exception as e:
         logger.info(f"Error evaluating network activation function: {e}")
-        return None
+        return {}
 
     return {
         "net_arch": selected_config["net_arch"],
@@ -749,7 +749,9 @@ def main():
         #   set of functions, instead of classes, since it's a small configuration. We could also offer a wrapper around
         #   PPO (and eventually A2C) to allow for easy customization of the network.
 
-        logger.info(rl_network_config)
+        if not rl_network_config:
+            logger.info("No RL network config")
+            return
 
         policy_kwargs = dict(
             activation_fn=rl_network_config.get("activation_fn"),
