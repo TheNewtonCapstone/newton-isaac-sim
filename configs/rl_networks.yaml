@@ -12,3 +12,6 @@ networks:
   custom_name:
     net_arch: [256, 256]
     activation_fn: torch.nn.ELU
+  descending_network:
+    net_arch: [1024, 512, 256]
+    activation_fn: torch.nn.ReLU
