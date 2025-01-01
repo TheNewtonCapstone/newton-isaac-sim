@@ -33,3 +33,10 @@ nodes:
     pub_real_topic: /contact
     pub_period: 10
     pub_qos: None
+
+  joints_controller:
+    name: joints_controller_node
+    pub_sim_topic: /sim/joints
+    pub_real_topic: /joints
+    pub_period: 5
+    pub_qos: None

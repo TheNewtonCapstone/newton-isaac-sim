@@ -40,7 +40,7 @@ class NewtonBaseAgent(BaseAgent):
         if self._universe.ros_enabled:
             from core.ros import BaseNode
 
-            # we sync the step of the ROS nodes with the agent's step, therefore the RL step
+            # we sync the step of the ROS nodes with the agent's step, therefore the physics step
 
             if isinstance(self.imu, BaseNode):
                 self.imu.step()

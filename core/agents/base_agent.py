@@ -33,12 +33,10 @@ class BaseAgent(ABC):
         )
 
     @abstractmethod
-    def step(self, actions: Actions) -> EnvObservations:
+    def step(self, actions: Actions) -> None:
         assert (
             self._is_constructed
         ), f"{self.__class__.__name__} not constructed: tried to step!"
-
-        return self.get_observations()
 
     @abstractmethod
     def get_observations(self) -> EnvObservations:

@@ -3,31 +3,73 @@ robot_type: quadruped
 
 # Kinematics
 joints:
-  limits:
-    positions:
-      FR_HAA: [-45, 45]
-      FL_HAA: [-45, 45]
-      HR_HAA: [-45, 45]
-      HL_HAA: [-45, 45]
-      FR_HFE: [-90, 90]
-      HR_HFE: [-90, 90]
-      FL_HFE: [-90, 90]
-      HL_HFE: [-90, 90]
-      FR_KFE: [-175, 175]
-      FL_KFE: [-175, 175]
-      HR_KFE: [-175, 175]
-      HL_KFE: [-175, 175]
+  gear_ratios:
+    FL_HAA: 9
+    FR_HAA: 9
+    HL_HAA: 9
+    HR_HAA: 9
+    FL_HFE: 9
+    FR_HFE: 9
+    HL_HFE: 9
+    HR_HFE: 9
+    FL_KFE: 9
+    FR_KFE: 9
+    HL_KFE: 9
+    HR_KFE: 9
 
-    velocities:
-      FR_HAA: 8000
-      FL_HAA: 8000
-      HR_HAA: 8000
-      HL_HAA: 8000
-      FR_HFE: 8000
-      HR_HFE: 8000
-      FL_HFE: 8000
-      HL_HFE: 8000
-      FR_KFE: 8000
-      FL_KFE: 8000
-      HR_KFE: 8000
-      HL_KFE: 8000
+  effort_saturation: # of the input (i.e. the motor; before applying any gear ratio)
+    FL_HAA: 0.4
+    FR_HAA: 0.4
+    HL_HAA: 0.4
+    HR_HAA: 0.4
+    FL_HFE: 0.4
+    FR_HFE: 0.4
+    HL_HFE: 0.4
+    HR_HFE: 0.4
+    FL_KFE: 0.4
+    FR_KFE: 0.4
+    HL_KFE: 0.4
+    HR_KFE: 0.4
+
+  limits: # of the output (i.e. the joint itself, after applying any gear ratio)
+    positions: # deg
+      FL_HAA: [-45, 45]
+      FR_HAA: [-45, 45]
+      HL_HAA: [-45, 45]
+      HR_HAA: [-45, 45]
+      FL_HFE: [-90, 90]
+      FR_HFE: [-90, 90]
+      HL_HFE: [-90, 90]
+      HR_HFE: [-90, 90]
+      FL_KFE: [-175, 175]
+      FR_KFE: [-175, 175]
+      HL_KFE: [-175, 175]
+      HR_KFE: [-175, 175]
+
+    velocities: # deg/s
+      FL_HAA: 5440
+      FR_HAA: 5440
+      HL_HAA: 5440
+      HR_HAA: 5440
+      FL_HFE: 5440
+      FR_HFE: 5440
+      HL_HFE: 5440
+      HR_HFE: 5440
+      FL_KFE: 5440
+      FR_KFE: 5440
+      HL_KFE: 5440
+      HR_KFE: 5440
+
+    efforts: # Nm
+      FL_HAA: 6.3
+      FR_HAA: 6.3
+      HL_HAA: 6.3
+      HR_HAA: 6.3
+      FL_HFE: 6.3
+      FR_HFE: 6.3
+      HL_HFE: 6.3
+      HR_HFE: 6.3
+      FL_KFE: 6.3
+      FR_KFE: 6.3
+      HL_KFE: 6.3
+      HR_KFE: 6.3

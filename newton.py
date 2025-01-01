@@ -452,6 +452,7 @@ def main():
     from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
 
     from core.sensors import VecIMU, VecContact
+    from core.actuators import DCActuator
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -470,8 +471,32 @@ def main():
         num_contact_sensors_per_agent=4,
     )
 
+    actuators: List[DCActuator] = []
+    effort_saturation_config: Config = robot_config["joints"]["effort_saturation"]
+
+    for i in range(12):
+        actuator = DCActuator(
+            universe=universe,
+            k_p=90,
+            k_d=9,
+            effort_saturation=list(effort_saturation_config.values())[i],
+        )
+
+        actuators.append(actuator)
+
+    joints_controller = VecJointsController(
+        universe=universe,
+        joint_position_limits=robot_config["joints"]["limits"]["positions"],
+        joint_velocity_limits=robot_config["joints"]["limits"]["velocities"],
+        joint_effort_limits=robot_config["joints"]["limits"]["efforts"],
+        joint_gear_ratios=robot_config["joints"]["gear_ratios"],
+        noise_function=lambda x: x,
+        actuators=actuators,
+    )
+
     if enable_ros:
         from core.sensors import ROSVecIMU, ROSVecContact
+        from core.controllers import ROSVecJointsController
         from core.utils.ros import get_qos_profile_from_node_config
 
         namespace: str = ros_config["namespace"]
@@ -506,12 +531,20 @@ def main():
             ),
         )
 
-    joints_controller = VecJointsController(
-        universe=universe,
-        joint_position_limits=robot_config["joints"]["limits"]["positions"],
-        joint_velocity_limits=robot_config["joints"]["limits"]["velocities"],
-        noise_function=lambda x: x,
-    )
+        joints_controller_node_config: Config = ros_config["nodes"]["joints_controller"]
+        joints_controller = ROSVecJointsController(
+            vec_joints_controller=joints_controller,
+            node_name=joints_controller_node_config["name"],
+            namespace=namespace,
+            pub_sim_topic=joints_controller_node_config["pub_sim_topic"],
+            pub_real_topic=joints_controller_node_config["pub_real_topic"],
+            pub_period=joints_controller_node_config["pub_period"],
+            pub_qos_profile=get_qos_profile_from_node_config(
+                joints_controller_node_config,
+                "pub_qos",
+                ros_config,
+            ),
+        )
 
     newton_agent = NewtonVecAgent(
         num_agents=num_envs,
@@ -573,8 +606,7 @@ def main():
                 joint_positions
             )
 
-            # we wrap it in an array to make it 2D (it's a vectorized env)
-            env.step(joint_actions.unsqueeze(0))
+            env.step(joint_actions)
 
         exit(1)
 
@@ -586,7 +618,12 @@ def main():
         env = NewtonMultiTerrainEnv(
             agent=newton_agent,
             num_envs=num_envs,
-            terrain_builders=[PerlinBaseTerrainBuilder(), FlatBaseTerrainBuilder()],
+            terrain_builders=[
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+            ],
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
         )
@@ -595,7 +632,7 @@ def main():
         env.reset()
 
         while universe.is_playing:
-            env.step(np.zeros((num_envs, 12)))
+            env.step(torch.zeros((num_envs, 12)))
 
         exit(1)
 
