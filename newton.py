@@ -236,7 +236,7 @@ def checkpoint_select(
 
     cli = Input(
         prompt=f"Please enter a run name (format: newton_idle_001): ",
-        default=f"{most_recent_checkpoint}",
+        default=f"",
         strip=True,
     )
 
@@ -245,7 +245,9 @@ def checkpoint_select(
     while selected_checkpoint_name not in runs_settings:
         selected_checkpoint_name = cli.launch()
 
-    print(selected_checkpoint_name)
+        if not selected_checkpoint_name:
+            print(f"Selecting latest checkpoint: {most_recent_checkpoint}.")
+            selected_checkpoint_name = most_recent_checkpoint
 
     return (
         runs_settings,
