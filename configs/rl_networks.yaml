@@ -15,3 +15,9 @@ networks:
   descending_network:
     net_arch: [1024, 512, 256]
     activation_fn: torch.nn.ReLU
+  chatgpt:
+    net_arch: [256, 128, 64]
+    activation_fn: torch.nn.ReLU
+  big_network:
+    net_arch: [2048, 1024, 512]
+    activation_fn: torch.nn.ReLU
