@@ -2,7 +2,8 @@ from abc import abstractmethod
 
 import torch
 
-from core.types import (
+from ..base import BaseObject
+from ..types import (
     VecJointsEfforts,
     VecJointsPositions,
     VecJointsVelocities,
@@ -10,20 +11,15 @@ from core.types import (
     VecJointVelocityLimits,
     VecJointGearRatios,
 )
-from core.universe import Universe
+from ..universe import Universe
 
 
-class BaseActuator:
+class BaseActuator(BaseObject):
     def __init__(
         self,
         universe: Universe,
     ):
-        """
-        Args:
-            universe: Unique instance of the Universe class.
-            gear_ratio: Gear ratio of the actuator, so if the motor spins `gear_ratio` revolutions, the output spins 1 revolution.
-        """
-        self._universe: Universe = universe
+        super().__init__(universe=universe)
 
         self._vec_velocity_limits: VecJointVelocityLimits = torch.zeros(
             (0,),
@@ -48,14 +44,12 @@ class BaseActuator:
             self._target_positions,
         )
 
-        self._is_constructed: bool = False
-
     @property
     def computed_output_efforts(self) -> VecJointsEfforts:
         """Returns computed efforts, after any clamping, saturation, etc. and, most importantly, after the gear ratio."""
         assert (
-            self._is_constructed
-        ), "Actuator not constructed: tried to access computed efforts!"
+            self.is_fully_constructed
+        ), "Actuator not fully constructed: tried to access computed efforts!"
 
         return self._computed_output_efforts
 
@@ -63,8 +57,8 @@ class BaseActuator:
     def applied_output_efforts(self) -> VecJointsEfforts:
         """Returns applied efforts, after any clamping, saturation, etc. and, most importantly, after the gear ratio."""
         assert (
-            self._is_constructed
-        ), "Actuator not constructed: tried to access applied efforts!"
+            self.is_fully_constructed
+        ), "Actuator not fully constructed: tried to access applied efforts!"
 
         return self._applied_output_efforts
 
@@ -75,9 +69,7 @@ class BaseActuator:
         input_vec_effort_limits: VecJointEffortLimits,
         vec_gear_ratios: VecJointVelocityLimits,
     ) -> None:
-        assert (
-            not self._is_constructed
-        ), "Actuator already constructed: tried to construct!"
+        super().construct()
 
         # limits are given of the input
         self._vec_velocity_limits = input_vec_velocity_limits
@@ -85,7 +77,9 @@ class BaseActuator:
 
         self._vec_gear_ratios = vec_gear_ratios
 
-        self._is_constructed = True
+    @abstractmethod
+    def post_construct(self) -> None:
+        super().post_construct()
 
     @abstractmethod
     def step(
@@ -94,13 +88,17 @@ class BaseActuator:
         output_target_positions: VecJointsPositions,
         output_current_velocities: VecJointsVelocities,
     ) -> VecJointsEfforts:
-        assert self._is_constructed, "Actuator not constructed: tried to step!"
+        assert (
+            self.is_fully_constructed
+        ), "Actuator not fully constructed: tried to step!"
 
         return self._applied_output_efforts
 
     @abstractmethod
     def reset(self) -> None:
-        assert self._is_constructed, "Actuator not constructed: tried to reset!"
+        assert (
+            self.is_fully_constructed
+        ), "Actuator not fully constructed: tried to reset!"
 
         self._computed_output_efforts = torch.zeros_like(self._computed_output_efforts)
         self._applied_output_efforts = torch.zeros_like(self._applied_output_efforts)

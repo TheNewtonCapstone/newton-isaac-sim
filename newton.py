@@ -547,6 +547,7 @@ def main():
         )
 
     newton_agent = NewtonVecAgent(
+        universe=universe,
         num_agents=num_envs,
         imu=imu,
         joints_controller=joints_controller,
@@ -554,10 +555,12 @@ def main():
     )
 
     animation_engine = AnimationEngine(
+        universe=universe,
         clips=animation_clips_config,
     )
 
     domain_randomizer = NewtonBaseDomainRandomizer(
+        universe=universe,
         seed=rl_config["seed"],
         agent=newton_agent,
         randomizer_settings=randomization_config,
@@ -569,6 +572,7 @@ def main():
 
     if animating:
         env = NewtonMultiTerrainEnv(
+            universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
             terrain_builders=[
@@ -581,10 +585,10 @@ def main():
             inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
         )
 
-        env.construct(universe)
-        env.reset()  # called manually, because the task usually does it, must be done before stepping
+        env.register_self()  # done manually, generally the task would do this
+        animation_engine.register_self(current_animation)
 
-        animation_engine.construct(current_animation)
+        universe.reset(construction=True)
 
         ordered_dof_names = joints_controller.art_view.dof_names
 
@@ -606,7 +610,8 @@ def main():
                 joint_positions
             )
 
-            env.step(joint_actions)
+            # we need to make it 2D, since the controller expects a batch of actions
+            env.step(joint_actions.repeat(1, 1))
 
         exit(1)
 
@@ -616,6 +621,7 @@ def main():
 
     if physics_only:
         env = NewtonMultiTerrainEnv(
+            universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
             terrain_builders=[
@@ -628,8 +634,9 @@ def main():
             inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
         )
 
-        env.construct(universe)
-        env.reset()
+        env.register_self()  # done manually, generally the task would do this
+
+        universe.reset(construction=True)
 
         while universe.is_playing:
             env.step(torch.zeros((num_envs, 12)))
@@ -648,6 +655,7 @@ def main():
     terrains_resolution = torch.tensor([20, 20])
 
     training_env = NewtonMultiTerrainEnv(
+        universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
         terrain_builders=[
@@ -679,6 +687,7 @@ def main():
     )
 
     playing_env = NewtonMultiTerrainEnv(
+        universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
         terrain_builders=[
@@ -730,8 +739,8 @@ def main():
 
     # task used for either training or playing
     task = NewtonIdleTask(
-        training_env=training_env,
-        playing_env=playing_env,
+        universe=universe,
+        env=playing_env if playing else training_env,
         agent=newton_agent,
         animation_engine=animation_engine,
         device=rl_config["device"],
@@ -745,7 +754,7 @@ def main():
         save_path=run_name,
     )
 
-    task.construct(universe)
+    universe.reset(construction=True)
 
     from stable_baselines3 import PPO
     from stable_baselines3.common.policies import BasePolicy

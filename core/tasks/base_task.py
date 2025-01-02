@@ -12,10 +12,11 @@ from stable_baselines3.common.vec_env.base_vec_env import (
 )
 
 import gymnasium
-from core.agents import BaseAgent
-from core.envs import BaseEnv
-from core.types import Progress, Rewards, Dones, Actions, Infos
-from core.universe import Universe
+from ..agents import BaseAgent
+from ..base import BaseObject
+from ..envs import BaseEnv
+from ..types import Progress, Rewards, Dones, Actions, Infos
+from ..universe import Universe
 
 
 class BaseTaskCallback(BaseCallback):
@@ -49,12 +50,12 @@ class BaseTaskCallback(BaseCallback):
         return True
 
 
-class BaseTask(VecEnv):
+class BaseTask(BaseObject, VecEnv):
     def __init__(
         self,
+        universe: Universe,
         name: str,
-        training_env: BaseEnv,
-        playing_env: BaseEnv,
+        env: BaseEnv,
         agent: BaseAgent,
         num_envs: int,
         device: str,
@@ -65,12 +66,19 @@ class BaseTask(VecEnv):
         action_space: gymnasium.spaces.Box,
         reward_space: gymnasium.spaces.Box,
     ):
+        BaseObject.__init__(
+            self,
+            universe=universe,
+        )
+
+        self.register_self()
+
         self.name: str = name
         self.device: str = device
         self.playing: bool = playing
 
         self.agent: BaseAgent = agent
-        self.env: BaseEnv = playing_env if self.playing else training_env
+        self.env: BaseEnv = env
 
         self.observation_space: gymnasium.spaces.Space = observation_space
         self.action_space: gymnasium.spaces.Box = action_space
@@ -107,27 +115,28 @@ class BaseTask(VecEnv):
 
         self.render_mode: str = "human"
 
-        super().__init__(
+        VecEnv.__init__(
+            self,
             num_envs=num_envs,
             observation_space=observation_space,
             action_space=action_space,
         )
 
-        self._is_constructed: bool = False
-
-    @property
-    def __str__(self):
+    def __repr__(self):
         return f"BaseTask: {self.num_envs} environments, {self.num_observations} observations, {self.num_actions} actions"
 
     @abstractmethod
-    def construct(self, universe: Universe) -> None:
-        assert not self._is_constructed, "Task already constructed: tried to construct!"
+    def construct(self) -> None:
+        BaseObject.construct(self)
+
+    def post_construct(self):
+        BaseObject.post_construct(self)
 
     # Gymnasium methods (required from VecEnv)
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:
-        assert self._is_constructed, "Task not constructed: tried to step"
+        assert self._is_post_constructed, "Task not constructed: tried to step"
 
         return (
             np.zeros(self.num_envs),
@@ -138,7 +147,7 @@ class BaseTask(VecEnv):
 
     @abstractmethod
     def reset(self) -> VecEnvObs:
-        assert self._is_constructed, "Task not constructed: tried to reset"
+        assert self._is_post_constructed, "Task not constructed: tried to reset"
 
         return {}
 

@@ -30,14 +30,14 @@ def dict_to_vec_limits(
 
     # Check if the joint limits are in the form of a list of lists or a list of floats (position requires 2 values)
     if isinstance(list(joint_limits.values())[0], list):
-        vec_joint_limits = torch.zeros((1, len(joint_names), 2))
+        vec_joint_limits = torch.zeros((len(joint_names), 2))
     else:
-        vec_joint_limits = torch.zeros((1, len(joint_names), 1))
+        vec_joint_limits = torch.zeros((len(joint_names), 1))
 
     # Ensures that the joint constraints are in the correct order
     for i, joint_name in enumerate(joint_names):
         limits = joint_limits[joint_name]
 
-        vec_joint_limits[0, i, :] = torch.tensor(limits)
+        vec_joint_limits[i, :] = torch.tensor(limits)
 
     return vec_joint_limits.to(device=device)

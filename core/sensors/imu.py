@@ -1,16 +1,19 @@
 from typing import Optional
 
 import torch
-from core.types import IMUData, NoiseFunction
-from core.universe import Universe
-from omni.isaac.core.prims import RigidPrimView
 from torch import Tensor
+
+import omni.isaac.core.prims
+from ..base import BaseObject
+from ..types import IMUData, NoiseFunction
+from ..universe import Universe
+
 
 # TODO: Wrap sensors in a ROS2 node for easy integration
 #   This would allow for easy logging of commands, sensor data, etc. all within the ROS2 ecosystem.
 
 
-class VecIMU:
+class VecIMU(BaseObject):
     def __init__(
         self,
         universe: Universe,
@@ -18,17 +21,17 @@ class VecIMU:
         local_orientation: Tensor,
         noise_function: NoiseFunction,
     ):
-        self._universe: Universe = universe
+        super().__init__(universe=universe)
+
         self._path_expr: str = ""
         self.local_position: Tensor = local_position.to(self._universe.device)
         self.local_orientation: Tensor = local_orientation.to(self._universe.device)
         self._num_imus: int = 0
 
-        self._rigid_prim_view: Optional[RigidPrimView] = None
+        self._rigid_prim_view: Optional[omni.isaac.core.prims.RigidPrimView] = None
         self._last_update_time: float = 0.0
 
         self._noise_function: NoiseFunction = noise_function
-        self._is_constructed: bool = False
 
         from core.utils.math import IDENTITY_QUAT
 
@@ -81,11 +84,11 @@ class VecIMU:
         return self._path_expr
 
     def construct(self, path_expr: str) -> None:
-        assert not self._is_constructed, "IMU already constructed: tried to construct!"
+        super().construct()
 
         self._path_expr = path_expr
 
-        self._rigid_prim_view = RigidPrimView(
+        self._rigid_prim_view = omni.isaac.core.prims.RigidPrimView(
             self._path_expr,
             name="imu_rigid_view",
             prepare_contact_sensors=False,
@@ -94,12 +97,14 @@ class VecIMU:
         )
         self._universe.add_prim(self._rigid_prim_view)
 
-        # propagate physics changes
-        self._universe.reset()
+        self._is_constructed = True
+
+    def post_construct(self) -> None:
+        super().post_construct()
 
         self._num_imus = self._rigid_prim_view.count
 
-        self._is_constructed = True
+        self._is_post_constructed = True
 
         # required to fill the tensors with the correct number of IMUs
         self.reset()

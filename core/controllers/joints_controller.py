@@ -3,6 +3,7 @@ from typing import Optional, List
 import torch
 from torch import Tensor
 
+from core.base import BaseObject
 from core.actuators import BaseActuator
 from core.types import (
     NoiseFunction,
@@ -42,14 +43,14 @@ def apply_joint_position_limits(
 
             # in degrees: https://docs.omniverse.nvidia.com/kit/docs/pxr-usd-api/latest/pxr/UsdPhysics.html#pxr.UsdPhysics.RevoluteJoint
             rev_joint.CreateLowerLimitAttr().Set(
-                vec_joint_position_limits[i, j, 0].item(),
+                vec_joint_position_limits[j, 0].item(),
             )
             rev_joint.GetUpperLimitAttr().Set(
-                vec_joint_position_limits[i, j, 1].item(),
+                vec_joint_position_limits[j, 1].item(),
             )
 
 
-class VecJointsController:
+class VecJointsController(BaseObject):
     def __init__(
         self,
         universe: Universe,
@@ -60,9 +61,10 @@ class VecJointsController:
         joint_gear_ratios: ArtJointsGearRatios,
         actuators: List[BaseActuator],
     ):
+        super().__init__(universe=universe)
+
         self.path_expr: str = ""
 
-        self._universe: Universe = universe
         self._articulation_view: Optional[ArticulationView] = None
 
         self._noise_function: NoiseFunction = noise_function
@@ -102,8 +104,6 @@ class VecJointsController:
 
         self._actuators: List[BaseActuator] = actuators
 
-        self._is_constructed: bool = False
-
     @property
     def art_view(self) -> Optional[ArticulationView]:
         if not self._is_constructed:
@@ -112,9 +112,7 @@ class VecJointsController:
         return self._articulation_view
 
     def construct(self, path_expr: str) -> None:
-        assert (
-            not self._is_constructed
-        ), "Joints controller already constructed: tried to construct!"
+        super().construct()
 
         self.path_expr = path_expr
 
@@ -127,7 +125,17 @@ class VecJointsController:
         )
         self._universe.add_prim(self._articulation_view)
 
-        self._universe.reset()
+        for i, actuator in enumerate(self._actuators):
+            actuator.register_self(
+                self._vec_joint_velocity_limits[i] * self._vec_gear_ratios[i],
+                self._vec_joint_effort_limits[i] / self._vec_gear_ratios[i],
+                self._vec_gear_ratios[i],
+            )
+
+        self._is_constructed = True
+
+    def post_construct(self):
+        super().post_construct()
 
         assert self._articulation_view.num_dof == self._num_joints, (
             f"Number of dof in articulation view ({self._articulation_view.num_dof}) "
@@ -161,41 +169,18 @@ class VecJointsController:
             f"content)"
         )
 
-        # Replicate the joint limits for each articulation in the articulation view
-        self._vec_joint_position_limits = self._vec_joint_position_limits.repeat(
-            (self._articulation_view.count, 1, 1),
-        )
-        self._vec_joint_velocity_limits = self._vec_joint_velocity_limits.repeat(
-            (self._articulation_view.count, 1, 1),
-        )
-        self._vec_joint_effort_limits = self._vec_joint_effort_limits.repeat(
-            (self._articulation_view.count, 1, 1),
-        )
-        self._vec_gear_ratios = self._vec_gear_ratios.repeat(
-            (self._articulation_view.count, 1, 1),
-        )
-
         apply_joint_position_limits(
             self._vec_joint_position_limits,
             self._articulation_view.prim_paths,
             self._articulation_view.joint_names,
         )
 
-        for i, actuator in enumerate(self._actuators):
-            actuator.construct(
-                input_vec_velocity_limits=(
-                    self._vec_joint_velocity_limits[:, i] * self._vec_gear_ratios[:, i]
-                ),
-                input_vec_effort_limits=(
-                    self._vec_joint_effort_limits[:, i] / self._vec_gear_ratios[:, i]
-                ),
-                vec_gear_ratios=self._vec_gear_ratios[:, i],
-            )
-
-        self._is_constructed = True
+        self._is_post_constructed = True
 
     def step(self, joint_actions: Tensor) -> None:
-        assert self._is_constructed, "Joints controller not constructed: tried to step!"
+        assert (
+            self.is_fully_constructed
+        ), "Joints controller not fully constructed: tried to step!"
 
         self._target_joint_positions = self._process_joint_actions(
             joint_actions,
@@ -213,11 +198,11 @@ class VecJointsController:
 
         for i, actuator in enumerate(self._actuators):
             efforts = actuator.step(
-                current_joint_positions[:, i].unsqueeze(-1),
-                self._target_joint_positions[:, i].unsqueeze(-1),
-                current_velocities[:, i].unsqueeze(-1),
+                current_joint_positions[:, i],
+                self._target_joint_positions[:, i],
+                current_velocities[:, i],
             )
-            efforts_to_apply[:, i] = efforts.squeeze(-1)
+            efforts_to_apply[:, i] = efforts
 
         self._articulation_view.set_joint_efforts(efforts_to_apply)
 
@@ -229,8 +214,8 @@ class VecJointsController:
         indices: Optional[Indices] = None,
     ) -> None:
         assert (
-            self._is_constructed
-        ), "Joints controller not constructed: tried to reset!"
+            self.is_fully_constructed
+        ), "Joints controller not fully constructed: tried to reset!"
 
         if indices is None:
             indices = torch.arange(
@@ -274,10 +259,10 @@ class VecJointsController:
 
         joint_positions_normalized = map_range(
             joint_positions,
-            self._vec_joint_position_limits[:, :, 0].to(
+            self._vec_joint_position_limits[:, 0].to(
                 joint_positions.device,
             ),
-            self._vec_joint_position_limits[:, :, 1].to(
+            self._vec_joint_position_limits[:, 1].to(
                 joint_positions.device,
             ),
             -1.0,
@@ -341,7 +326,7 @@ class VecJointsController:
         applied_joint_efforts: Tensor = torch.zeros_like(self._target_joint_positions)
 
         for i, actuator in enumerate(self._actuators):
-            applied_joint_efforts[:, i] = actuator.applied_output_efforts
+            applied_joint_efforts[:, i] = actuator.applied_output_efforts.squeeze(-1)
 
         return applied_joint_efforts
 
@@ -361,22 +346,19 @@ class VecJointsController:
         Returns:
             The processed joint positions (in degrees).
         """
-        joint_positions = torch.zeros_like(joint_actions).to(self._universe.device)
+        joint_positions = torch.clamp(
+            joint_actions.to(vec_joint_position_limits.device),
+            min=-1.0,
+            max=1.0,
+        )
 
-        for i, _ in enumerate(joint_positions):
-            joint_positions[i] = torch.clamp(
-                joint_actions[i],
-                min=-1.0,
-                max=1.0,
-            )
+        joint_positions = torch.lerp(
+            vec_joint_position_limits[:, 0],
+            vec_joint_position_limits[:, 1],
+            (joint_positions + 1) / 2,
+        )
 
-            joint_positions[i] = torch.lerp(
-                vec_joint_position_limits[:, :, 0],
-                vec_joint_position_limits[:, :, 1],
-                (joint_positions[i] + 1) / 2,
-            )
-
-            if noise_function is not None:
-                joint_positions[i] = noise_function(joint_positions[i])
+        if noise_function is not None:
+            joint_positions = noise_function(joint_positions)
 
         return joint_positions

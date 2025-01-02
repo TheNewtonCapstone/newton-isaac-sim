@@ -90,9 +90,9 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 class NewtonBaseTask(BaseTask):
     def __init__(
         self,
+        universe: Universe,
         name: str,
-        training_env: NewtonBaseEnv,
-        playing_env: NewtonBaseEnv,
+        env: NewtonBaseEnv,
         agent: NewtonBaseAgent,
         animation_engine: AnimationEngine,
         num_envs: int,
@@ -106,9 +106,9 @@ class NewtonBaseTask(BaseTask):
     ):
 
         super().__init__(
+            universe,
             name,
-            training_env,
-            playing_env,
+            env,
             agent,
             num_envs,
             device,
@@ -120,8 +120,7 @@ class NewtonBaseTask(BaseTask):
             reward_space,
         )
 
-        self.training_env: NewtonBaseEnv = training_env
-        self.playing_env: NewtonBaseEnv = playing_env
+        self.training_env: NewtonBaseEnv = env
         self.agent: NewtonBaseAgent = agent
 
         self.animation_engine: AnimationEngine = animation_engine
@@ -132,15 +131,12 @@ class NewtonBaseTask(BaseTask):
         )  # 2 sets of past actions, 0: t - 1, 1: t - 2
 
     @abstractmethod
-    def construct(self, universe: Universe) -> None:
-        super().construct(universe)
+    def construct(self) -> None:
+        super().construct()
 
-        if self.playing:
-            self.playing_env.construct(universe)
-        else:
-            self.training_env.construct(universe)
+        self.env.register_self()
 
-        self.animation_engine.construct(self.name)
+        self.animation_engine.register_self(self.name)
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:

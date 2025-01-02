@@ -6,30 +6,34 @@ from core.types import (
     Progress,
 )
 from .types import AnimationClip, Keyframe, BoneData, ArmatureData
+from ..base import BaseObject
+from ..universe import Universe
 
 
-class AnimationEngine:
+class AnimationEngine(BaseObject):
     def __init__(
         self,
+        universe: Universe,
         clips: Dict[str, Config],
     ):
+        super().__init__(universe=universe)
+
         self.current_clip_name: Optional[str] = None
 
         self.clip_configs: Dict[str, Config] = clips
         self.clips: Dict[str, AnimationClip] = {}
 
-        self._is_constructed: bool = False
-
     @property
     def current_clip(self) -> AnimationClip:
         assert (
-            self._is_constructed
+            self.is_fully_constructed
         ), "AnimationEngine not constructed: tried to access current_clip!"
 
         return self.clips[self.current_clip_name]
 
     def construct(self, current_clip: str) -> None:
-        assert not self._is_constructed, "AnimationEngine already constructed!"
+        super().construct()
+
         assert (
             current_clip in self.clip_configs
         ), f"Clip {current_clip} not found in {self.clip_configs.keys()}"
@@ -88,6 +92,11 @@ class AnimationEngine:
 
         self._is_constructed = True
 
+    def post_construct(self):
+        super().post_construct()
+
+        self._is_post_constructed = True
+
     def get_multiple_clip_data_at_seconds(
         self,
         seconds: Progress,
@@ -104,6 +113,10 @@ class AnimationEngine:
         Returns:
             A tensor with shape (num_agents, num_bones, 9) containing the joint positions, orientations, relative angles and relative angle velocities for each agent.
         """
+        assert (
+            self.is_fully_constructed
+        ), "AnimationEngine not constructed: tried to get multiple clip data!"
+
         clip_datas = self.get_clip_data_at_seconds(
             self.current_clip_name,
             seconds,
@@ -148,6 +161,10 @@ class AnimationEngine:
         Returns:
             A list of armature data for each agent.
         """
+        assert (
+            self.is_fully_constructed
+        ), "AnimationEngine not constructed: tried to get clip data at seconds!"
+
         clip: AnimationClip = self.clips[clip_name]
         frames = second.cpu() * clip.framerate
 
@@ -174,6 +191,10 @@ class AnimationEngine:
         Returns:
             Armature data for the given clip.
         """
+        assert (
+            self.is_fully_constructed
+        ), "AnimationEngine not constructed: tried to get clip data at frame!"
+
         clip: AnimationClip = self.clips[clip_name]
         keyframes = clip.keyframes
 

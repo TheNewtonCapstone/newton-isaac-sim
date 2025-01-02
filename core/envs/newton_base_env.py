@@ -14,6 +14,7 @@ from torch import Tensor
 class NewtonBaseEnv(BaseEnv):
     def __init__(
         self,
+        universe: Universe,
         agent: NewtonBaseAgent,
         num_envs: int,
         terrain_builders: List[BaseTerrainBuilder],
@@ -21,6 +22,7 @@ class NewtonBaseEnv(BaseEnv):
         inverse_control_frequency: int,
     ):
         super().__init__(
+            universe,
             agent,
             num_envs,
             terrain_builders,
@@ -38,8 +40,12 @@ class NewtonBaseEnv(BaseEnv):
         self._inverse_control_frequency = inverse_control_frequency
 
     @abstractmethod
-    def construct(self, universe: Universe) -> None:
-        super().construct(universe)
+    def construct(self) -> None:
+        super().construct()
+
+    @abstractmethod
+    def post_construct(self):
+        super().post_construct()
 
     @abstractmethod
     def step(self, actions: Actions) -> None:

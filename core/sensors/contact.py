@@ -1,19 +1,22 @@
 from typing import List, Optional
 
 import torch
-from core.types import ContactData
-from core.universe import Universe
-from omni.isaac.core.prims import RigidPrimView
 from torch import Tensor
 
+from omni.isaac.core.prims import RigidPrimView
+from ..base import BaseObject
+from ..types import ContactData
+from ..universe import Universe
 
-class VecContact:
+
+class VecContact(BaseObject):
     def __init__(
         self,
         universe: Universe,
         num_contact_sensors_per_agent: int = 1,
     ):
-        self._universe: Universe = universe
+        super().__init__(universe=universe)
+
         self._path_expr: str = ""
         self._paths: List[List[str]] = []
         self._rigid_prim_view: Optional[RigidPrimView] = None
@@ -22,8 +25,6 @@ class VecContact:
         self._num_contact_sensors: int = 0
 
         self._last_update_time: float = 0.0
-
-        self._is_constructed: bool = False
 
         self._contacts: Tensor = torch.zeros(
             (self._num_contact_sensors, self._num_contact_sensors_per_agent),
@@ -52,9 +53,7 @@ class VecContact:
         self,
         path_expr: str,
     ) -> None:
-        assert (
-            not self._is_constructed
-        ), "Contact sensor already constructed: tried to construct!"
+        super().construct()
 
         self._path_expr = path_expr
 
@@ -74,8 +73,17 @@ class VecContact:
         )
         self._universe.add_prim(self._rigid_prim_view)
 
-        # propagate physics changes
-        self._universe.reset()
+        self._is_constructed = True
+
+    def post_construct(self) -> None:
+        super().post_construct()
+
+        from core.utils.usd import find_matching_prims_count
+
+        num_agents = (
+            find_matching_prims_count(self._path_expr)
+            // self._num_contact_sensors_per_agent
+        )
 
         assert (
             self._rigid_prim_view.count
@@ -89,12 +97,16 @@ class VecContact:
             self._rigid_prim_view.count // self._num_contact_sensors_per_agent
         )
 
-        self._is_constructed = True
+        self._is_post_constructed = True
 
         # required to fill the tensors with the correct number of sensors
         self.reset()
 
     def reset(self) -> None:
+        assert (
+            self.is_fully_constructed
+        ), "Contact sensor not constructed: tried to reset!"
+
         self._contacts: Tensor = torch.zeros(
             (self._num_contact_sensors, self._num_contact_sensors_per_agent),
             device=self._universe.device,

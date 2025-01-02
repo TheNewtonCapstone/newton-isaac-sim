@@ -44,6 +44,13 @@ class DCActuator(BaseActuator):
             vec_gear_ratios,
         )
 
+        self._is_constructed = True
+
+    def post_construct(self) -> None:
+        super().post_construct()
+
+        self._is_post_constructed = True
+
     def step(
         self,
         output_current_positions: VecJointsPositions,

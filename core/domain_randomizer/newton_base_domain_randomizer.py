@@ -1,21 +1,24 @@
 from typing import Optional
 
 import torch
-from core.agents import NewtonBaseAgent
-from core.domain_randomizer.base_domain_randomizer import BaseDomainRandomizer
-from core.types import Config, Indices
-from core.universe import Universe
+
 from omni.isaac.core.prims import RigidPrimView
+from .base_domain_randomizer import BaseDomainRandomizer
+from ..agents import NewtonBaseAgent
+from ..types import Config, Indices
+from ..universe import Universe
 
 
 class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
     def __init__(
         self,
+        universe: Universe,
         seed: int,
         agent: NewtonBaseAgent,
         randomizer_settings: Config,
     ):
         super().__init__(
+            universe,
             seed,
             agent,
             randomizer_settings,
@@ -27,8 +30,8 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         self.initial_positions: torch.Tensor = torch.zeros((1, 3))
         self.initial_orientations: torch.Tensor = torch.zeros((1, 4))
 
-    def construct(self, universe: Universe) -> None:
-        super().construct(universe)
+    def construct(self) -> None:
+        super().construct()
 
         self._rigid_prim_view = RigidPrimView(
             prim_paths_expr=self._agent.base_path_expr,
@@ -37,9 +40,12 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         )
         self._universe.add_prim(self._rigid_prim_view)
 
-        self._universe.reset()
-
         self._is_constructed = True
+
+    def post_construct(self) -> None:
+        super().post_construct()
+
+        self._is_post_constructed = True
 
     def on_step(self) -> None:
         super().on_step()
