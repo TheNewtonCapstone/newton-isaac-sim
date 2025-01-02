@@ -173,16 +173,9 @@ class NewtonIdleTask(NewtonBaseTask):
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]
         world_gravities = obs["world_gravities"]
-        world_gravities_norm = world_gravities / torch.linalg.vector_norm(
-            world_gravities,
-            dim=1,
-            keepdim=True,
-        )
         projected_gravities = obs["projected_gravities"]
         projected_gravities_norm = projected_gravities / torch.linalg.vector_norm(
-            projected_gravities,
-            dim=1,
-            keepdim=True,
+            projected_gravities, dim=1, keepdim=True
         )
         in_contact_with_ground = obs["in_contacts"]
 
@@ -196,11 +189,11 @@ class NewtonIdleTask(NewtonBaseTask):
             (self.progress_buf > 5).to(self.device),
         )
 
-        # base position
-        base_linear_velocity_xy = linear_velocities[:, :2]
-        base_linear_velocity_z = linear_velocities[:, 2]
-        base_angular_velocity_xy = angular_velocities[:, :2]
-        base_angular_velocity_z = angular_velocities[:, 2]
+        # Base movement metrics
+        base_linear_velocity = linear_velocities[:, :2]  # Focus on x, y
+        base_angular_velocity_z = angular_velocities[
+            :, 2
+        ]  # Simplified rotational penalty
 
         joint_positions = (
             self.agent.joints_controller.get_normalized_joint_positions()
@@ -213,6 +206,10 @@ class NewtonIdleTask(NewtonBaseTask):
             self.agent.joints_controller.art_view.get_measured_joint_efforts()
         )  # in Nm
 
+        # TODO: Modify the animation reward by giving different reward weights to each joint group (Shoulder, Upper leg,
+        #  lower leg). This way we can give more importance to shoulder movements compared to the rest.
+
+        # Reference animation data
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
             self.progress_buf * self.rl_step_dt,
             dof_ordered_names,
@@ -222,12 +219,12 @@ class NewtonIdleTask(NewtonBaseTask):
             self.agent.joints_controller.normalize_joint_positions(
                 animation_joint_data[:, :, 7]
             ).to(device=self.device)
-        )  # [-1, 1] unitless
+        )
         animation_joint_velocities = (
             self.agent.joints_controller.normalize_joint_velocities(
                 animation_joint_data[:, :, 8]
             ).to(device=self.device)
-        )  # [-1, 1] unitless
+        )
 
         # DONES
 
@@ -254,86 +251,38 @@ class NewtonIdleTask(NewtonBaseTask):
             fd_second_order_squared_norm,
         )
 
-        # base position reward
-        base_orientation_reward = exp_squared_dot(
-            projected_gravities_norm,
-            world_gravities_norm,
-            mult=-20.0,
+        base_orientation_reward = exp_squared(
+            projected_gravities_norm[:, 2] - 1.0,  # Penalize deviations from upright
+            mult=-10.0,
             weight=1.0,
         )
-        base_linear_velocity_xy_reward = exp_squared_norm(
-            base_linear_velocity_xy,
-            mult=-8.0,
-            weight=1.0,
-        )
-        base_linear_velocity_z_reward = exp_squared(
-            base_linear_velocity_z,
-            mult=-8.0,
-            weight=1.0,
-        )
-        base_angular_velocity_xy_reward = exp_squared_norm(
-            base_angular_velocity_xy,
-            mult=-2,
-            weight=0.5,
-        )
-        base_angular_velocity_z_reward = exp_squared(
-            base_angular_velocity_z,
-            mult=-2,
-            weight=0.5,
+        base_velocity_reward = exp_squared_norm(
+            base_linear_velocity, mult=-5.0, weight=1.5
         )
         joint_positions_reward = fd_first_order_squared_norm(
             joint_positions,
             animation_joint_positions,
-            weight=10.0,
+            weight=25.0,  # Strong emphasis on gait
         )
         joint_velocities_reward = fd_first_order_squared_norm(
-            joint_velocities,
-            animation_joint_velocities,
-            weight=0.01,
+            joint_velocities, animation_joint_velocities, weight=5  # Small penalty
         )
         joint_efforts_reward = squared_norm(
-            joint_efforts,
-            weight=0.001,
-        )
-        # joint accelerations reward
-        joint_action_rate_reward = fd_first_order_squared_norm(
-            self.actions_buf,
-            self.last_actions_buf[0],
-            weight=1.0,
-        )
-        joint_action_acceleration_reward = fd_second_order_squared_norm(
-            self.actions_buf,
-            self.last_actions_buf[0],
-            self.last_actions_buf[1],
-            weight=0.45,
-        )
-        in_contacts_reward = in_contact_with_ground.sum(dim=-1)  # 1 reward per contact
-        survival_reward = torch.where(
-            terminated,
-            0.0,
-            2.0,
-        )
+            joint_efforts, weight=0.002
+        )  # Simplified effort penalty
+        survival_reward = torch.where(terminated, 0.0, 2.0)  # Incentivize survival
 
         self.rewards_buf = (
-            base_orientation_reward
-            + base_linear_velocity_xy_reward
-            + base_linear_velocity_z_reward
-            + base_angular_velocity_xy_reward
-            + base_angular_velocity_z_reward
-            + joint_positions_reward
+            # base_orientation_reward
+            # + base_velocity_reward
+            +joint_positions_reward
             + joint_velocities_reward
-            + joint_efforts_reward
-            + joint_action_rate_reward
-            + joint_action_acceleration_reward
-            + in_contacts_reward
+            # + joint_efforts_reward
             + survival_reward
         )
 
-        self.rewards_buf = torch.nan_to_num(
-            self.rewards_buf,
-            nan=0.0,
-        )
-
+        # Handle NaNs and clip rewards
+        self.rewards_buf = torch.nan_to_num(self.rewards_buf, nan=0.0)
         self.rewards_buf = torch.clip(
             self.rewards_buf,
             torch.from_numpy(self.reward_space.low).to(self.device),
