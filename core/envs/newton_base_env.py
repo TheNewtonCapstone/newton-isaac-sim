@@ -14,6 +14,7 @@ from torch import Tensor
 class NewtonBaseEnv(BaseEnv):
     def __init__(
         self,
+        universe: Universe,
         agent: NewtonBaseAgent,
         num_envs: int,
         terrain_builders: List[BaseTerrainBuilder],
@@ -21,6 +22,7 @@ class NewtonBaseEnv(BaseEnv):
         inverse_control_frequency: int,
     ):
         super().__init__(
+            universe,
             agent,
             num_envs,
             terrain_builders,
@@ -38,17 +40,21 @@ class NewtonBaseEnv(BaseEnv):
         self._inverse_control_frequency = inverse_control_frequency
 
     @abstractmethod
-    def construct(self, universe: Universe) -> None:
-        super().construct(universe)
+    def construct(self) -> None:
+        super().construct()
+
+    @abstractmethod
+    def post_construct(self):
+        super().post_construct()
 
     @abstractmethod
     def step(self, actions: Actions) -> None:
-        self.agent.step(actions)  # agent should always step before any physics step
-
-        self.domain_randomizer.on_step()  # same goes for DR
-
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
         for _ in range(self._inverse_control_frequency):
+            self.agent.step(actions)  # agent runs physic-related computations
+
+            self.domain_randomizer.on_step()  # DR should always happen before any physics step
+
             super().step(actions)  # advances the simulation by one step
 
     @abstractmethod

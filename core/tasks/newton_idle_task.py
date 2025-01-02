@@ -28,8 +28,8 @@ class NewtonIdleTaskCallback(NewtonBaseTaskCallback):
 class NewtonIdleTask(NewtonBaseTask):
     def __init__(
         self,
-        training_env: NewtonBaseEnv,
-        playing_env: NewtonBaseEnv,
+        universe: Universe,
+        env: NewtonBaseEnv,
         agent: NewtonBaseAgent,
         animation_engine: AnimationEngine,
         num_envs: int,
@@ -68,9 +68,9 @@ class NewtonIdleTask(NewtonBaseTask):
         )
 
         super().__init__(
+            universe,
             "newton_idle",
-            training_env,
-            playing_env,
+            env,
             agent,
             animation_engine,
             num_envs,
@@ -85,10 +85,15 @@ class NewtonIdleTask(NewtonBaseTask):
 
         self.reset_height: float = 0.1
 
-    def construct(self, universe: Universe) -> None:
-        super().construct(universe)
+    def construct(self) -> None:
+        super().construct()
 
         self._is_constructed = True
+
+    def post_construct(self):
+        super().post_construct()
+
+        self._is_post_constructed = True
 
     def step_wait(self) -> VecEnvStepReturn:
         super().step_wait()

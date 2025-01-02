@@ -9,6 +9,7 @@ base_lr: 3e-6
 episode_length: 500
 
 newton:
+# TODO: Remove inverse_control_frequency as a task parameter
   inverse_control_frequency: 4  # we're aiming for a total compute budget of 2 times the physics timestep (0.005s * 4 = 0.02s)
 
   # TODO: Add gains as a configuration parameter

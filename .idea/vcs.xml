@@ -2,5 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/ros/pkgs/newton_ros" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/ros/pkgs/newton_sim_ros" vcs="Git" />
   </component>
 </project>

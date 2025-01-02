@@ -1,6 +1,9 @@
 physics_dt: 0.005000
-stage_units_in_meters: 1.0
+# TODO: Fully implement control_dt functionality across all systems
+#   The idea is to have everything inside of the Universe object, so it's more easily accessed from one place
+control_dt: 0.020000
 rendering_dt: 0.01667
+stage_units_in_meters: 1.0
 backend: torch
 device: cuda
 

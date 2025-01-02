@@ -1,12 +1,13 @@
-from typing import Any
+from typing import Any, Dict, Tuple
 
-from core.globals import LIGHTS_PATH, PHYSICS_PATH
-from core.types import Settings
 from omni.isaac.core import SimulationContext
 from omni.isaac.core.prims import XFormPrim, XFormPrimView
 from omni.isaac.core.scenes import Scene
 from omni.isaac.kit import SimulationApp
 from pxr import Usd
+from ..base import BaseObject
+from ..globals import LIGHTS_PATH, PHYSICS_PATH
+from ..types import Config
 
 
 class Universe(SimulationContext):
@@ -14,12 +15,16 @@ class Universe(SimulationContext):
         self,
         headless: bool,
         sim_app: SimulationApp,
-        world_settings: Settings,
+        world_settings: Config,
+        ros_enabled: bool = False,
     ):
         self.sim_app: SimulationApp = sim_app
-        self._world_settings: Settings = world_settings
+        self._world_settings: Config = world_settings
+
+        self._control_dt: float = self._world_settings["control_dt"]
 
         self._headless = headless
+        self._ros_enabled = ros_enabled
 
         if self.has_gui:
             from omni.kit.viewport.utility import get_active_viewport
@@ -30,6 +35,9 @@ class Universe(SimulationContext):
 
         # Scene
         self._scene = Scene()
+
+        # Object registry
+        self._registrations: Dict[BaseObject, Tuple[Any, Any]] = {}
 
         super().__init__(
             physics_prim_path=PHYSICS_PATH,
@@ -46,6 +54,10 @@ class Universe(SimulationContext):
         return self._headless
 
     @property
+    def ros_enabled(self) -> bool:
+        return self._ros_enabled
+
+    @property
     def has_gui(self) -> bool:
         return not self.headless
 
@@ -56,6 +68,25 @@ class Universe(SimulationContext):
     @property
     def use_usd_physics(self) -> bool:
         return not self.use_fabric_physics
+
+    @property
+    def control_dt(self) -> float:
+        return self._control_dt
+
+    def register_object(
+        self,
+        obj: BaseObject,
+        *args,
+        **kwargs,
+    ) -> None:
+        """
+        Registers an object in the universe. If the object is already registered, it'll be ignored.
+        All registered objects will be constructed and post-constructed in the order they were registered.
+        """
+        self._registrations[obj] = (args, kwargs)
+
+    def add_prim(self, prim: XFormPrim | XFormPrimView):
+        self._scene.add(prim)
 
     def step(self, render: bool = False) -> None:
         """Steps the simulation. This behaves exactly like IsaacLab SimulationContext's step function.
@@ -94,7 +125,7 @@ class Universe(SimulationContext):
         # otherwise, we need to manually update the app (without stepping the simulation)
         self.update_app_no_sim()
 
-    def reset(self, soft: bool = False) -> None:
+    def reset(self, soft: bool = False, construction: bool = False) -> None:
         import omni.log
 
         # TODO: implement proper logging, probably with a logger class and different channels for different things (
@@ -117,8 +148,63 @@ class Universe(SimulationContext):
             for _ in range(2):
                 self.render()
 
-    def add_prim(self, prim: XFormPrim | XFormPrimView):
-        self._scene.add(prim)
+        if not construction:
+            return
+
+        # This is generally the first time the universe is being reset, let's construct all registered objects
+
+        registrations = self._registrations.copy()
+        restarted_constructions = False
+        completed_constructions = False
+        completed_post_constructions = False
+
+        while not (completed_constructions and completed_post_constructions):
+            if not completed_constructions:
+                # Construct all registered objects
+                for obj in registrations:
+                    # skip construction if the object is already constructed
+                    if obj.is_constructed:
+                        continue
+
+                    # we assume that no new registrations have been added during the construction process
+                    restarted_constructions = False
+
+                    # get construction arguments
+                    args, _ = self._registrations[obj]
+
+                    obj.construct(*args)
+
+                    # check if any new registrations have been added during the construction process
+                    if len(registrations) != len(self._registrations):
+                        registrations = self._registrations.copy()
+                        restarted_constructions = True
+                        break
+
+                # if we restarted the construction process, we need to start over
+                completed_constructions = not restarted_constructions
+
+            # start the while loop again, there's been a new registration
+            if restarted_constructions:
+                continue
+
+            # make sure that physics is updated before post-construction
+            self.reset(soft=False, construction=False)
+
+            # Post-construct all registered objects, no new registrations should be added during this process
+            for obj in registrations:
+                if obj.is_post_constructed:
+                    continue
+
+                # get construction arguments
+                _, kwargs = self._registrations[obj]
+
+                obj.post_construct(**kwargs)
+
+                assert len(registrations) == len(
+                    self._registrations
+                ), "New registrations cannot be added during post-construction!"
+
+            completed_post_constructions = True
 
     def update_app_no_sim(self) -> None:
         self.set_carb_setting("/app/player/playSimulations", False)

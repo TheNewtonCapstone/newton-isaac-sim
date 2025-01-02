@@ -21,9 +21,29 @@ class ContactData(TypedDict):
 
 
 # Motors
-JointsPositions = torch.Tensor
-JointsPositionLimits = Dict[str, List[float]]
-JointsVelocityLimits = Dict[str, float]
+
+VecJointsPositions = torch.Tensor
+VecJointsVelocities = torch.Tensor
+VecJointsEfforts = torch.Tensor
+
+VecJointPositionLimits = torch.Tensor
+VecJointVelocityLimits = torch.Tensor
+VecJointEffortLimits = torch.Tensor
+VecJointGearRatios = torch.Tensor
+
+JointPositionLimit = List[float]
+JointVelocityLimit = float
+JointEffortLimit = float
+
+ArtJointsPositionLimits = Dict[str, List[float]]
+ArtJointsVelocityLimits = Dict[str, float]
+ArtJointsEffortLimits = Dict[str, float]
+ArtJointsGearRatios = Dict[str, float]
+
+JointPosition = float
+JointVelocity = float
+JointEffort = float
+JointSaturation = float
 
 # RL
 Actions = torch.Tensor
@@ -42,22 +62,24 @@ NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
 #   I.e. float | torch.Tensor | np.ndarray
 
 # Meta
-Settings = Dict[str, Any]
-SettingsCollection = Dict[str, Settings]
+Config = Dict[str, Any]
+ConfigCollection = Dict[str, Config]
 Indices = torch.Tensor
 
 Matter = Tuple[
     argparse.Namespace,
-    Settings,
-    Settings,
-    Settings,
-    Settings,
-    SettingsCollection,
+    Config,
+    Config,
+    Config,
+    Config,
+    Config,
+    ConfigCollection,
     str,
     str,
-    SettingsCollection,
+    ConfigCollection,
     Optional[str],
     str,
+    bool,
     bool,
     bool,
     bool,
