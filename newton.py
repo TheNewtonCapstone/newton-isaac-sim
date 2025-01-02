@@ -294,7 +294,7 @@ def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
     selected_choice, selected_choice_ind = cli.launch()
 
     # Parse selected network
-    selected_config = list(networks.values())[selected_choice_ind]
+    selected_config: dict = list(networks.values())[selected_choice_ind]
 
     if not selected_config.get("net_arch"):
         logger.info(f"No network architecture found in {rl_config_file_path}.")
@@ -384,6 +384,7 @@ def setup() -> Optional[Matter]:
     runs_dir: str = cli_args.runs_dir
     current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
     no_checkpoint = cli_args.no_checkpoint
+    rl_network_config: Config = {}
 
     if (playing or exporting) and no_checkpoint:
         print("No checkpoint specified for playing or exporting.")
