@@ -1,8 +1,77 @@
 robot_name: newton
 robot_type: quadruped
 
+# Actuators
+actuators:
+  dc: # of the input (i.e. the motor; before applying any gear ratio)
+    effort_saturation:
+      FL_HAA: 0.25
+      FR_HAA: 0.25
+      HL_HAA: 0.25
+      HR_HAA: 0.25
+      FL_HFE: 0.25
+      FR_HFE: 0.25
+      HL_HFE: 0.25
+      HR_HFE: 0.25
+      FL_KFE: 0.25
+      FR_KFE: 0.25
+      HL_KFE: 0.25
+      HR_KFE: 0.25
+
+    gains:
+      FL_HAA:
+        p: 2.0
+        d: 0.5
+      FR_HAA:
+        p: 2.0
+        d: 0.5
+      HL_HAA:
+        p: 2.0
+        d: 0.5
+      HR_HAA:
+        p: 2.0
+        d: 0.5
+      FL_HFE:
+        p: 2.0
+        d: 0.2
+      FR_HFE:
+        p: 2.0
+        d: 0.2
+      HL_HFE:
+        p: 2.0
+        d: 0.2
+      HR_HFE:
+        p: 2.0
+        d: 0.2
+      FL_KFE:
+        p: 0.09
+        d: 0.05
+      FR_KFE:
+        p: 0.09
+        d: 0.05
+      HL_KFE:
+        p: 0.09
+        d: 0.05
+      HR_KFE:
+        p: 0.09
+        d: 0.05
+
 # Kinematics
 joints:
+  fixed:
+    FL_HAA: False
+    FR_HAA: False
+    HL_HAA: False
+    HR_HAA: False
+    FL_HFE: False
+    FR_HFE: False
+    HL_HFE: False
+    HR_HFE: False
+    FL_KFE: False
+    FR_KFE: False
+    HL_KFE: False
+    HR_KFE: False
+
   gear_ratios:
     FL_HAA: 9
     FR_HAA: 9
@@ -16,20 +85,6 @@ joints:
     FR_KFE: 9
     HL_KFE: 9
     HR_KFE: 9
-
-  effort_saturation: # of the input (i.e. the motor; before applying any gear ratio)
-    FL_HAA: 0.4
-    FR_HAA: 0.4
-    HL_HAA: 0.4
-    HR_HAA: 0.4
-    FL_HFE: 0.4
-    FR_HFE: 0.4
-    HL_HFE: 0.4
-    HR_HFE: 0.4
-    FL_KFE: 0.4
-    FR_KFE: 0.4
-    HL_KFE: 0.4
-    HR_KFE: 0.4
 
   limits: # of the output (i.e. the joint itself, after applying any gear ratio)
     positions: # deg
@@ -61,15 +116,15 @@ joints:
       HR_KFE: 5440
 
     efforts: # Nm
-      FL_HAA: 6.3
-      FR_HAA: 6.3
-      HL_HAA: 6.3
-      HR_HAA: 6.3
-      FL_HFE: 6.3
-      FR_HFE: 6.3
-      HL_HFE: 6.3
-      HR_HFE: 6.3
-      FL_KFE: 6.3
-      FR_KFE: 6.3
-      HL_KFE: 6.3
-      HR_KFE: 6.3
+      FL_HAA: 2.25
+      FR_HAA: 2.25
+      HL_HAA: 2.25
+      HR_HAA: 2.25
+      FL_HFE: 2.25
+      FR_HFE: 2.25
+      HL_HFE: 2.25
+      HR_HFE: 2.25
+      FL_KFE: 2.25
+      FR_KFE: 2.25
+      HL_KFE: 2.25
+      HR_KFE: 2.25

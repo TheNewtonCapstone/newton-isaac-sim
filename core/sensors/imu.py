@@ -23,6 +23,9 @@ class VecIMU(BaseObject):
     ):
         super().__init__(universe=universe)
 
+        # We type hint universe again here to avoid circular imports
+        self._universe: Universe = universe
+
         self._path_expr: str = ""
         self.local_position: Tensor = local_position.to(self._universe.device)
         self.local_orientation: Tensor = local_orientation.to(self._universe.device)

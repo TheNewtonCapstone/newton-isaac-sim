@@ -30,6 +30,7 @@ VecJointPositionLimits = torch.Tensor
 VecJointVelocityLimits = torch.Tensor
 VecJointEffortLimits = torch.Tensor
 VecJointGearRatios = torch.Tensor
+VecJointFixed = torch.Tensor
 
 JointPositionLimit = List[float]
 JointVelocityLimit = float
@@ -39,6 +40,7 @@ ArtJointsPositionLimits = Dict[str, List[float]]
 ArtJointsVelocityLimits = Dict[str, float]
 ArtJointsEffortLimits = Dict[str, float]
 ArtJointsGearRatios = Dict[str, float]
+ArtJointsFixed = Dict[str, bool]
 
 JointPosition = float
 JointVelocity = float
@@ -90,4 +92,5 @@ Matter = Tuple[
     bool,
     int,
     float,
+    int,
 ]

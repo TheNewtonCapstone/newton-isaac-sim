@@ -133,4 +133,7 @@ class DCActuator(BaseActuator):
             max=torch.zeros_like(min_effort),
         )
 
-        return torch.clamp(input_efforts, min_effort, max_effort)
+        return torch.nan_to_num(
+            torch.clamp(input_efforts, min_effort, max_effort),
+            nan=0.0,
+        )

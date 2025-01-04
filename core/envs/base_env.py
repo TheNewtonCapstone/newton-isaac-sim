@@ -22,6 +22,9 @@ class BaseEnv(BaseObject):
             universe=universe,
         )
 
+        # We type hint universe again here to avoid circular imports
+        self._universe: Universe = universe
+
         self.agent: BaseAgent = agent
         self.num_envs = num_envs
 
