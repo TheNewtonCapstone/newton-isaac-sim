@@ -35,7 +35,7 @@ def setup_argparser() -> argparse.ArgumentParser:
         "--rl-network-config",
         type=str,
         help="Path to the network configuration file for RL.",
-        default="configs/rl_networks.yaml",
+        default="configs/networks.yaml",
     )
     parser.add_argument(
         "--rl-network-name",
@@ -255,16 +255,17 @@ def checkpoint_select(
     )
 
 
-def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
+def network_arch_select(newton_config_file_path: str) -> Optional[Settings]:
     from bullet import Bullet
     import torch.nn
 
-    rl_config = load_config(rl_config_file_path)
+    network_config = load_config(newton_config_file_path)
 
-    networks = rl_config.get("networks", {})
-    if not networks:
-        logger.info(f"No networks found in {rl_config_file_path}.")
-        return {}
+    if "networks" not in network_config:
+        logger.info(f"No networks found in {newton_config_file_path}.")
+        return None
+
+    networks: Settings = network_config["networks"]
 
     # Build choices for CLI
     choices = [
@@ -284,21 +285,24 @@ def network_arch_select(rl_config_file_path: str) -> dict[str, Any]:
     selected_choice, selected_choice_ind = cli.launch()
 
     # Parse selected network
-    selected_config = list(networks.values())[selected_choice_ind]
+    selected_config: Settings = list(networks.values())[selected_choice_ind]
 
-    if not selected_config.get("net_arch"):
-        logger.info(f"No network architecture found in {rl_config_file_path}.")
-        return {}
+    if not selected_config["net_arch"]:
+        logger.info(f"No network architecture found in {newton_config_file_path}.")
+        return None
 
-    if not selected_config.get("activation_fn"):
-        logger.info(f"No network activation function found in {rl_config_file_path}.")
-        return {}
+    if not selected_config["activation_fn"]:
+        logger.info(
+            f"No network activation function found in {newton_config_file_path}."
+        )
+        return None
 
     try:
+        # gets the direct torch.nn reference from the string
         selected_config["activation_fn"] = eval(selected_config["activation_fn"])
     except Exception as e:
         logger.info(f"Error evaluating network activation function: {e}")
-        return {}
+        return None
 
     return {
         "net_arch": selected_config["net_arch"],
@@ -421,6 +425,10 @@ def setup() -> Optional[Matter]:
     control_step_dt = (
         rl_config["newton"]["inverse_control_frequency"] * world_config["physics_dt"]
     )
+
+    if not rl_network_config and training:
+        logger.info("No RL network config")
+        return None
 
     return (
         cli_args,
@@ -754,10 +762,6 @@ def main():
         #   We can offer a set of predefined policies, or allow the user to specify their own. I'm thinking of a
         #   set of functions, instead of classes, since it's a small configuration. We could also offer a wrapper around
         #   PPO (and eventually A2C) to allow for easy customization of the network.
-
-        if not rl_network_config:
-            logger.info("No RL network config")
-            return
 
         policy_kwargs = dict(
             activation_fn=rl_network_config.get("activation_fn"),
