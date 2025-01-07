@@ -116,15 +116,15 @@ joints:
       HR_KFE: 5440
 
     efforts: # Nm
-      FL_HAA: 2.25
-      FR_HAA: 2.25
-      HL_HAA: 2.25
-      HR_HAA: 2.25
-      FL_HFE: 2.25
-      FR_HFE: 2.25
-      HL_HFE: 2.25
-      HR_HFE: 2.25
-      FL_KFE: 2.25
-      FR_KFE: 2.25
-      HL_KFE: 2.25
-      HR_KFE: 2.25
+      FL_HAA: 3.375
+      FR_HAA: 3.375
+      HL_HAA: 3.375
+      HR_HAA: 3.375
+      FL_HFE: 3.375
+      FR_HFE: 3.375
+      HL_HFE: 3.375
+      HR_HFE: 3.375
+      FL_KFE: 3.375
+      FR_KFE: 3.375
+      HL_KFE: 3.375
+      HR_KFE: 3.375
