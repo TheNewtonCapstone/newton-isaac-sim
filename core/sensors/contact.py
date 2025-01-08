@@ -17,6 +17,9 @@ class VecContact(BaseObject):
     ):
         super().__init__(universe=universe)
 
+        # We type hint universe again here to avoid circular imports
+        self._universe: Universe = universe
+
         self._path_expr: str = ""
         self._paths: List[List[str]] = []
         self._rigid_prim_view: Optional[RigidPrimView] = None

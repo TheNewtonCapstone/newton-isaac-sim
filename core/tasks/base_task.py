@@ -30,7 +30,7 @@ class BaseTaskCallback(BaseCallback):
 
         self.logger.record("meta/num_envs", task.num_envs)
         self.logger.record("meta/max_episode_length", task.max_episode_length)
-        self.logger.record("meta/rl_step_dt", task.rl_step_dt)
+        self.logger.record("meta/rl_step_dt", task._universe.control_dt)
 
         self.logger.record("meta/observation_space", task.observation_space)
         self.logger.record("meta/num_observations", task.num_observations)
@@ -61,7 +61,6 @@ class BaseTask(BaseObject, VecEnv):
         device: str,
         playing: bool,
         max_episode_length: int,
-        rl_step_dt: float,
         observation_space: gymnasium.spaces.Space,
         action_space: gymnasium.spaces.Box,
         reward_space: gymnasium.spaces.Box,
@@ -70,6 +69,9 @@ class BaseTask(BaseObject, VecEnv):
             self,
             universe=universe,
         )
+
+        # We type hint universe again here to avoid circular imports
+        self._universe: Universe = universe
 
         self.register_self()
 
@@ -86,7 +88,6 @@ class BaseTask(BaseObject, VecEnv):
 
         self.num_envs: int = num_envs
         self.max_episode_length: int = max_episode_length
-        self.rl_step_dt: float = rl_step_dt
 
         self.num_observations: int = self.observation_space.shape[0]
         self.num_actions: int = self.action_space.shape[0]

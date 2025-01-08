@@ -16,6 +16,9 @@ class BaseAgent(BaseObject):
 
         super().__init__(universe=universe)
 
+        # We type hint universe again here to avoid circular imports
+        self._universe: Universe = universe
+
         self.path: str = ""
         self.num_agents: int = num_agents
 

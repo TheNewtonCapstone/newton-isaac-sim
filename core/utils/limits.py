@@ -7,6 +7,8 @@ from core.types import (
     VecJointPositionLimits,
     ArtJointsGearRatios,
     VecJointGearRatios,
+    ArtJointsFixed,
+    VecJointFixed,
 )
 
 
@@ -16,6 +18,7 @@ def dict_to_vec_limits(
         | ArtJointsVelocityLimits
         | ArtJointsEffortLimits
         | ArtJointsGearRatios
+        | ArtJointsFixed
     ),
     device: str,
 ) -> (
@@ -23,6 +26,7 @@ def dict_to_vec_limits(
     | VecJointVelocityLimits
     | VecJointEffortLimits
     | VecJointGearRatios
+    | VecJointFixed
 ):
     joint_names = list(joint_limits.keys())
 

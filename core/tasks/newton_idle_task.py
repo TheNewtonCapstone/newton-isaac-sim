@@ -36,7 +36,6 @@ class NewtonIdleTask(NewtonBaseTask):
         device: str,
         playing: bool,
         max_episode_length: int,
-        rl_step_dt: float,
     ):
         self.observation_space: Box = Box(
             low=np.array(
@@ -77,7 +76,6 @@ class NewtonIdleTask(NewtonBaseTask):
             device,
             playing,
             max_episode_length,
-            rl_step_dt,
             self.observation_space,
             self.action_space,
             self.reward_space,
@@ -214,7 +212,7 @@ class NewtonIdleTask(NewtonBaseTask):
         )  # in Nm
 
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
-            self.progress_buf * self.rl_step_dt,
+            self.progress_buf * self._universe.control_dt,
             dof_ordered_names,
         )
         # we use the joint controller here, because it contains all the required information

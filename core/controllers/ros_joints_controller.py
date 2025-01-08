@@ -27,6 +27,7 @@ class ROSVecJointsController(BaseVecJointsController, BaseSimRealNode):
             vec_joints_controller._joint_effort_limits,
             vec_joints_controller._gear_ratios,
             vec_joints_controller._actuators,
+            vec_joints_controller._fixed_joints,
         )
         BaseSimRealNode.__init__(
             self,

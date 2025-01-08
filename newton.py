@@ -448,9 +448,8 @@ def setup() -> Optional[Matter]:
     if interactive:
         world_config["sim_params"]["enable_scene_query_support"] = True
 
-    control_step_dt = (
-        rl_config["newton"]["inverse_control_frequency"] * world_config["physics_dt"]
-    )
+    control_step_dt = world_config["control_dt"]
+    inverse_control_frequency = int(control_step_dt / world_config["physics_dt"])
 
     if not rl_network_config and training:
         logger.info("No RL network config")
@@ -481,6 +480,7 @@ def setup() -> Optional[Matter]:
         enable_ros,
         num_envs,
         control_step_dt,
+        inverse_control_frequency,
     )
 
 
@@ -516,6 +516,7 @@ def main():
         enable_ros,
         num_envs,
         control_step_dt,
+        inverse_control_frequency,
     ) = base_matter
 
     logger.info(
@@ -565,13 +566,18 @@ def main():
     )
 
     actuators: List[DCActuator] = []
-    effort_saturation_config: Config = robot_config["joints"]["effort_saturation"]
+    effort_saturation_config: Config = robot_config["actuators"]["dc"][
+        "effort_saturation"
+    ]
+    gain_config_list: List[Config] = list(
+        robot_config["actuators"]["dc"]["gains"].values()
+    )
 
     for i in range(12):
         actuator = DCActuator(
             universe=universe,
-            k_p=90,
-            k_d=9,
+            k_p=gain_config_list[i]["p"],
+            k_d=gain_config_list[i]["d"],
             effort_saturation=list(effort_saturation_config.values())[i],
         )
 
@@ -585,6 +591,7 @@ def main():
         joint_gear_ratios=robot_config["joints"]["gear_ratios"],
         noise_function=lambda x: x,
         actuators=actuators,
+        fixed_joints=robot_config["joints"]["fixed"],
     )
 
     if enable_ros:
@@ -675,7 +682,7 @@ def main():
                 FlatBaseTerrainBuilder(),
             ],
             domain_randomizer=domain_randomizer,
-            inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
+            inverse_control_frequency=inverse_control_frequency,
         )
 
         env.register_self()  # done manually, generally the task would do this
@@ -724,7 +731,7 @@ def main():
                 FlatBaseTerrainBuilder(),
             ],
             domain_randomizer=domain_randomizer,
-            inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
+            inverse_control_frequency=inverse_control_frequency,
         )
 
         env.register_self()  # done manually, generally the task would do this
@@ -776,7 +783,7 @@ def main():
             ),
         ],
         domain_randomizer=domain_randomizer,
-        inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
+        inverse_control_frequency=inverse_control_frequency,
     )
 
     playing_env = NewtonMultiTerrainEnv(
@@ -808,7 +815,7 @@ def main():
             ),
         ],
         domain_randomizer=domain_randomizer,
-        inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
+        inverse_control_frequency=inverse_control_frequency,
     )
 
     # TODO: Improve the way we save runs
@@ -840,7 +847,6 @@ def main():
         num_envs=num_envs,
         playing=playing,
         max_episode_length=rl_config["episode_length"],
-        rl_step_dt=control_step_dt,
     )
     callback = NewtonBaseTaskCallback(
         check_freq=64,

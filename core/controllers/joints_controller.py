@@ -16,6 +16,8 @@ from core.types import (
     VecJointEffortLimits,
     ArtJointsGearRatios,
     VecJointGearRatios,
+    ArtJointsFixed,
+    VecJointFixed,
 )
 from core.universe import Universe
 from core.utils.limits import dict_to_vec_limits
@@ -32,7 +34,7 @@ def apply_joint_position_limits(
 
     stage = get_current_stage()
 
-    for i, prim_path in enumerate(prim_paths):
+    for _, prim_path in enumerate(prim_paths):
         for j, joint_name in enumerate(joint_names):
             joint_path = f"{prim_path}/{joint_name}"
 
@@ -60,8 +62,12 @@ class VecJointsController(BaseObject):
         joint_effort_limits: ArtJointsEffortLimits,
         joint_gear_ratios: ArtJointsGearRatios,
         actuators: List[BaseActuator],
+        fixed_joints: ArtJointsFixed,
     ):
         super().__init__(universe=universe)
+
+        # We type hint universe again here to avoid circular imports
+        self._universe: Universe = universe
 
         self.path_expr: str = ""
 
@@ -102,6 +108,12 @@ class VecJointsController(BaseObject):
             self._universe.device,
         )
 
+        self._fixed_joints: ArtJointsFixed = fixed_joints
+        self._vec_fixed_joints: VecJointFixed = dict_to_vec_limits(
+            fixed_joints,
+            self._universe.device,
+        )
+
         self._actuators: List[BaseActuator] = actuators
 
     @property
@@ -116,6 +128,17 @@ class VecJointsController(BaseObject):
 
         self.path_expr = path_expr
 
+        # zero out any fixed joints' limits
+        fixed_joint_indices = (
+            self._vec_fixed_joints.cpu().nonzero(as_tuple=True)[0].flatten()
+        )
+
+        self._vec_joint_position_limits[fixed_joint_indices] = 0.0
+        self._vec_joint_position_limits_rad[fixed_joint_indices] = 0.0
+        self._vec_joint_velocity_limits[fixed_joint_indices] = 0.0
+        self._vec_joint_velocity_limits_rad[fixed_joint_indices] = 0.0
+        self._vec_joint_effort_limits[fixed_joint_indices] = 0.0
+
         from omni.isaac.core.articulations import ArticulationView
 
         self._articulation_view = ArticulationView(
@@ -127,7 +150,7 @@ class VecJointsController(BaseObject):
 
         for i, actuator in enumerate(self._actuators):
             actuator.register_self(
-                self._vec_joint_velocity_limits[i] * self._vec_gear_ratios[i],
+                self._vec_joint_velocity_limits_rad[i] * self._vec_gear_ratios[i],
                 self._vec_joint_effort_limits[i] / self._vec_gear_ratios[i],
                 self._vec_gear_ratios[i],
             )
@@ -168,6 +191,11 @@ class VecJointsController(BaseObject):
             f"do not match the gear ratios' joint names ({list(self._gear_ratios.keys())}; in order or "
             f"content)"
         )
+        assert self._articulation_view.dof_names == list(self._fixed_joints.keys()), (
+            f"Joint names in articulation view ({self._articulation_view.dof_names}) "
+            f"do not match the fixed joints' joint names ({list(self._fixed_joints.keys())}; in order or "
+            f"content)"
+        )
 
         apply_joint_position_limits(
             self._vec_joint_position_limits,
@@ -188,18 +216,20 @@ class VecJointsController(BaseObject):
             self._noise_function,
         )
 
-        current_joint_positions = self._articulation_view.get_joint_positions()
-        current_joint_positions = torch.rad2deg(current_joint_positions)
+        current_joint_positions = (
+            self._articulation_view.get_joint_positions()
+        )  # in radians
 
-        current_velocities = self._articulation_view.get_joint_velocities()
-        current_velocities = torch.rad2deg(current_velocities)
+        current_velocities = (
+            self._articulation_view.get_joint_velocities()
+        )  # in radians per second
 
         efforts_to_apply: Tensor = torch.zeros_like(self._target_joint_positions)
 
         for i, actuator in enumerate(self._actuators):
             efforts = actuator.step(
                 current_joint_positions[:, i],
-                self._target_joint_positions[:, i],
+                torch.deg2rad(self._target_joint_positions[:, i]),
                 current_velocities[:, i],
             )
             efforts_to_apply[:, i] = efforts
@@ -314,7 +344,7 @@ class VecJointsController(BaseObject):
         return self.normalize_joint_velocities(self.get_joint_velocities_deg())
 
     def get_target_joint_positions_deg(self) -> Tensor:
-        return self._target_joint_positions
+        return torch.rad2deg(self._target_joint_positions)
 
     def get_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_positions())
