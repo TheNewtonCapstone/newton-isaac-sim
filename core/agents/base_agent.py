@@ -1,29 +1,29 @@
-from abc import ABC, abstractmethod
-from typing import Optional
+from abc import abstractmethod
 
-from core.globals import AGENTS_PATH
-from core.types import EnvObservations, Actions
-from core.universe import Universe
+from ..base import BaseObject
+from ..globals import AGENTS_PATH
+from ..types import EnvObservations, Actions
+from ..universe import Universe
 
 
-class BaseAgent(ABC):
-    def __init__(self, num_agents: int) -> None:
+class BaseAgent(BaseObject):
+    def __init__(
+        self,
+        universe: Universe,
+        num_agents: int,
+    ) -> None:
         assert num_agents > 0, f"Number of agents must be greater than 0: {num_agents}"
+
+        super().__init__(universe=universe)
 
         self.path: str = ""
         self.num_agents: int = num_agents
-        self._universe: Optional[Universe] = None
-
-        self._is_constructed: bool = False
 
     @abstractmethod
-    def construct(self, universe: Universe) -> None:
-        assert (
-            not self._is_constructed
-        ), f"{self.__class__.__name__} already constructed: tried to construct!"
+    def construct(self) -> None:
+        super().construct()
 
         self.path = AGENTS_PATH
-        self._universe = universe
 
         from omni.isaac.core.utils.prims import create_prim
 
@@ -33,17 +33,19 @@ class BaseAgent(ABC):
         )
 
     @abstractmethod
-    def step(self, actions: Actions) -> EnvObservations:
-        assert (
-            self._is_constructed
-        ), f"{self.__class__.__name__} not constructed: tried to step!"
+    def post_construct(self) -> None:
+        super().post_construct()
 
-        return self.get_observations()
+    @abstractmethod
+    def step(self, actions: Actions) -> None:
+        assert (
+            self._is_post_constructed
+        ), f"{self.__class__.__name__} not constructed: tried to step!"
 
     @abstractmethod
     def get_observations(self) -> EnvObservations:
         assert (
-            self._is_constructed
+            self._is_post_constructed
         ), f"{self.__class__.__name__} not constructed: tried to get observations!"
 
         return {}

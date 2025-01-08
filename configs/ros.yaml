@@ -1,0 +1,42 @@
+enabled: true
+namespace: sim
+domain_id: 25
+
+defaults:
+  qos:
+    history: 0 # 0: system default, 1: keep last, 2: keep all, 3: unknown
+    depth: 5 # number of samples in history
+    reliability: 0 # 0: system default, 1: reliable, 2: best effort, 3: unknown
+    durability: 0 # 0: system default, 1: transient_local, 2: volatile, 3: unknown
+    lifespan:
+      seconds: 0
+      nanoseconds: 0
+    deadline:
+      seconds: 0
+      nanoseconds: 0
+    liveliness: 0 # 0: system default, 1: automatic, 2: manual_by_topic, 3: unknown
+    liveliness_lease_duration:
+      seconds: 0
+      nanoseconds: 0
+
+nodes:
+  imu:
+    name: imu_node
+    pub_sim_topic: /sim/imu
+    pub_real_topic: /imu
+    pub_period: 5
+    pub_qos: None
+
+  contact:
+    name: contact_node
+    pub_sim_topic: /sim/contact
+    pub_real_topic: /contact
+    pub_period: 10
+    pub_qos: None
+
+  joints_controller:
+    name: joints_controller_node
+    pub_sim_topic: /sim/joints
+    pub_real_topic: /joints
+    pub_period: 5
+    pub_qos: None

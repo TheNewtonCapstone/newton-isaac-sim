@@ -2,34 +2,38 @@ from typing import Dict, Optional, List
 
 import torch
 from core.types import (
-    Settings,
+    Config,
     Progress,
 )
 from .types import AnimationClip, Keyframe, BoneData, ArmatureData
+from ..base import BaseObject
+from ..universe import Universe
 
 
-class AnimationEngine:
+class AnimationEngine(BaseObject):
     def __init__(
         self,
-        clips: Dict[str, Settings],
+        universe: Universe,
+        clips: Dict[str, Config],
     ):
+        super().__init__(universe=universe)
+
         self.current_clip_name: Optional[str] = None
 
-        self.clip_configs: Dict[str, Settings] = clips
+        self.clip_configs: Dict[str, Config] = clips
         self.clips: Dict[str, AnimationClip] = {}
-
-        self._is_constructed: bool = False
 
     @property
     def current_clip(self) -> AnimationClip:
         assert (
-            self._is_constructed
+            self.is_fully_constructed
         ), "AnimationEngine not constructed: tried to access current_clip!"
 
         return self.clips[self.current_clip_name]
 
     def construct(self, current_clip: str) -> None:
-        assert not self._is_constructed, "AnimationEngine already constructed!"
+        super().construct()
+
         assert (
             current_clip in self.clip_configs
         ), f"Clip {current_clip} not found in {self.clip_configs.keys()}"
@@ -39,12 +43,12 @@ class AnimationEngine:
         frame_dt = 1 / self.clip_configs[current_clip]["framerate"]
 
         for clip_name, clip_settings in self.clip_configs.items():
-            saved_keyframes: List[Settings] = clip_settings["keyframes"]
+            saved_keyframes: List[Config] = clip_settings["keyframes"]
             keyframes: List[Keyframe] = []
 
             for keyframe_settings in saved_keyframes:
                 frame: int = keyframe_settings["frame"]
-                saved_data: List[Settings] = keyframe_settings["data"]
+                saved_data: List[Config] = keyframe_settings["data"]
 
                 data: Dict[str, BoneData] = {}
 
@@ -54,8 +58,12 @@ class AnimationEngine:
                     orientation: torch.Tensor = torch.tensor(bone_data["orientation"])
 
                     relative_angle: float = bone_data["relative_angle"]
-                    previous_relative_angle: float = saved_keyframes[frame - 1]["data"][i]["relative_angle"]
-                    relative_angle_velocity: float = (relative_angle - previous_relative_angle) / frame_dt
+                    previous_relative_angle: float = saved_keyframes[frame - 1]["data"][
+                        i
+                    ]["relative_angle"]
+                    relative_angle_velocity: float = (
+                        relative_angle - previous_relative_angle
+                    ) / frame_dt
 
                     data[bone_name] = BoneData(
                         name=bone_name,
@@ -84,6 +92,11 @@ class AnimationEngine:
 
         self._is_constructed = True
 
+    def post_construct(self):
+        super().post_construct()
+
+        self._is_post_constructed = True
+
     def get_multiple_clip_data_at_seconds(
         self,
         seconds: Progress,
@@ -100,8 +113,14 @@ class AnimationEngine:
         Returns:
             A tensor with shape (num_agents, num_bones, 9) containing the joint positions, orientations, relative angles and relative angle velocities for each agent.
         """
+        assert (
+            self.is_fully_constructed
+        ), "AnimationEngine not constructed: tried to get multiple clip data!"
+
         clip_datas = self.get_clip_data_at_seconds(
-            self.current_clip_name, seconds, interpolate,
+            self.current_clip_name,
+            seconds,
+            interpolate,
         )
 
         num_agents = len(clip_datas)
@@ -142,6 +161,10 @@ class AnimationEngine:
         Returns:
             A list of armature data for each agent.
         """
+        assert (
+            self.is_fully_constructed
+        ), "AnimationEngine not constructed: tried to get clip data at seconds!"
+
         clip: AnimationClip = self.clips[clip_name]
         frames = second.cpu() * clip.framerate
 
@@ -168,6 +191,10 @@ class AnimationEngine:
         Returns:
             Armature data for the given clip.
         """
+        assert (
+            self.is_fully_constructed
+        ), "AnimationEngine not constructed: tried to get clip data at frame!"
+
         clip: AnimationClip = self.clips[clip_name]
         keyframes = clip.keyframes
 

@@ -1,17 +1,18 @@
 from typing import List, Optional
 
 import torch
-from core.agents import NewtonBaseAgent
-from core.domain_randomizer import NewtonBaseDomainRandomizer
-from core.envs import NewtonBaseEnv
-from core.terrain import BaseTerrainBuilder
-from core.types import EnvObservations, Actions, Indices
-from core.universe import Universe
+from ..agents import NewtonBaseAgent
+from ..domain_randomizer import NewtonBaseDomainRandomizer
+from . import NewtonBaseEnv
+from ..terrain import BaseTerrainBuilder
+from ..types import EnvObservations, Actions, Indices
+from ..universe import Universe
 
 
 class NewtonMultiTerrainEnv(NewtonBaseEnv):
     def __init__(
         self,
+        universe: Universe,
         agent: NewtonBaseAgent,
         num_envs: int,
         terrain_builders: List[BaseTerrainBuilder],
@@ -19,6 +20,7 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         inverse_control_frequency: int,
     ):
         super().__init__(
+            universe,
             agent,
             num_envs,
             terrain_builders,
@@ -26,8 +28,8 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
             inverse_control_frequency,
         )
 
-    def construct(self, universe: Universe) -> None:
-        super().construct(universe)
+    def construct(self) -> None:
+        super().construct()
 
         num_terrains = len(self.terrain_builders)
         terrains_size = self.terrain_builders[0].size
@@ -79,16 +81,19 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         if len(self.reset_newton_positions) > self.num_envs:
             self.reset_newton_positions = self.reset_newton_positions[: self.num_envs]
 
-        self.agent.construct(self._universe)
+        self.agent.register_self()
 
-        self.domain_randomizer.construct(self._universe)
+        self.domain_randomizer.register_self()
         # TODO: investigate whether we need to have the positions and rotations in this class or in domain randomizer
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
         self.domain_randomizer.set_initial_orientations(self.reset_newton_orientations)
 
         self._is_constructed = True
 
-        self._universe.reset()
+    def post_construct(self):
+        super().post_construct()
+
+        self._is_post_constructed = True
 
     def step(self, actions: Actions) -> None:
         super().step(actions)  # advances the simulation by one step

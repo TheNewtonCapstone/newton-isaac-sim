@@ -1,46 +1,29 @@
 from typing import Optional, List
 
-import numpy as np
 import torch
+from torch import Tensor
+
+from core.base import BaseObject
+from core.actuators import BaseActuator
 from core.types import (
     NoiseFunction,
     Indices,
-    JointsPositionLimits,
-    JointsVelocityLimits,
+    ArtJointsPositionLimits,
+    VecJointPositionLimits,
+    ArtJointsVelocityLimits,
+    ArtJointsEffortLimits,
+    VecJointVelocityLimits,
+    VecJointEffortLimits,
+    ArtJointsGearRatios,
+    VecJointGearRatios,
 )
 from core.universe import Universe
-from gymnasium.spaces import Box
+from core.utils.limits import dict_to_vec_limits
 from omni.isaac.core.articulations import ArticulationView
-from torch import Tensor
-
-
-def dict_to_box_limits(
-    joint_limits: JointsPositionLimits | JointsVelocityLimits,
-) -> Box:
-    joint_names = list(joint_limits.keys())
-
-    low_joint_limits = np.zeros((len(joint_names)))
-    high_joint_limits = np.zeros_like(low_joint_limits)
-
-    # Ensures that the joint constraints are in the correct order
-    for i, joint_name in enumerate(joint_names):
-        limits = joint_limits[joint_name]
-        is_limits_list = isinstance(limits, list)
-
-        low_joint_limits[i] = limits[0] if is_limits_list else -limits
-        high_joint_limits[i] = limits[1] if is_limits_list else limits
-
-    box_joint_constraints = Box(
-        low=low_joint_limits,
-        high=high_joint_limits,
-        dtype=np.float32,
-    )
-
-    return box_joint_constraints
 
 
 def apply_joint_position_limits(
-    box_joint_position_limits: Box,
+    vec_joint_position_limits: VecJointPositionLimits,
     prim_paths: List[str],
     joint_names: List[str],
 ) -> None:
@@ -58,34 +41,68 @@ def apply_joint_position_limits(
             if not rev_joint:
                 continue  # Skip if joint is not a RevoluteJoint
 
+            # in degrees: https://docs.omniverse.nvidia.com/kit/docs/pxr-usd-api/latest/pxr/UsdPhysics.html#pxr.UsdPhysics.RevoluteJoint
             rev_joint.CreateLowerLimitAttr().Set(
-                box_joint_position_limits.low[j].item()
+                vec_joint_position_limits[j, 0].item(),
             )
-            rev_joint.GetUpperLimitAttr().Set(box_joint_position_limits.high[j].item())
+            rev_joint.GetUpperLimitAttr().Set(
+                vec_joint_position_limits[j, 1].item(),
+            )
 
 
-class VecJointsController:
+class VecJointsController(BaseObject):
     def __init__(
         self,
         universe: Universe,
         noise_function: NoiseFunction,
-        joint_position_limits: JointsPositionLimits,
-        joint_velocity_limits: JointsPositionLimits,
+        joint_position_limits: ArtJointsPositionLimits,
+        joint_velocity_limits: ArtJointsVelocityLimits,
+        joint_effort_limits: ArtJointsEffortLimits,
+        joint_gear_ratios: ArtJointsGearRatios,
+        actuators: List[BaseActuator],
     ):
+        super().__init__(universe=universe)
+
         self.path_expr: str = ""
 
-        self._universe: Universe = universe
         self._articulation_view: Optional[ArticulationView] = None
 
         self._noise_function: NoiseFunction = noise_function
         self._target_joint_positions: Tensor = torch.zeros(0)
 
-        self._joint_position_limits: JointsPositionLimits = joint_position_limits
-        self._box_joint_position_limits: Box = dict_to_box_limits(joint_position_limits)
-        self._joint_velocity_limits: JointsPositionLimits = joint_velocity_limits
-        self._box_joint_velocity_limits: Box = dict_to_box_limits(joint_velocity_limits)
+        self._num_joints: int = len(joint_position_limits)
 
-        self._is_constructed: bool = False
+        self._joint_position_limits: ArtJointsPositionLimits = joint_position_limits
+        self._vec_joint_position_limits: VecJointPositionLimits = dict_to_vec_limits(
+            joint_position_limits,
+            self._universe.device,
+        )
+        self._vec_joint_position_limits_rad: VecJointPositionLimits = torch.deg2rad(
+            self._vec_joint_position_limits,
+        )
+
+        self._joint_velocity_limits: ArtJointsVelocityLimits = joint_velocity_limits
+        self._vec_joint_velocity_limits: VecJointVelocityLimits = dict_to_vec_limits(
+            joint_velocity_limits,
+            self._universe.device,
+        )
+        self._vec_joint_velocity_limits_rad: VecJointVelocityLimits = torch.deg2rad(
+            self._vec_joint_velocity_limits,
+        )
+
+        self._joint_effort_limits: ArtJointsEffortLimits = joint_effort_limits
+        self._vec_joint_effort_limits: VecJointEffortLimits = dict_to_vec_limits(
+            joint_effort_limits,
+            self._universe.device,
+        )
+
+        self._gear_ratios: ArtJointsGearRatios = joint_gear_ratios
+        self._vec_gear_ratios: VecJointGearRatios = dict_to_vec_limits(
+            joint_gear_ratios,
+            self._universe.device,
+        )
+
+        self._actuators: List[BaseActuator] = actuators
 
     @property
     def art_view(self) -> Optional[ArticulationView]:
@@ -94,14 +111,8 @@ class VecJointsController:
 
         return self._articulation_view
 
-    @property
-    def target_joint_positions(self) -> Tensor:
-        return self._target_joint_positions
-
     def construct(self, path_expr: str) -> None:
-        assert (
-            not self._is_constructed
-        ), "Joints controller already constructed: tried to construct!"
+        super().construct()
 
         self.path_expr = path_expr
 
@@ -114,32 +125,86 @@ class VecJointsController:
         )
         self._universe.add_prim(self._articulation_view)
 
-        self._universe.reset()
+        for i, actuator in enumerate(self._actuators):
+            actuator.register_self(
+                self._vec_joint_velocity_limits[i] * self._vec_gear_ratios[i],
+                self._vec_joint_effort_limits[i] / self._vec_gear_ratios[i],
+                self._vec_gear_ratios[i],
+            )
+
+        self._is_constructed = True
+
+    def post_construct(self):
+        super().post_construct()
+
+        assert self._articulation_view.num_dof == self._num_joints, (
+            f"Number of dof in articulation view ({self._articulation_view.num_dof}) "
+            f"does not match the number of joints in the controller ({self._num_joints})"
+        )
+
+        assert self._articulation_view.dof_names == list(
+            self._joint_position_limits.keys()
+        ), (
+            f"Joint names in articulation view ({self._articulation_view.dof_names}) "
+            f"do not match the position limits' joint names ({list(self._joint_position_limits.keys())}; in order or "
+            f"content)"
+        )
+        assert self._articulation_view.dof_names == list(
+            self._joint_velocity_limits.keys()
+        ), (
+            f"Joint names in articulation view ({self._articulation_view.dof_names}) "
+            f"do not match the velocity limits' joint names ({list(self._joint_velocity_limits.keys())}; in order or "
+            f"content)"
+        )
+        assert self._articulation_view.dof_names == list(
+            self._joint_effort_limits.keys()
+        ), (
+            f"Joint names in articulation view ({self._articulation_view.dof_names}) "
+            f"do not match the effort limits' joint names ({list(self._joint_effort_limits.keys())}; in order or "
+            f"content)"
+        )
+        assert self._articulation_view.dof_names == list(self._gear_ratios.keys()), (
+            f"Joint names in articulation view ({self._articulation_view.dof_names}) "
+            f"do not match the gear ratios' joint names ({list(self._gear_ratios.keys())}; in order or "
+            f"content)"
+        )
 
         apply_joint_position_limits(
-            self._box_joint_position_limits,
+            self._vec_joint_position_limits,
             self._articulation_view.prim_paths,
             self._articulation_view.joint_names,
         )
 
-        self._articulation_view.set_max_joint_velocities(
-            torch.from_numpy(self._box_joint_velocity_limits.high).to(
-                device=self._universe.device,
-            )
-        )
-
-        self._is_constructed = True
+        self._is_post_constructed = True
 
     def step(self, joint_actions: Tensor) -> None:
-        assert self._is_constructed, "Joints controller not constructed: tried to step!"
+        assert (
+            self.is_fully_constructed
+        ), "Joints controller not fully constructed: tried to step!"
 
         self._target_joint_positions = self._process_joint_actions(
             joint_actions,
-            self._box_joint_position_limits,
+            self._vec_joint_position_limits,
             self._noise_function,
         )
 
-        self._articulation_view.set_joint_position_targets(self._target_joint_positions)
+        current_joint_positions = self._articulation_view.get_joint_positions()
+        current_joint_positions = torch.rad2deg(current_joint_positions)
+
+        current_velocities = self._articulation_view.get_joint_velocities()
+        current_velocities = torch.rad2deg(current_velocities)
+
+        efforts_to_apply: Tensor = torch.zeros_like(self._target_joint_positions)
+
+        for i, actuator in enumerate(self._actuators):
+            efforts = actuator.step(
+                current_joint_positions[:, i],
+                self._target_joint_positions[:, i],
+                current_velocities[:, i],
+            )
+            efforts_to_apply[:, i] = efforts
+
+        self._articulation_view.set_joint_efforts(efforts_to_apply)
 
     def reset(
         self,
@@ -149,8 +214,8 @@ class VecJointsController:
         indices: Optional[Indices] = None,
     ) -> None:
         assert (
-            self._is_constructed
-        ), "Joints controller not constructed: tried to reset!"
+            self.is_fully_constructed
+        ), "Joints controller not fully constructed: tried to reset!"
 
         if indices is None:
             indices = torch.arange(
@@ -164,7 +229,7 @@ class VecJointsController:
 
         self._target_joint_positions = self._process_joint_actions(
             joint_positions,
-            self._box_joint_position_limits,
+            self._vec_joint_position_limits,
         )
 
         self._articulation_view.set_joint_positions(
@@ -194,10 +259,10 @@ class VecJointsController:
 
         joint_positions_normalized = map_range(
             joint_positions,
-            torch.from_numpy(self._box_joint_position_limits.low).to(
+            self._vec_joint_position_limits[:, 0].to(
                 joint_positions.device,
             ),
-            torch.from_numpy(self._box_joint_position_limits.high).to(
+            self._vec_joint_position_limits[:, 1].to(
                 joint_positions.device,
             ),
             -1.0,
@@ -218,17 +283,20 @@ class VecJointsController:
 
         joint_velocities_normalized = map_range(
             joint_velocities,
-            torch.from_numpy(self._box_joint_velocity_limits.low).to(
+            self._vec_joint_velocity_limits.to(
                 joint_velocities.device,
-            ),
-            torch.from_numpy(self._box_joint_velocity_limits.high).to(
+            ).squeeze(-1),
+            self._vec_joint_velocity_limits.to(
                 joint_velocities.device,
-            ),
+            ).squeeze(-1),
             -1.0,
             1.0,
         )
 
         return joint_velocities_normalized
+
+    # TODO: Improve naming of `JointsController` methods
+    #   They are too long and too descriptive, which makes them hard to read.
 
     def get_normalized_joint_positions(self) -> Tensor:
         """
@@ -245,53 +313,52 @@ class VecJointsController:
 
         return self.normalize_joint_velocities(self.get_joint_velocities_deg())
 
+    def get_target_joint_positions_deg(self) -> Tensor:
+        return self._target_joint_positions
+
     def get_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_positions())
 
     def get_joint_velocities_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_velocities())
 
+    def get_applied_joint_efforts(self) -> Tensor:
+        applied_joint_efforts: Tensor = torch.zeros_like(self._target_joint_positions)
+
+        for i, actuator in enumerate(self._actuators):
+            applied_joint_efforts[:, i] = actuator.applied_output_efforts.squeeze(-1)
+
+        return applied_joint_efforts
+
     def _process_joint_actions(
         self,
         joint_actions: Tensor,
-        box_joint_constraints: Box,
+        vec_joint_position_limits: VecJointPositionLimits,
         noise_function: Optional[NoiseFunction] = None,
     ) -> Tensor:
         """
         Joint actions are processed by mapping them to the joint constraints (degrees) and applying noise.
         Args:
             joint_actions: The joint actions to be processed [-1, 1].
-            box_joint_constraints: The joint constraints, as a gymnasium.Box object.
+            vec_joint_position_limits: The joint position limits.
             noise_function: The noise function to be applied to the computed joint positions.
 
         Returns:
-            The processed joint positions (in radians).
+            The processed joint positions (in degrees).
         """
-        low_constraints_t = torch.from_numpy(box_joint_constraints.low).to(
-            device=self._universe.device
+        joint_positions = torch.clamp(
+            joint_actions.to(vec_joint_position_limits.device),
+            min=-1.0,
+            max=1.0,
         )
-        high_constraints_t = torch.from_numpy(box_joint_constraints.high).to(
-            device=self._universe.device
+
+        joint_positions = torch.lerp(
+            vec_joint_position_limits[:, 0],
+            vec_joint_position_limits[:, 1],
+            (joint_positions + 1) / 2,
         )
 
-        joint_positions = torch.zeros_like(joint_actions).to(self._universe.device)
-
-        for i, _ in enumerate(joint_positions):
-            joint_positions[i] = torch.clamp(
-                joint_actions[i],
-                min=-1.0,
-                max=1.0,
-            )
-
-            joint_positions[i] = torch.lerp(
-                low_constraints_t,
-                high_constraints_t,
-                (joint_positions[i] + 1) / 2,
-            )
-
-            if noise_function is not None:
-                joint_positions[i] = noise_function(joint_positions[i])
-
-            joint_positions[i] = torch.deg2rad(joint_positions[i])
+        if noise_function is not None:
+            joint_positions = noise_function(joint_positions)
 
         return joint_positions

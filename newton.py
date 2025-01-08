@@ -1,8 +1,8 @@
 import argparse
 import logging
-from typing import List, Optional, Tuple, Any, Dict
-from core.types import Matter, Settings, SettingsCollection
-from core.utils.config import load_config
+from typing import List, Optional, Tuple
+
+from core.types import Matter, Config, ConfigCollection
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="newton.log", level=logging.INFO)
@@ -52,8 +52,14 @@ def setup_argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--randomization-config",
         type=str,
-        help="Enable domain randomization.",
+        help="Path to the configuration file for domain randomization.",
         default="configs/randomization.yaml",
+    )
+    parser.add_argument(
+        "--ros-config",
+        type=str,
+        help="Path to the configuration file for ROS2.",
+        default="configs/ros.yaml",
     )
     parser.add_argument(
         "--animations-dir",
@@ -62,7 +68,13 @@ def setup_argparser() -> argparse.ArgumentParser:
         default="assets/newton/animations",
     )
     parser.add_argument(
-        "--checkpoints-dir",
+        "--animation-name",
+        type=str,
+        help="Name of the animation to load (for RL or animating).",
+        default=None,
+    )
+    parser.add_argument(
+        "--runs-dir",
         type=str,
         help="Path to the directory containing checkpoints.",
         default="runs",
@@ -74,16 +86,16 @@ def setup_argparser() -> argparse.ArgumentParser:
         default=None,
     )
     parser.add_argument(
-        "--checkpoint-name",
+        "--run-name",
         type=str,
-        help="Name of the checkpoint to load.",
+        help="Name of the run to load (for RL or exporting; will select highest reward checkpoint within).",
         default=None,
     )
     parser.add_argument(
-        "--animation-name",
-        type=str,
-        help="Name of the animation to load (for RL or animating).",
-        default=None,
+        "--no-checkpoint",
+        action="store_true",
+        help="Skip any checkpoint loading logic (will fail when playing or exporting).",
+        default=False,
     )
     parser.add_argument(
         "--num-envs",
@@ -148,9 +160,9 @@ def task_select():
 def animation_select(
     animation_config_dir: str,
     current_animation_name: Optional[str],
-) -> Optional[Tuple[SettingsCollection, str]]:
+) -> Optional[Tuple[ConfigCollection, str]]:
     from core.utils.path import get_files_with_extension
-    from core.utils.config import animation_configs_to_clips_settings
+    from core.utils.config import animation_configs_to_clips_config
 
     # discover animations in directory
     animation_configs_filenames = get_files_with_extension(
@@ -165,7 +177,7 @@ def animation_select(
         return None
 
     # load animation clips settings from config files
-    animation_clips_settings = animation_configs_to_clips_settings(
+    animation_clips_settings = animation_configs_to_clips_config(
         animation_configs_paths
     )
 
@@ -200,25 +212,25 @@ def animation_select(
 
 def checkpoint_select(
     runs_dir: str,
-    current_checkpoint_name: Optional[str],
+    current_run_name: Optional[str],
     required: bool,
-) -> Optional[Tuple[Settings, str]]:
-    from core.utils.checkpoints import (
+) -> Optional[Tuple[Config, str]]:
+    from core.utils.runs import (
         save_runs_library,
         build_runs_library_from_runs_folder,
     )
 
-    runs_settings: Settings = build_runs_library_from_runs_folder(runs_dir)
+    runs_settings: Config = build_runs_library_from_runs_folder(runs_dir)
     if not runs_settings:
         logger.info(f"No runs found in {runs_dir}.")
         return None
 
     save_runs_library(runs_settings, runs_dir)
 
-    if current_checkpoint_name and current_checkpoint_name in runs_settings:
+    if current_run_name and current_run_name in runs_settings:
         return (
             runs_settings,
-            runs_settings[current_checkpoint_name]["checkpoints"][-1]["path"],
+            runs_settings[current_run_name]["checkpoints"][-1]["path"],
         )
 
     from bullet import Input, YesNo
@@ -235,29 +247,30 @@ def checkpoint_select(
     most_recent_checkpoint = str(list(runs_settings.keys())[-1])
 
     cli = Input(
-        prompt=f"Please enter a run name (format: newton_idle_001): ",
+        prompt=f"Please enter a run name (format: <task_name>_001): ",
         default=f"",
         strip=True,
     )
 
-    selected_checkpoint_name = ""
+    selected_run_name = ""
 
-    while selected_checkpoint_name not in runs_settings:
-        selected_checkpoint_name = cli.launch()
+    while selected_run_name not in runs_settings:
+        selected_run_name = cli.launch()
 
-        if not selected_checkpoint_name:
+        if len(selected_run_name) == 0:
             print(f"Selecting latest checkpoint: {most_recent_checkpoint}.")
-            selected_checkpoint_name = most_recent_checkpoint
+            selected_run_name = most_recent_checkpoint
 
     return (
         runs_settings,
-        runs_settings[selected_checkpoint_name]["checkpoints"][-1]["path"],
+        runs_settings[selected_run_name]["checkpoints"][-1]["path"],
     )
 
 
-def network_arch_select(newton_config_file_path: str) -> Optional[Settings]:
+def network_arch_select(newton_config_file_path: str) -> Optional[Config]:
     from bullet import Bullet
-    import torch.nn
+
+    from core.utils.config import load_config
 
     network_config = load_config(newton_config_file_path)
 
@@ -265,7 +278,7 @@ def network_arch_select(newton_config_file_path: str) -> Optional[Settings]:
         logger.info(f"No networks found in {newton_config_file_path}.")
         return None
 
-    networks: Settings = network_config["networks"]
+    networks: Config = network_config["networks"]
 
     # Build choices for CLI
     choices = [
@@ -285,7 +298,7 @@ def network_arch_select(newton_config_file_path: str) -> Optional[Settings]:
     selected_choice, selected_choice_ind = cli.launch()
 
     # Parse selected network
-    selected_config: Settings = list(networks.values())[selected_choice_ind]
+    selected_config: Config = list(networks.values())[selected_choice_ind]
 
     if not selected_config["net_arch"]:
         logger.info(f"No network architecture found in {newton_config_file_path}.")
@@ -298,6 +311,8 @@ def network_arch_select(newton_config_file_path: str) -> Optional[Settings]:
         return None
 
     try:
+        import torch.nn  # used in dynamic eval below
+
         # gets the direct torch.nn reference from the string
         selected_config["activation_fn"] = eval(selected_config["activation_fn"])
     except Exception as e:
@@ -357,7 +372,7 @@ def setup() -> Optional[Matter]:
 
     # Animation
 
-    animation_clips_config: Settings = {}
+    animation_clips_config: Config = {}
     current_animation: Optional[str] = None
 
     if animating or training or playing:
@@ -374,15 +389,24 @@ def setup() -> Optional[Matter]:
 
     # Checkpoint and Network config
 
-    runs_library: Settings = {}
-    runs_dir: str = cli_args.checkpoints_dir
+    runs_library: Config = {}
+    runs_dir: str = cli_args.runs_dir
     current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
-    rl_network_config = {}
+    no_checkpoint = cli_args.no_checkpoint
+    rl_network_config: Config = {}
 
-    if (training or playing or exporting) and current_checkpoint_path is None:
+    if (playing or exporting) and no_checkpoint:
+        print("No checkpoint specified for playing or exporting.")
+        return None
+
+    if (
+        (training or playing or exporting)
+        and current_checkpoint_path is None
+        and not no_checkpoint
+    ):
         checkpoint_select_result = checkpoint_select(
-            cli_args.checkpoints_dir,
-            cli_args.checkpoint_name,
+            runs_dir,
+            cli_args.run_name,
             required=not training,
         )
 
@@ -401,6 +425,7 @@ def setup() -> Optional[Matter]:
     rl_config = load_config(cli_args.rl_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
+    ros_config = load_config(cli_args.ros_config)
 
     # Helper flags
 
@@ -411,6 +436,7 @@ def setup() -> Optional[Matter]:
     interactive = not headless and (
         physics_only or playing or animating
     )  # interactive means that the user is expected to control the agent in some way
+    enable_ros = ros_config["enabled"]
 
     # override some config with CLI num_envs, if specified
     num_envs = rl_config["n_envs"]
@@ -437,6 +463,7 @@ def setup() -> Optional[Matter]:
         world_config,
         randomization_config,
         rl_network_config,
+        ros_config,
         animation_clips_config,
         current_animation,
         runs_dir,
@@ -451,6 +478,7 @@ def setup() -> Optional[Matter]:
         is_rl,
         interactive,
         headless,
+        enable_ros,
         num_envs,
         control_step_dt,
     )
@@ -470,6 +498,7 @@ def main():
         world_config,
         randomization_config,
         rl_network_config,
+        ros_config,
         animation_clips_config,
         current_animation,
         runs_dir,
@@ -484,6 +513,7 @@ def main():
         is_rl,
         interactive,
         headless,
+        enable_ros,
         num_envs,
         control_step_dt,
     ) = base_matter
@@ -500,12 +530,12 @@ def main():
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
 
-    universe = big_bang({"headless": headless}, world_config)
+    universe = big_bang({"headless": headless}, world_config, ros_enabled=enable_ros)
 
     # only now can we import the rest of the modules
     from core.universe import Universe
 
-    # to circumvent Python typing restrictions, we type the universe here
+    # to circumvent Python typing restrictions, we type the universe object here
     universe: Universe = universe
 
     from core.envs import NewtonMultiTerrainEnv
@@ -514,8 +544,8 @@ def main():
     from core.terrain.flat_terrain import FlatBaseTerrainBuilder
     from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
 
-    from core.sensors import VecIMU
-    from core.sensors.contact import VecContact
+    from core.sensors import VecIMU, VecContact
+    from core.actuators import DCActuator
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -529,19 +559,88 @@ def main():
         noise_function=lambda x: x,
     )
 
-    joints_controller = VecJointsController(
-        universe=universe,
-        joint_position_limits=robot_config["joints"]["limits"]["positions"],
-        joint_velocity_limits=robot_config["joints"]["limits"]["velocities"],
-        noise_function=lambda x: x,
-    )
-
     contact_sensor = VecContact(
         universe=universe,
         num_contact_sensors_per_agent=4,
     )
 
+    actuators: List[DCActuator] = []
+    effort_saturation_config: Config = robot_config["joints"]["effort_saturation"]
+
+    for i in range(12):
+        actuator = DCActuator(
+            universe=universe,
+            k_p=90,
+            k_d=9,
+            effort_saturation=list(effort_saturation_config.values())[i],
+        )
+
+        actuators.append(actuator)
+
+    joints_controller = VecJointsController(
+        universe=universe,
+        joint_position_limits=robot_config["joints"]["limits"]["positions"],
+        joint_velocity_limits=robot_config["joints"]["limits"]["velocities"],
+        joint_effort_limits=robot_config["joints"]["limits"]["efforts"],
+        joint_gear_ratios=robot_config["joints"]["gear_ratios"],
+        noise_function=lambda x: x,
+        actuators=actuators,
+    )
+
+    if enable_ros:
+        from core.sensors import ROSVecIMU, ROSVecContact
+        from core.controllers import ROSVecJointsController
+        from core.utils.ros import get_qos_profile_from_node_config
+
+        namespace: str = ros_config["namespace"]
+
+        imu_node_config: Config = ros_config["nodes"]["imu"]
+        imu = ROSVecIMU(
+            vec_imu=imu,
+            node_name=imu_node_config["name"],
+            namespace=namespace,
+            pub_sim_topic=imu_node_config["pub_sim_topic"],
+            pub_real_topic=imu_node_config["pub_real_topic"],
+            pub_period=imu_node_config["pub_period"],
+            pub_qos_profile=get_qos_profile_from_node_config(
+                imu_node_config,
+                "pub_qos",
+                ros_config,
+            ),
+        )
+
+        contact_node_config: Config = ros_config["nodes"]["contact"]
+        contact_sensor = ROSVecContact(
+            vec_contact=contact_sensor,
+            node_name=contact_node_config["name"],
+            namespace=namespace,
+            pub_sim_topic=contact_node_config["pub_sim_topic"],
+            pub_real_topic=contact_node_config["pub_real_topic"],
+            pub_period=contact_node_config["pub_period"],
+            pub_qos_profile=get_qos_profile_from_node_config(
+                contact_node_config,
+                "pub_qos",
+                ros_config,
+            ),
+        )
+
+        joints_controller_node_config: Config = ros_config["nodes"]["joints_controller"]
+        joints_controller = ROSVecJointsController(
+            vec_joints_controller=joints_controller,
+            node_name=joints_controller_node_config["name"],
+            namespace=namespace,
+            pub_sim_topic=joints_controller_node_config["pub_sim_topic"],
+            pub_real_topic=joints_controller_node_config["pub_real_topic"],
+            pub_period=joints_controller_node_config["pub_period"],
+            pub_qos_profile=get_qos_profile_from_node_config(
+                joints_controller_node_config,
+                "pub_qos",
+                ros_config,
+            ),
+        )
+
     newton_agent = NewtonVecAgent(
+        universe=universe,
         num_agents=num_envs,
         imu=imu,
         joints_controller=joints_controller,
@@ -549,10 +648,12 @@ def main():
     )
 
     animation_engine = AnimationEngine(
+        universe=universe,
         clips=animation_clips_config,
     )
 
     domain_randomizer = NewtonBaseDomainRandomizer(
+        universe=universe,
         seed=rl_config["seed"],
         agent=newton_agent,
         randomizer_settings=randomization_config,
@@ -564,6 +665,7 @@ def main():
 
     if animating:
         env = NewtonMultiTerrainEnv(
+            universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
             terrain_builders=[
@@ -576,10 +678,10 @@ def main():
             inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
         )
 
-        env.construct(universe)
-        env.reset()  # called manually, because the task usually does it, must be done before stepping
+        env.register_self()  # done manually, generally the task would do this
+        animation_engine.register_self(current_animation)
 
-        animation_engine.construct(current_animation)
+        universe.reset(construction=True)
 
         ordered_dof_names = joints_controller.art_view.dof_names
 
@@ -601,8 +703,8 @@ def main():
                 joint_positions
             )
 
-            # we wrap it in an array to make it 2D (it's a vectorized env)
-            env.step(joint_actions.unsqueeze(0))
+            # we need to make it 2D, since the controller expects a batch of actions
+            env.step(joint_actions.repeat(1, 1))
 
         exit(1)
 
@@ -612,18 +714,25 @@ def main():
 
     if physics_only:
         env = NewtonMultiTerrainEnv(
+            universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
-            terrain_builders=[PerlinBaseTerrainBuilder(), FlatBaseTerrainBuilder()],
+            terrain_builders=[
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+                FlatBaseTerrainBuilder(),
+            ],
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=rl_config["newton"]["inverse_control_frequency"],
         )
 
-        env.construct(universe)
-        env.reset()
+        env.register_self()  # done manually, generally the task would do this
+
+        universe.reset(construction=True)
 
         while universe.is_playing:
-            env.step(np.zeros((num_envs, 12)))
+            env.step(torch.zeros((num_envs, 12)))
 
         exit(1)
 
@@ -639,6 +748,7 @@ def main():
     terrains_resolution = torch.tensor([20, 20])
 
     training_env = NewtonMultiTerrainEnv(
+        universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
         terrain_builders=[
@@ -670,6 +780,7 @@ def main():
     )
 
     playing_env = NewtonMultiTerrainEnv(
+        universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
         terrain_builders=[
@@ -705,24 +816,24 @@ def main():
     #   the task, the environment, etc. We would also have a way to easily load the last run, or a specific run.
     #   labels: enhancement
 
-    from core.utils.checkpoints import (
+    from core.utils.runs import (
         get_unused_run_id,
         create_runs_library,
     )
 
-    new_checkpoint_id = get_unused_run_id(runs_library)
+    new_run_id = get_unused_run_id(runs_library)
 
-    if new_checkpoint_id is None:
+    if new_run_id is None:
         runs_library = create_runs_library(runs_dir)
 
-        new_checkpoint_id = get_unused_run_id(runs_library)
+        new_run_id = get_unused_run_id(runs_library)
 
-    run_name = f"newton_idle_{new_checkpoint_id}"
+    run_name = f"newton_idle_{new_run_id}"
 
     # task used for either training or playing
     task = NewtonIdleTask(
-        training_env=training_env,
-        playing_env=playing_env,
+        universe=universe,
+        env=playing_env if playing else training_env,
         agent=newton_agent,
         animation_engine=animation_engine,
         device=rl_config["device"],
@@ -736,7 +847,7 @@ def main():
         save_path=run_name,
     )
 
-    task.construct(universe)
+    universe.reset(construction=True)
 
     from stable_baselines3 import PPO
     from stable_baselines3.common.policies import BasePolicy
@@ -764,8 +875,8 @@ def main():
         #   PPO (and eventually A2C) to allow for easy customization of the network.
 
         policy_kwargs = dict(
-            activation_fn=rl_network_config.get("activation_fn"),
-            net_arch=rl_network_config.get("net_arch"),
+            activation_fn=rl_network_config["activation_fn"],
+            net_arch=rl_network_config["net_arch"],
         )
 
         model = PPO(

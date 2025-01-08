@@ -1,10 +1,10 @@
 from abc import abstractmethod
 
-from core.agents import BaseAgent
-from core.controllers import VecJointsController
-from core.sensors import VecIMU, VecContact
-from core.types import Actions, EnvObservations
-from core.universe import Universe
+from . import BaseAgent
+from ..controllers import VecJointsController
+from ..sensors import VecContact, VecIMU
+from ..types import Actions, EnvObservations
+from ..universe import Universe
 
 # TODO: Add a command controller to the NewtonBaseAgent
 #   It would allow for control of the agent's movement through a keyboard or a controller. Any Task would be able to
@@ -14,12 +14,16 @@ from core.universe import Universe
 class NewtonBaseAgent(BaseAgent):
     def __init__(
         self,
+        universe: Universe,
         num_agents: int,
         imu: VecIMU,
         joints_controller: VecJointsController,
         contact_sensor: VecContact,
     ) -> None:
-        super().__init__(num_agents)
+        super().__init__(
+            universe=universe,
+            num_agents=num_agents,
+        )
 
         self.base_path_expr: str = ""
 
@@ -28,14 +32,29 @@ class NewtonBaseAgent(BaseAgent):
         self.contact_sensor: VecContact = contact_sensor
 
     @abstractmethod
-    def construct(self, universe: Universe) -> None:
-        super().construct(universe)
+    def construct(self) -> None:
+        super().construct()
+
+    @abstractmethod
+    def post_construct(self) -> None:
+        super().post_construct()
 
     @abstractmethod
     def step(self, actions: Actions) -> None:
         super().step(actions)
 
         self.joints_controller.step(actions)
+
+        if self._universe.ros_enabled:
+            from core.ros import BaseNode
+
+            # we sync the step of the ROS nodes with the agent's step, therefore the physics step
+
+            if isinstance(self.imu, BaseNode):
+                self.imu.step()
+
+            if isinstance(self.contact_sensor, BaseNode):
+                self.contact_sensor.step()
 
     @abstractmethod
     def get_observations(self) -> EnvObservations:
