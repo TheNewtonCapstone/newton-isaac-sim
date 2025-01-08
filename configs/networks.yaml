@@ -1,0 +1,17 @@
+# This file contains the configuration for the neural networks used in the RL algorithms.
+# The networks are defined in the following format:
+#   network_name:
+#     net_arch: List[int]  # The specification of the hidden layers
+#     activation_fn: torch.nn.Module  # The activation function to use
+
+networks:
+  # DO NOT REMOVE 'default' NETWORK. IT IS USED AS A FALLBACK
+  default:
+    net_arch: [64, 64]
+    activation_fn: torch.nn.ReLU
+  custom_name:
+    net_arch: [256, 256]
+    activation_fn: torch.nn.ELU
+  descending_network:
+    net_arch: [1024, 512, 256]
+    activation_fn: torch.nn.ReLU
