@@ -13,6 +13,7 @@ from stable_baselines3.common.vec_env.base_vec_env import (
 
 import gymnasium
 from ..agents import BaseAgent
+from ..archiver import Archiver
 from ..base import BaseObject
 from ..envs import BaseEnv
 from ..types import Progress, Rewards, Dones, Actions, Infos
@@ -41,11 +42,23 @@ class BaseTaskCallback(BaseCallback):
     def _on_step(self) -> bool:
         task: BaseTask = self.training_env
 
-        self.logger.record("rewards/median", torch.median(task.rewards_buf).item())
+        median_dones: float = torch.median(task.dones_buf.sum(dim=-1)).item()
+        median_reward: float = torch.median(task.rewards_buf).item()
+        mean_progress: float = task.progress_buf.mean().item()
+        mean_action: float = task.actions_buf.mean().item()
 
-        self.logger.record("progress/mean", task.progress_buf.mean().item())
+        self.logger.record("dones/median", median_dones)
+        self.logger.record("rewards/median", median_reward)
+        self.logger.record("progress/mean", mean_progress)
+        self.logger.record("actions/mean", mean_action)
 
-        self.logger.record("actions/mean", task.actions_buf.mean().item())
+        task_archive_data = {
+            "dones_median": median_dones,
+            "rewards_median": median_reward,
+            "progress_mean": mean_progress,
+            "actions_mean": mean_action,
+        }
+        Archiver.put("rl", task_archive_data)
 
         return True
 

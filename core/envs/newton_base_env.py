@@ -3,6 +3,7 @@ from typing import List, Optional
 
 import torch
 from core.agents import NewtonBaseAgent
+from core.archiver import Archiver
 from core.domain_randomizer import NewtonBaseDomainRandomizer
 from core.envs import BaseEnv
 from core.terrain import BaseTerrainBuilder
@@ -82,5 +83,10 @@ class NewtonBaseEnv(BaseEnv):
             )
             * gravity_magnitude
         ).repeat(self.num_envs, 1)
+
+        Archiver.put(
+            "env_obs",
+            {"world_gravity": torch.tensor(gravity_direction) * gravity_magnitude},
+        )
 
         return env_obs
