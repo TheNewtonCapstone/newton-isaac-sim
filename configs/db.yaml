@@ -1,0 +1,6 @@
+type: influxdb
+
+influxdb:
+  organization: "TheNewtonCapstone"
+  token: ""
+  url: "http://localhost:8086"
