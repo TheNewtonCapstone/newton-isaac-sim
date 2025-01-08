@@ -216,11 +216,13 @@ class VecJointsController(BaseObject):
             self._noise_function,
         )
 
-        current_joint_positions = self._articulation_view.get_joint_positions()
-        # current_joint_positions = torch.rad2deg(current_joint_positions)
+        current_joint_positions = (
+            self._articulation_view.get_joint_positions()
+        )  # in radians
 
-        current_velocities = self._articulation_view.get_joint_velocities()
-        # current_velocities = torch.rad2deg(current_velocities)
+        current_velocities = (
+            self._articulation_view.get_joint_velocities()
+        )  # in radians per second
 
         efforts_to_apply: Tensor = torch.zeros_like(self._target_joint_positions)
 
@@ -342,7 +344,7 @@ class VecJointsController(BaseObject):
         return self.normalize_joint_velocities(self.get_joint_velocities_deg())
 
     def get_target_joint_positions_deg(self) -> Tensor:
-        return self._target_joint_positions
+        return torch.rad2deg(self._target_joint_positions)
 
     def get_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_positions())
