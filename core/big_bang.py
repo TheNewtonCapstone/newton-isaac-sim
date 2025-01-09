@@ -1,6 +1,6 @@
 from typing import Optional
 
-from core.types import Config
+from core.types import Config, Mode
 from isaacsim import SimulationApp
 
 _universe: Optional["Universe"] = None
@@ -9,6 +9,9 @@ _universe: Optional["Universe"] = None
 def big_bang(
     app_settings: Config,
     world_settings: Config,
+    num_envs: int,
+    mode: Mode,
+    run_name: Optional[str],
     ros_enabled: bool = False,
     experience: str = "./apps/omni.isaac.sim.newton.kit",
 ) -> "Universe":
@@ -17,6 +20,9 @@ def big_bang(
     Args:
         app_settings: The settings for the simulation app (i.e. rendering).
         world_settings: The settings for the world (i.e. physics).
+        num_envs: The number of environments in the world.
+        mode: The mode in which the universe is initialized.
+        run_name: The name of the run (if training or playing).
         ros_enabled: Whether to disable ROS2 bridge and ROS-related functionality.
         experience: The path to the experience to load (Omniverse Kit).
 
@@ -46,6 +52,9 @@ def big_bang(
         headless=app_settings["headless"],
         sim_app=sim_app,
         world_settings=world_settings,
+        num_envs=num_envs,
+        mode=mode,
+        run_name=run_name,
         ros_enabled=ros_enabled,
     )
     _universe.reset(soft=False)

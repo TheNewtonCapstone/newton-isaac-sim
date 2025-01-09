@@ -13,3 +13,6 @@ outputs/**
 # Logs
 *.csv
 *.log
+
+# Secrets
+secrets.*

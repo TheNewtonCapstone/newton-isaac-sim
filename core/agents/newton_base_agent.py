@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
 from . import BaseAgent
+from ..archiver import Archiver
 from ..controllers import VecJointsController
 from ..sensors import VecContact, VecIMU
 from ..types import Actions, EnvObservations
@@ -60,12 +61,21 @@ class NewtonBaseAgent(BaseAgent):
     def get_observations(self) -> EnvObservations:
         imu_data_tensor = self.imu.get_data()
         contact_data_tensor = self.contact_sensor.get_data()
-        data_numpy = {}
+
+        obs = {}
+        first_obs = {}
+
+        agent_count_median = self.num_agents // 2
 
         for key, value in imu_data_tensor.items():
-            data_numpy[key] = value
+            obs[key] = value
+            first_obs[key] = value[agent_count_median, :]
 
         for key, value in contact_data_tensor.items():
-            data_numpy[key] = value
+            obs[key] = value
+            first_obs[key] = value[agent_count_median, :]
 
-        return data_numpy
+        # we put only the first agent's observations
+        Archiver.put("agent_obs", first_obs)
+
+        return obs

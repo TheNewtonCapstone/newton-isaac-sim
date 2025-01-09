@@ -3,6 +3,7 @@ from typing import Optional, List
 import torch
 from torch import Tensor
 
+from core.archiver import Archiver
 from core.base import BaseObject
 from core.actuators import BaseActuator
 from core.types import (
@@ -74,7 +75,9 @@ class VecJointsController(BaseObject):
         self._articulation_view: Optional[ArticulationView] = None
 
         self._noise_function: NoiseFunction = noise_function
-        self._target_joint_positions: Tensor = torch.zeros(0)
+        self._target_joint_positions: Tensor = torch.zeros(
+            (self._universe.num_envs, len(actuators))
+        )
 
         self._num_joints: int = len(joint_position_limits)
 
@@ -235,6 +238,16 @@ class VecJointsController(BaseObject):
             efforts_to_apply[:, i] = efforts
 
         self._articulation_view.set_joint_efforts(efforts_to_apply)
+
+        joints_obs_archive = {
+            "target_joint_positions_median": self.get_target_joint_positions_deg().median(),
+            "joint_positions_norm_median": self.get_normalized_joint_positions().median(),
+            "joint_positions_median": self.get_joint_positions_deg().median(),
+            "joint_velocities_norm_median": self.get_normalized_joint_velocities().median(),
+            "joint_velocities_median": self.get_joint_velocities_deg().median(),
+            "joint_efforts_median": self.get_applied_joint_efforts().median(),
+        }
+        Archiver.put("joints_obs", joints_obs_archive)
 
     def reset(
         self,

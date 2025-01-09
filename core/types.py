@@ -1,5 +1,5 @@
 import argparse
-from typing import Dict, Any, Callable, List, Tuple, TypedDict, Optional
+from typing import Dict, Any, Callable, List, Tuple, TypedDict, Optional, Literal
 
 import torch
 
@@ -65,6 +65,7 @@ NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
 Config = Dict[str, Any]
 ConfigCollection = Dict[str, Config]
 Indices = torch.Tensor
+Mode = Literal["training", "playing", "animating", "physics-only", "exporting"]
 
 Matter = Tuple[
     argparse.Namespace,
@@ -73,13 +74,19 @@ Matter = Tuple[
     Config,
     Config,
     Config,
+    str,
+    Config,
+    Config,
     Config,
     ConfigCollection,
     str,
     str,
     ConfigCollection,
     Optional[str],
+    Optional[str],
+    Mode,
     str,
+    bool,
     bool,
     bool,
     bool,

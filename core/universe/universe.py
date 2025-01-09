@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional
 
 from omni.isaac.core import SimulationContext
 from omni.isaac.core.prims import XFormPrim, XFormPrimView
@@ -7,7 +7,12 @@ from omni.isaac.kit import SimulationApp
 from pxr import Usd
 from ..base import BaseObject
 from ..globals import LIGHTS_PATH, PHYSICS_PATH
-from ..types import Config
+from ..types import Config, Mode
+
+
+# TODO: Centralize configuration data into the Universe class
+#   We should have a single source of truth for all configuration, including the simulation app settings, world settings,
+#   and any other settings that are used in the simulation. This will make it easier to manage and query the settings.
 
 
 class Universe(SimulationContext):
@@ -16,6 +21,9 @@ class Universe(SimulationContext):
         headless: bool,
         sim_app: SimulationApp,
         world_settings: Config,
+        num_envs: int,
+        mode: Mode,
+        run_name: Optional[str],
         ros_enabled: bool = False,
     ):
         self.sim_app: SimulationApp = sim_app
@@ -23,8 +31,11 @@ class Universe(SimulationContext):
 
         self._control_dt: float = self._world_settings["control_dt"]
 
-        self._headless = headless
-        self._ros_enabled = ros_enabled
+        self._num_envs: int = num_envs
+        self._headless: bool = headless
+        self._mode: Mode = mode
+        self._run_name: Optional[str] = run_name
+        self._ros_enabled: bool = ros_enabled
 
         if self.has_gui:
             from omni.kit.viewport.utility import get_active_viewport
@@ -34,7 +45,7 @@ class Universe(SimulationContext):
             viewport_ctx.updates_enabled = True
 
         # Scene
-        self._scene = Scene()
+        self._scene: Scene = Scene()
 
         # Object registry
         self._registrations: Dict[BaseObject, Tuple[Any, Any]] = {}
@@ -52,6 +63,18 @@ class Universe(SimulationContext):
     @property
     def headless(self) -> bool:
         return self._headless
+
+    @property
+    def num_envs(self) -> int:
+        return self._num_envs
+
+    @property
+    def mode(self) -> Mode:
+        return self._mode
+
+    @property
+    def run_name(self) -> Optional[str]:
+        return self._run_name
 
     @property
     def ros_enabled(self) -> bool:
