@@ -1,0 +1,16 @@
+PROJECT_NAME           = "newton-esp-core"
+OUTPUT_DIRECTORY       = doxygen
+GENERATE_XML          = YES
+XML_OUTPUT            = xml
+INPUT                 = ../core
+FILE_PATTERNS         = *.py
+ENABLE_PREPROCESSING  = NO # avoid doxygen to discover includes without being told to do so
+RECURSIVE             = YES
+EXTRACT_PRIVATE       = NO
+EXTRACT_STATIC        = YES
+EXTRACT_PRIV_VIRTUAL  = YES
+HIDE_SCOPE_NAMES      = YES
+FULL_PATH_NAMES       = YES
+STRIP_FROM_PATH       = ../core
+STRIP_FROM_INC_PATH   = ../core
+PYTHON_DOCSTRING      = NO

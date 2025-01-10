@@ -112,13 +112,13 @@ class Universe(SimulationContext):
         self._scene.add(prim)
 
     def step(self, render: bool = False) -> None:
-        """Steps the simulation. This behaves exactly like IsaacLab SimulationContext's step function.
+        """
+        @brief Steps the simulation. This behaves exactly like IsaacLab SimulationContext's step function.
 
         .. note::
             This function blocks if the timeline is paused. It only returns when the timeline is playing.
 
-        Args:
-            render: Unused, rendering depends on the headless flag.
+        @param render: Unused, rendering depends on the headless flag.
         """
 
         # check if the simulation timeline is paused. in that case keep stepping until it is playing
