@@ -1,0 +1,4 @@
+# build files
+_build/
+api/
+doxygen/
