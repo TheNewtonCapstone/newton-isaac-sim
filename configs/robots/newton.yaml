@@ -3,6 +3,9 @@ robot_type: quadruped
 
 # Actuators
 actuators:
+  lstm: # of the input (i.e. the motor; before applying any gear ratio)
+    model_path: assets/newton/models/lstm.pth
+
   dc: # of the input (i.e. the motor; before applying any gear ratio)
     effort_saturation:
       FL_HAA: 0.25

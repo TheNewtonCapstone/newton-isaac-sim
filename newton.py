@@ -622,7 +622,7 @@ def main():
     from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
 
     from core.sensors import VecIMU, VecContact
-    from core.actuators import DCActuator
+    from core.actuators import LSTMActuator
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -641,7 +641,7 @@ def main():
         num_contact_sensors_per_agent=4,
     )
 
-    actuators: List[DCActuator] = []
+    actuators: List[LSTMActuator] = []
     effort_saturation_config: Config = robot_config["actuators"]["dc"][
         "effort_saturation"
     ]
@@ -650,11 +650,9 @@ def main():
     )
 
     for i in range(12):
-        actuator = DCActuator(
+        actuator = LSTMActuator(
             universe=universe,
-            k_p=gain_config_list[i]["p"],
-            k_d=gain_config_list[i]["d"],
-            effort_saturation=list(effort_saturation_config.values())[i],
+            motor_model_path=robot_config["actuators"]["lstm"]["model_path"],
         )
 
         actuators.append(actuator)
