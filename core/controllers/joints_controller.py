@@ -1,5 +1,7 @@
 from typing import Optional, List
 
+from sympy.physics.units import frequency
+
 import torch
 from torch import Tensor
 
@@ -23,6 +25,7 @@ from core.types import (
 from core.universe import Universe
 from core.utils.limits import dict_to_vec_limits
 from omni.isaac.core.articulations import ArticulationView
+import numpy as np
 
 
 def apply_joint_position_limits(
@@ -213,16 +216,34 @@ class VecJointsController(BaseObject):
             self.is_fully_constructed
         ), "Joints controller not fully constructed: tried to step!"
 
+        dt = self._universe.current_time
+        amplitude = 3.0
+        frequency = 15.0
+        sine_cmd = amplitude * np.sin(2 * torch.pi * frequency * dt)
+        custom_actions = torch.full(
+            (self._universe.num_envs, self._num_joints),
+            float("inf"),
+            device=self._universe.device,
+        )
+        custom_actions[:, -1] = sine_cmd
+        print(joint_actions)
+        print(sine_cmd)
+        print(custom_actions)
         self._target_joint_positions = self._process_joint_actions(
-            joint_actions,
+            custom_actions,
             self._vec_joint_position_limits,
             self._noise_function,
         )
+        # temp_arr = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        # self._target_joint_positions = torch.tensor(temp_arr)
+        # print(temp_arr)
 
         current_joint_positions = (
             self._articulation_view.get_joint_positions()
         )  # in radians
-
+        # current_joint_positions = torch.tensor(np.array(temp_arr))
+        # print(current_joint_positions)
+        # print(type(current_joint_positions))
         current_velocities = (
             self._articulation_view.get_joint_velocities()
         )  # in radians per second
