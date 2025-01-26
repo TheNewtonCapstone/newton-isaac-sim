@@ -89,6 +89,17 @@ class BaseActuator(BaseObject):
         output_target_positions: VecJointsPositions,
         output_current_velocities: VecJointsVelocities,
     ) -> VecJointsEfforts:
+        """Computes the efforts to apply to the output joints with a simple PD controller.
+
+        Args:
+            output_current_positions: Positions of the joints at the output (in rad).
+            output_target_positions: Target positions of the joints at the output (in rad).
+            output_current_velocities: Velocities of the joints at the output (in rad/s).
+
+        Returns:
+            VecJointsEfforts: Efforts to apply to the output joints (in Nm).
+
+        """
         assert (
             self.is_fully_constructed
         ), "Actuator not fully constructed: tried to step!"

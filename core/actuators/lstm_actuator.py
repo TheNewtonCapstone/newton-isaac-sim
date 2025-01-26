@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -8,7 +6,6 @@ from core.types import (
     VecJointsPositions,
     VecJointsVelocities,
     VecJointsEfforts,
-    JointSaturation,
     VecJointVelocityLimits,
     VecJointEffortLimits,
     VecJointGearRatios,
@@ -40,7 +37,10 @@ class LSTMActuator(BaseActuator):
         )
 
         self._model_path: str = motor_model_path
-        self._model: LSTMActuatorModel = LSTMActuatorModel().to(self._universe.device)
+        self._model: LSTMActuatorModel = LSTMActuatorModel(
+            hidden_size=64,
+            num_layers=2,
+        ).to(self._universe.device)
 
     def construct(
         self,
@@ -72,16 +72,6 @@ class LSTMActuator(BaseActuator):
         output_target_positions: VecJointsPositions,
         output_current_velocities: VecJointsVelocities,
     ) -> VecJointsEfforts:
-        """Computes the efforts to apply to the output joints with a simple PD controller.
-
-        Args:
-            output_current_positions: Positions of the joints at the output.
-            output_target_positions: Target positions of the joints at the output.
-            output_current_velocities: Velocities of the joints at the output.
-
-        Returns:
-
-        """
         self._update_efforts(
             output_current_positions,
             output_target_positions,
@@ -98,25 +88,27 @@ class LSTMActuator(BaseActuator):
         output_current_positions: VecJointsPositions,
         output_target_positions: VecJointsPositions,
         output_current_velocities: VecJointsVelocities,
-        output_target_velocities: Optional[VecJointsVelocities] = None,
     ) -> None:
-        if output_target_velocities is None:
-            output_target_velocities = torch.zeros_like(output_current_velocities)
+        output_current_positions = output_current_positions / (2 * torch.pi)
+        output_target_positions = output_target_positions / (2 * torch.pi)
+        output_current_velocities = output_current_velocities / (2 * torch.pi)
 
         # the given positions & velocities are of the output, not the input, which is why we multiply by the gear ratio
-        output_position_errors = output_target_positions - output_current_positions
-        input_tensor = torch.cat(
+        input_position_errors = (
+            output_target_positions - output_current_positions
+        ) * self._vec_gear_ratios
+        input_current_velocities = output_current_velocities * self._vec_gear_ratios
+
+        input_tensor = torch.stack(
             (
-                output_position_errors * self._vec_gear_ratios,
-                output_current_velocities * self._vec_gear_ratios,
+                input_position_errors,
+                input_current_velocities,
             ),
-            dim=-1,
-        ).unsqueeze(
-            0
-        )  # unsqueeze to add batch dimension
+            dim=1,
+        )
 
         with torch.no_grad():
-            computed_input_efforts = self._model(input_tensor).squeeze(0)
+            computed_input_efforts = self._model(input_tensor).squeeze(1)
 
         # but the computed efforts are from the input's perspective, so we multiply again to get the output's efforts
         self._computed_output_efforts = computed_input_efforts * self._vec_gear_ratios

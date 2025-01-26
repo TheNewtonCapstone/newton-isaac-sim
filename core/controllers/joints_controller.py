@@ -1,13 +1,13 @@
 from typing import Optional, List
 
-from sympy.physics.units import frequency
-
+import numpy as np
 import torch
+from omni.isaac.core.articulations import ArticulationView
 from torch import Tensor
 
+from core.actuators import BaseActuator
 from core.archiver import Archiver
 from core.base import BaseObject
-from core.actuators import BaseActuator
 from core.types import (
     NoiseFunction,
     Indices,
@@ -24,8 +24,6 @@ from core.types import (
 )
 from core.universe import Universe
 from core.utils.limits import dict_to_vec_limits
-from omni.isaac.core.articulations import ArticulationView
-import numpy as np
 
 
 def apply_joint_position_limits(
@@ -216,21 +214,8 @@ class VecJointsController(BaseObject):
             self.is_fully_constructed
         ), "Joints controller not fully constructed: tried to step!"
 
-        dt = self._universe.current_time
-        amplitude = 3.0
-        frequency = 15.0
-        sine_cmd = amplitude * np.sin(2 * torch.pi * frequency * dt)
-        custom_actions = torch.full(
-            (self._universe.num_envs, self._num_joints),
-            float("inf"),
-            device=self._universe.device,
-        )
-        custom_actions[:, -1] = sine_cmd
-        print(joint_actions)
-        print(sine_cmd)
-        print(custom_actions)
         self._target_joint_positions = self._process_joint_actions(
-            custom_actions,
+            joint_actions,
             self._vec_joint_position_limits,
             self._noise_function,
         )

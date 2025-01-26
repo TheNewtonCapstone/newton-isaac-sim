@@ -5,6 +5,9 @@ robot_type: quadruped
 actuators:
   lstm: # of the input (i.e. the motor; before applying any gear ratio)
     model_path: assets/newton/models/lstm.pth
+  mlp:
+    model_path: assets/newton/models/mlp.pth
+    scaler_params_path: assets/newton/models/mlp_scaler.json
 
   dc: # of the input (i.e. the motor; before applying any gear ratio)
     effort_saturation:
@@ -62,17 +65,17 @@ actuators:
 # Kinematics
 joints:
   fixed:
-    FL_HAA: True
-    FR_HAA: True
-    HL_HAA: True
-    HR_HAA: True
-    FL_HFE: True
-    FR_HFE: True
-    HL_HFE: True
-    HR_HFE: True
-    FL_KFE: True
-    FR_KFE: True
-    HL_KFE: True
+    FL_HAA: False
+    FR_HAA: False
+    HL_HAA: False
+    HR_HAA: False
+    FL_HFE: False
+    FR_HFE: False
+    HL_HFE: False
+    HR_HFE: False
+    FL_KFE: False
+    FR_KFE: False
+    HL_KFE: False
     HR_KFE: False
 
   gear_ratios:

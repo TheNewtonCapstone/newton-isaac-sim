@@ -1,7 +1,7 @@
+import json
 from typing import Optional
 
 import torch
-from omni.isaac.core.utils.math import normalized
 from torch import nn
 
 from core.actuators import BaseActuator
@@ -9,7 +9,6 @@ from core.types import (
     VecJointsPositions,
     VecJointsVelocities,
     VecJointsEfforts,
-    JointSaturation,
     VecJointVelocityLimits,
     VecJointEffortLimits,
     VecJointGearRatios,
@@ -48,26 +47,25 @@ class MLPActuator(BaseActuator):
         self,
         universe: Universe,
         motor_model_path: str,
-        scaler_params: dict,
+        scaler_params_path: str,
     ):
         super().__init__(
             universe=universe,
         )
 
         self._model_path: str = motor_model_path
-        self._scaler_params: dict = scaler_params
+        self._scaler_params: dict = json.load(open(scaler_params_path))
 
         self._model: MLPActuatorModel = MLPActuatorModel(
             hidden_size=32,
             num_layers=3,
         ).to(self._universe.device)
 
-        self._position_errors_t0 = None
-        self._position_errors_t1 = None
-        self._position_errors_t2 = None
-        self._velocity_t0 = None
-        self._velocity_t1 = None
-        self._velocity_t2 = None
+        self._position_errors = torch.zeros(
+            (3, self._universe.num_envs),
+            device=self._universe.device,
+        )
+        self._velocities = torch.zeros_like(self._position_errors)
 
     def construct(
         self,
@@ -84,6 +82,7 @@ class MLPActuator(BaseActuator):
         self._model.load_state_dict(
             torch.load(self._model_path, map_location=self._universe.device)
         )
+
         self._model.eval()
 
         self._is_constructed = True
@@ -123,49 +122,40 @@ class MLPActuator(BaseActuator):
         output_current_positions: VecJointsPositions,
         output_target_positions: VecJointsPositions,
         output_current_velocities: VecJointsVelocities,
-        output_target_velocities: Optional[VecJointsVelocities] = None,
     ) -> None:
-        if output_target_velocities is None:
-            output_target_velocities = torch.zeros_like(output_current_velocities)
+        output_current_positions = output_current_positions / (2 * torch.pi)
+        output_target_positions = output_target_positions / (2 * torch.pi)
+        output_current_velocities = output_current_velocities / (2 * torch.pi)
 
         # the given positions & velocities are of the output, not the input, which is why we multiply by the gear ratio
         # todo: format the data formating of the _update_efforts to fit current implementation of lstm
-        pos_error = (
-            output_current_positions - output_target_positions
+        input_pos_error = (
+            output_target_positions - output_current_positions
         ) * self._vec_gear_ratios
-        velocities = output_current_velocities * self._vec_gear_ratios
-        self._update_history(pos_error, velocities)
+        input_velocities = output_current_velocities * self._vec_gear_ratios
 
-        output_position_errors = output_target_positions - output_current_positions
-        norm_errors_t0 = normalized(self._position_errors_t0)
-        norm_errors_t1 = normalized(self._position_errors_t1)
-        norm_errors_t2 = normalized(self._position_errors_t2)
+        self._update_history(input_pos_error, input_velocities)
 
-        norm_velocity_t0 = normalized(self._velocity_t0)
-        norm_velocity_t1 = normalized(self._velocity_t1)
-        norm_velocity_t2 = normalized(self._velocity_t2)
+        pos_error_mean = self._scaler_params["pos_error_mean"]
+        pos_error_std = self._scaler_params["pos_error_std"]
+
+        vel_mean = self._scaler_params["vel_mean"]
+        vel_std = self._scaler_params["vel_std"]
+
+        norm_errors = normalize(self._position_errors, pos_error_mean, pos_error_std)
+        norm_velocities = normalize(self._velocities, vel_mean, vel_std)
 
         input_tensor = torch.cat(
             [
-                norm_errors_t0,
-                norm_errors_t1,
-                norm_errors_t2,
-                norm_velocity_t0,
-                norm_velocity_t1,
-                norm_velocity_t2,
+                norm_errors[0, :],
+                norm_errors[1, :],
+                norm_errors[2, :],
+                norm_velocities[0, :],
+                norm_velocities[1, :],
+                norm_velocities[2, :],
             ],
             dim=-1,
         ).unsqueeze(0)
-
-        # input_tensor = torch.cat(
-        #     (
-        #         output_position_errors * self._vec_gear_ratios,
-        #         output_current_velocities * self._vec_gear_ratios,
-        #     ),
-        #     dim=-1,
-        # ).unsqueeze(
-        #     0
-        # )  # unsqueeze to add batch dimension
 
         with torch.no_grad():
             computed_input_efforts = self._model(input_tensor).squeeze(0)
@@ -186,17 +176,22 @@ class MLPActuator(BaseActuator):
     def _update_history(
         self, pos_errors: VecJointsPositions, velocity: VecJointsVelocities
     ):
-        self._position_errors_t2 = self._position_errors_t1
-        self._position_errors_t1 = self._position_errors_t0
-        self._position_errors_t0 = pos_errors
-        self._velocity_t2 = self._velocity_t1
-        self._velocity_t1 = self._velocity_t0
-        self._velocity_t0 = velocity
+        self._position_errors[2, :] = self._position_errors[1, :].clone()
+        self._position_errors[1, :] = self._position_errors[0, :].clone()
+        self._position_errors[0, :] = pos_errors
 
-    def _normalize(self, data: torch.Tensor, mean: float, std: float) -> torch.Tensor:
-        norm = (data - mean) / std
-        return norm
+        self._velocities[2, :] = self._velocities[1, :].clone()
+        self._velocities[1, :] = self._velocities[0, :].clone()
+        self._velocities[0, :] = velocity
 
-    def _denormalize(self, data: torch.Tensor, mean: float, std: float) -> torch.Tensor:
-        denorm = (data * std) + mean
-        return denorm
+
+@torch.jit.script
+def normalize(data: torch.Tensor, mean: float, std: float) -> torch.Tensor:
+    norm = (data - mean) / std
+    return norm
+
+
+@torch.jit.script
+def denormalize(data: torch.Tensor, mean: float, std: float) -> torch.Tensor:
+    denorm = (data * std) + mean
+    return denorm

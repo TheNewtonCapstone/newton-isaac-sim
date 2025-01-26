@@ -74,9 +74,10 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
             indices,
         )
 
-        joint_positions = (
-            torch.rand((num_to_reset, 12), dtype=torch.float32) * 2.0 - 1.0
-        )  # [-1, 1]
+        joint_positions = torch.zeros((num_to_reset, 12), dtype=torch.float32)
+        # (
+        #    torch.rand((num_to_reset, 12), dtype=torch.float32) * 2.0 - 1.0
+        # )  # [-1, 1]
 
         joint_velocities = torch.zeros_like(joint_positions)
         joint_efforts = torch.zeros_like(joint_positions)
