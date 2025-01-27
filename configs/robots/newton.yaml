@@ -3,6 +3,12 @@ robot_type: quadruped
 
 # Actuators
 actuators:
+  lstm: # of the input (i.e. the motor; before applying any gear ratio)
+    model_path: assets/newton/models/lstm.pth
+  mlp:
+    model_path: assets/newton/models/mlp.pth
+    scaler_params_path: assets/newton/models/mlp_scaler.json
+
   dc: # of the input (i.e. the motor; before applying any gear ratio)
     effort_saturation:
       FL_HAA: 0.25

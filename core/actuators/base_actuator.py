@@ -21,8 +21,10 @@ class BaseActuator(BaseObject):
     ):
         super().__init__(universe=universe)
 
+        num_envs: int = self._universe.num_envs
+
         self._vec_velocity_limits: VecJointVelocityLimits = torch.zeros(
-            (0,),
+            (num_envs,),
             device=self._universe.device,
         )
         self._vec_effort_limits: VecJointEffortLimits = torch.zeros_like(
@@ -33,15 +35,14 @@ class BaseActuator(BaseObject):
             self._vec_velocity_limits,
         )
 
-        self._target_positions: VecJointsPositions = torch.zeros(
-            (0,),
-            device=self._universe.device,
+        self._target_positions: VecJointsPositions = torch.zeros_like(
+            self._vec_velocity_limits,
         )
         self._computed_output_efforts: VecJointsEfforts = torch.zeros_like(
-            self._target_positions,
+            self._vec_velocity_limits,
         )
         self._applied_output_efforts: VecJointsEfforts = torch.zeros_like(
-            self._target_positions,
+            self._vec_velocity_limits,
         )
 
     @property
@@ -88,6 +89,17 @@ class BaseActuator(BaseObject):
         output_target_positions: VecJointsPositions,
         output_current_velocities: VecJointsVelocities,
     ) -> VecJointsEfforts:
+        """Computes the efforts to apply to the output joints with a simple PD controller.
+
+        Args:
+            output_current_positions: Positions of the joints at the output (in rad).
+            output_target_positions: Target positions of the joints at the output (in rad).
+            output_current_velocities: Velocities of the joints at the output (in rad/s).
+
+        Returns:
+            VecJointsEfforts: Efforts to apply to the output joints (in Nm).
+
+        """
         assert (
             self.is_fully_constructed
         ), "Actuator not fully constructed: tried to step!"

@@ -1,8 +1,8 @@
 import argparse
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, get_args
 
-from core.types import Matter, Config, ConfigCollection
+from core.types import Matter, Config, ConfigCollection, Mode
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="newton.log", level=logging.INFO)
@@ -32,16 +32,16 @@ def setup_argparser() -> argparse.ArgumentParser:
         default="configs/tasks/newton_idle_task.yaml",
     )
     parser.add_argument(
-        "--rl-network-config",
+        "--network-config",
         type=str,
         help="Path to the network configuration file for RL.",
         default="configs/networks.yaml",
     )
     parser.add_argument(
-        "--rl-network-name",
+        "--network-name",
         type=str,
         help="Name of the network configuration to be used (located in the network configration file).",
-        default="default",
+        default=None,
     )
     parser.add_argument(
         "--world-config",
@@ -60,6 +60,18 @@ def setup_argparser() -> argparse.ArgumentParser:
         type=str,
         help="Path to the configuration file for ROS2.",
         default="configs/ros.yaml",
+    )
+    parser.add_argument(
+        "--db-config",
+        type=str,
+        help="Path to the configuration file for the database integration.",
+        default="configs/db.yaml",
+    )
+    parser.add_argument(
+        "--secrets",
+        type=str,
+        help="Path to the secrets file (containing database token, API keys, etc.).",
+        default="configs/secrets.yaml",
     )
     parser.add_argument(
         "--animations-dir",
@@ -214,7 +226,7 @@ def checkpoint_select(
     runs_dir: str,
     current_run_name: Optional[str],
     required: bool,
-) -> Optional[Tuple[Config, str]]:
+) -> Optional[Tuple[Config, str, str]]:
     from core.utils.runs import (
         save_runs_library,
         build_runs_library_from_runs_folder,
@@ -230,6 +242,7 @@ def checkpoint_select(
     if current_run_name and current_run_name in runs_settings:
         return (
             runs_settings,
+            current_run_name,
             runs_settings[current_run_name]["checkpoints"][-1]["path"],
         )
 
@@ -263,22 +276,41 @@ def checkpoint_select(
 
     return (
         runs_settings,
+        selected_run_name,
         runs_settings[selected_run_name]["checkpoints"][-1]["path"],
     )
 
 
-def network_arch_select(newton_config_file_path: str) -> Optional[Config]:
+def network_arch_select(
+    network_config_file_path: str,
+    network_name: Optional[str],
+) -> Optional[Tuple[Config, str]]:
     from bullet import Bullet
 
     from core.utils.config import load_config
 
-    network_config = load_config(newton_config_file_path)
-
-    if "networks" not in network_config:
-        logger.info(f"No networks found in {newton_config_file_path}.")
-        return None
+    network_config = load_config(network_config_file_path)
 
     networks: Config = network_config["networks"]
+
+    # gets the direct torch.nn reference from the string
+    def get_torch_activation_fn(activation_fn: str):
+        import torch.nn
+
+        nn_module_name = activation_fn.split(".")[-1]
+
+        return getattr(torch.nn, nn_module_name)
+
+    if network_name in networks:
+        return (
+            {
+                "net_arch": networks[network_name]["net_arch"],
+                "activation_fn": get_torch_activation_fn(
+                    networks[network_name]["activation_fn"]
+                ),
+            },
+            network_name,
+        )
 
     # Build choices for CLI
     choices = [
@@ -300,29 +332,14 @@ def network_arch_select(newton_config_file_path: str) -> Optional[Config]:
     # Parse selected network
     selected_config: Config = list(networks.values())[selected_choice_ind]
 
-    if not selected_config["net_arch"]:
-        logger.info(f"No network architecture found in {newton_config_file_path}.")
-        return None
-
-    if not selected_config["activation_fn"]:
-        logger.info(
-            f"No network activation function found in {newton_config_file_path}."
-        )
-        return None
-
-    try:
-        import torch.nn  # used in dynamic eval below
-
-        # gets the direct torch.nn reference from the string
-        selected_config["activation_fn"] = eval(selected_config["activation_fn"])
-    except Exception as e:
-        logger.info(f"Error evaluating network activation function: {e}")
-        return None
+    selected_config["activation_fn"] = get_torch_activation_fn(
+        selected_config["activation_fn"]
+    )
 
     return {
         "net_arch": selected_config["net_arch"],
         "activation_fn": selected_config["activation_fn"],
-    }
+    }, network_name
 
 
 def setup() -> Optional[Matter]:
@@ -333,6 +350,14 @@ def setup() -> Optional[Matter]:
     # General Configs
     cli_args, _ = parser.parse_known_args()
 
+    robot_config = load_config(cli_args.robot_config)
+    rl_config = load_config(cli_args.rl_config)
+    world_config = load_config(cli_args.world_config)
+    randomization_config = load_config(cli_args.randomization_config)
+    ros_config = load_config(cli_args.ros_config)
+    db_config = load_config(cli_args.db_config)
+    secrets = load_config(cli_args.secrets)
+
     # Control Flags
     training = cli_args.train
     playing = cli_args.play
@@ -340,35 +365,41 @@ def setup() -> Optional[Matter]:
     physics_only = cli_args.physics
     exporting = cli_args.export_onnx
 
-    _modes = {
+    modes = {
         "Training": training,
         "Playing": playing,
         "Animating": animating,
         "Physics Only": physics_only,
         "Exporting": exporting,
     }
+    mode: Mode
 
-    none_selected = sum(_modes.values()) == 0
-    multiple_selected = sum(_modes.values()) > 1
+    none_selected = sum(modes.values()) == 0
+    multiple_selected = sum(modes.values()) > 1
 
     if multiple_selected:
         logger.info(
             "Only one of training, playing, animating, physics or exporting can be set."
         )
         return None
-    elif none_selected:
-        mode_name, mode_idx = mode_select(list(_modes.keys()))
+    elif (
+        none_selected
+    ):  # we need a mode to start, so we ask the user to select one interactively
+        mode_name, mode_idx = mode_select(list(modes.keys()))
 
         training = mode_idx == 0
         playing = mode_idx == 1
         animating = mode_idx == 2
         physics_only = mode_idx == 3
         exporting = mode_idx == 4
-    else:
-        _modes_list = list(_modes.values())
-        _modes_flag_idx = _modes_list.index(True)
 
-        mode_name = list(_modes.keys())[_modes_flag_idx]
+        mode = get_args(Mode)[mode_idx]
+    else:  # we have a mode passed by argument
+        modes_list = list(modes.values())
+        modes_flag_idx = modes_list.index(True)
+
+        mode = get_args(Mode)[modes_flag_idx]
+        mode_name = list(modes.keys())[modes_flag_idx]
 
     # Animation
 
@@ -387,13 +418,14 @@ def setup() -> Optional[Matter]:
 
         animation_clips_config, current_animation = animation_select_result
 
-    # Checkpoint and Network config
+    # Run & checkpoint config
 
     runs_library: Config = {}
     runs_dir: str = cli_args.runs_dir
+
     current_checkpoint_path: Optional[str] = cli_args.checkpoint_path
+    current_run_name: Optional[str] = cli_args.run_name
     no_checkpoint = cli_args.no_checkpoint
-    rl_network_config: Config = {}
 
     if (playing or exporting) and no_checkpoint:
         print("No checkpoint specified for playing or exporting.")
@@ -406,26 +438,49 @@ def setup() -> Optional[Matter]:
     ):
         checkpoint_select_result = checkpoint_select(
             runs_dir,
-            cli_args.run_name,
+            current_run_name,
             required=not training,
         )
 
         if checkpoint_select_result is None and (playing or exporting):
             return None
 
-        if checkpoint_select_result is None and training:
-            rl_network_config = network_arch_select(cli_args.rl_network_config)
-
         if checkpoint_select_result is not None:
-            runs_library, current_checkpoint_path = checkpoint_select_result
+            runs_library, current_run_name, current_checkpoint_path = (
+                checkpoint_select_result
+            )
 
-    # Configs
+    # if we're training and the user did specify no-checkpoint, we need to create a new run
+    if no_checkpoint and training and current_run_name is None:
+        from core.utils.runs import (
+            get_unused_run_id,
+            create_runs_library,
+        )
 
-    robot_config = load_config(cli_args.robot_config)
-    rl_config = load_config(cli_args.rl_config)
-    world_config = load_config(cli_args.world_config)
-    randomization_config = load_config(cli_args.randomization_config)
-    ros_config = load_config(cli_args.ros_config)
+        new_run_id = get_unused_run_id(runs_library)
+
+        if new_run_id is None:
+            runs_library = create_runs_library(runs_dir)
+
+            new_run_id = get_unused_run_id(runs_library)
+
+        current_run_name = f"{rl_config['task_name']}_{new_run_id}"
+
+    # Network config
+
+    network_config: Config = {}
+    network_name: Optional[str] = cli_args.network_name
+
+    if training:
+        network_select_result = network_arch_select(
+            cli_args.network_config, network_name
+        )
+
+        if network_select_result is None:
+            print("No network architecture found.")
+            return None
+
+        network_config, network_name = network_select_result
 
     # Helper flags
 
@@ -437,6 +492,7 @@ def setup() -> Optional[Matter]:
         physics_only or playing or animating
     )  # interactive means that the user is expected to control the agent in some way
     enable_ros = ros_config["enabled"]
+    enable_db = db_config["enabled"]
 
     # override some config with CLI num_envs, if specified
     num_envs = rl_config["n_envs"]
@@ -451,23 +507,24 @@ def setup() -> Optional[Matter]:
     control_step_dt = world_config["control_dt"]
     inverse_control_frequency = int(control_step_dt / world_config["physics_dt"])
 
-    if not rl_network_config and training:
-        logger.info("No RL network config")
-        return None
-
     return (
         cli_args,
         robot_config,
         rl_config,
         world_config,
         randomization_config,
-        rl_network_config,
+        network_config,
+        network_name,
         ros_config,
+        db_config,
+        secrets,
         animation_clips_config,
         current_animation,
         runs_dir,
         runs_library,
+        current_run_name,
         current_checkpoint_path,
+        mode,
         mode_name,
         training,
         playing,
@@ -478,6 +535,7 @@ def setup() -> Optional[Matter]:
         interactive,
         headless,
         enable_ros,
+        enable_db,
         num_envs,
         control_step_dt,
         inverse_control_frequency,
@@ -497,13 +555,18 @@ def main():
         rl_config,
         world_config,
         randomization_config,
-        rl_network_config,
+        network_config,
+        network_name,
         ros_config,
+        db_config,
+        secrets,
         animation_clips_config,
         current_animation,
         runs_dir,
         runs_library,
+        current_run_name,
         current_checkpoint_path,
+        mode,
         mode_name,
         training,
         playing,
@@ -514,6 +577,7 @@ def main():
         interactive,
         headless,
         enable_ros,
+        enable_db,
         num_envs,
         control_step_dt,
         inverse_control_frequency,
@@ -531,13 +595,25 @@ def main():
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
 
-    universe = big_bang({"headless": headless}, world_config, ros_enabled=enable_ros)
+    universe = big_bang(
+        {"headless": headless},
+        world_config,
+        num_envs=num_envs,
+        mode=mode,
+        run_name=current_run_name,
+        ros_enabled=enable_ros,
+    )
 
     # only now can we import the rest of the modules
     from core.universe import Universe
 
     # to circumvent Python typing restrictions, we type the universe object here
     universe: Universe = universe
+
+    from core.archiver import Archiver
+
+    # creates a singleton instance of the archiver, to be used throughout the program
+    Archiver.create(universe, db_config, secrets["db"])
 
     from core.envs import NewtonMultiTerrainEnv
     from core.agents import NewtonVecAgent
@@ -546,7 +622,7 @@ def main():
     from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
 
     from core.sensors import VecIMU, VecContact
-    from core.actuators import DCActuator
+    from core.actuators import LSTMActuator, MLPActuator, BaseActuator
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -565,7 +641,7 @@ def main():
         num_contact_sensors_per_agent=4,
     )
 
-    actuators: List[DCActuator] = []
+    actuators: List[BaseActuator] = []
     effort_saturation_config: Config = robot_config["actuators"]["dc"][
         "effort_saturation"
     ]
@@ -574,11 +650,9 @@ def main():
     )
 
     for i in range(12):
-        actuator = DCActuator(
+        actuator = LSTMActuator(
             universe=universe,
-            k_p=gain_config_list[i]["p"],
-            k_d=gain_config_list[i]["d"],
-            effort_saturation=list(effort_saturation_config.values())[i],
+            motor_model_path=robot_config["actuators"]["lstm"]["model_path"],
         )
 
         actuators.append(actuator)
@@ -818,25 +892,6 @@ def main():
         inverse_control_frequency=inverse_control_frequency,
     )
 
-    # TODO: Improve the way we save runs
-    #   Maybe have a database? Or a file that keeps track of all runs with some metadata, like the date, the agent used,
-    #   the task, the environment, etc. We would also have a way to easily load the last run, or a specific run.
-    #   labels: enhancement
-
-    from core.utils.runs import (
-        get_unused_run_id,
-        create_runs_library,
-    )
-
-    new_run_id = get_unused_run_id(runs_library)
-
-    if new_run_id is None:
-        runs_library = create_runs_library(runs_dir)
-
-        new_run_id = get_unused_run_id(runs_library)
-
-    run_name = f"newton_idle_{new_run_id}"
-
     # task used for either training or playing
     task = NewtonIdleTask(
         universe=universe,
@@ -850,7 +905,7 @@ def main():
     )
     callback = NewtonBaseTaskCallback(
         check_freq=64,
-        save_path=run_name,
+        save_path=current_run_name,
     )
 
     universe.reset(construction=True)
@@ -875,14 +930,9 @@ def main():
                 instant_rewards=instant_rewards,
             )
 
-        # TODO: Add proper way to customize network size & shape
-        #   We can offer a set of predefined policies, or allow the user to specify their own. I'm thinking of a
-        #   set of functions, instead of classes, since it's a small configuration. We could also offer a wrapper around
-        #   PPO (and eventually A2C) to allow for easy customization of the network.
-
         policy_kwargs = dict(
-            activation_fn=rl_network_config["activation_fn"],
-            net_arch=rl_network_config["net_arch"],
+            activation_fn=network_config["activation_fn"],
+            net_arch=network_config["net_arch"],
         )
 
         model = PPO(
@@ -914,12 +964,12 @@ def main():
 
         model.learn(
             total_timesteps=rl_config["timesteps_per_env"] * num_envs,
-            tb_log_name=run_name,
+            tb_log_name=current_run_name,
             reset_num_timesteps=False,
             progress_bar=True,
             callback=callback,
         )
-        model.save(f"{runs_dir}/{run_name}_0/model.zip")
+        model.save(f"{runs_dir}/{current_run_name}_0/model.zip")
 
         exit(1)
 

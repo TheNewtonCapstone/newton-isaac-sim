@@ -1,10 +1,13 @@
 from typing import Optional, List
 
+import numpy as np
 import torch
+from omni.isaac.core.articulations import ArticulationView
 from torch import Tensor
 
-from core.base import BaseObject
 from core.actuators import BaseActuator
+from core.archiver import Archiver
+from core.base import BaseObject
 from core.types import (
     NoiseFunction,
     Indices,
@@ -21,7 +24,6 @@ from core.types import (
 )
 from core.universe import Universe
 from core.utils.limits import dict_to_vec_limits
-from omni.isaac.core.articulations import ArticulationView
 
 
 def apply_joint_position_limits(
@@ -74,7 +76,9 @@ class VecJointsController(BaseObject):
         self._articulation_view: Optional[ArticulationView] = None
 
         self._noise_function: NoiseFunction = noise_function
-        self._target_joint_positions: Tensor = torch.zeros(0)
+        self._target_joint_positions: Tensor = torch.zeros(
+            (self._universe.num_envs, len(actuators))
+        )
 
         self._num_joints: int = len(joint_position_limits)
 
@@ -215,11 +219,16 @@ class VecJointsController(BaseObject):
             self._vec_joint_position_limits,
             self._noise_function,
         )
+        # temp_arr = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        # self._target_joint_positions = torch.tensor(temp_arr)
+        # print(temp_arr)
 
         current_joint_positions = (
             self._articulation_view.get_joint_positions()
         )  # in radians
-
+        # current_joint_positions = torch.tensor(np.array(temp_arr))
+        # print(current_joint_positions)
+        # print(type(current_joint_positions))
         current_velocities = (
             self._articulation_view.get_joint_velocities()
         )  # in radians per second
@@ -235,6 +244,16 @@ class VecJointsController(BaseObject):
             efforts_to_apply[:, i] = efforts
 
         self._articulation_view.set_joint_efforts(efforts_to_apply)
+
+        joints_obs_archive = {
+            "target_joint_positions_median": self.get_target_joint_positions_deg().median(),
+            "joint_positions_norm_median": self.get_normalized_joint_positions().median(),
+            "joint_positions_median": self.get_joint_positions_deg().median(),
+            "joint_velocities_norm_median": self.get_normalized_joint_velocities().median(),
+            "joint_velocities_median": self.get_joint_velocities_deg().median(),
+            "joint_efforts_median": self.get_applied_joint_efforts().median(),
+        }
+        Archiver.put("joints_obs", joints_obs_archive)
 
     def reset(
         self,

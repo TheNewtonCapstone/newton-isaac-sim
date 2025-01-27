@@ -1,0 +1,19 @@
+enabled: False
+type: influxdb
+
+influxdb:
+  org: "TheNewtonCapstone"
+  url: "http://localhost:8086"
+  local:
+    enabled: True
+    persistent: True # container will run beyond the lifecycle of the application
+    image: "influxdb:2"
+    container_name: "newton-influxdb"
+    port: 8086
+    volumes:
+      newton-influxdb-data:
+        bind: "/var/lib/influxdb2"
+        mode: "rw"
+      newton-influxdb-config:
+        bind: "/etc/influxdb2"
+        mode: "rw"
