@@ -2,6 +2,7 @@ import argparse
 import logging
 from typing import List, Optional, Tuple, get_args
 
+from core.terrain.ascending_stair_terrain import AscendingStairsTerrainBuilder
 from core.types import Matter, Config, ConfigCollection, Mode
 
 logger = logging.getLogger(__name__)
@@ -750,10 +751,10 @@ def main():
             agent=newton_agent,
             num_envs=num_envs,
             terrain_builders=[
-                FlatBaseTerrainBuilder(),
-                FlatBaseTerrainBuilder(),
-                FlatBaseTerrainBuilder(),
-                FlatBaseTerrainBuilder(),
+                AscendingStairsTerrainBuilder(),
+                AscendingStairsTerrainBuilder(),
+                AscendingStairsTerrainBuilder(),
+                AscendingStairsTerrainBuilder(),
             ],
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
