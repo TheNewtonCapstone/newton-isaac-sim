@@ -3,10 +3,10 @@ device: "cuda"
 policy: "MlpPolicy"
 seed: 14321
 
-n_envs: 96
+n_envs: 512
 timesteps_per_env: 100_000
 base_lr: 3e-6
-episode_length: 500
+episode_length: 2000 # 20 seconds of real time (20 / 0.01 = 2000)
 
 delay:
   enabled: False
@@ -15,8 +15,8 @@ delay:
   instant_rewards: False # should the rewards be calculated on the brain or remote actor?
 
 ppo:
-  n_steps: 24
-  batch_size: 2304
+  n_steps: 32 # 0.64 seconds of real time (0.64 / 0.01 = 64)
+  batch_size: 32_768
   n_epochs: 5
 
   gamma: 0.99

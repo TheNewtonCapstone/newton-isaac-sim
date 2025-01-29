@@ -28,11 +28,11 @@ class FlatTerrainBuilder(BaseTerrainBuilder):
     def __init__(
         self,
         size: float = None,
-        resolution: Tensor = None,
+        grid_resolution: Tensor = None,
         height: float = 0,
         root_path: Optional[str] = None,
     ):
-        super().__init__(size, resolution, height, root_path)
+        super().__init__(size, grid_resolution, height, root_path)
 
     def build_from_self(self, position: List[float]) -> FlatTerrainBuild:
         """
@@ -51,7 +51,7 @@ class FlatTerrainBuilder(BaseTerrainBuilder):
     def build(
         self,
         size,
-        resolution,
+        grid_resolution,
         height,
         position,
         path,
@@ -60,7 +60,10 @@ class FlatTerrainBuilder(BaseTerrainBuilder):
         Notes:
             Resolution and height are not used for flat terrain.
         """
-        heightmap = np.zeros((2, 2))
+        num_rows = int(size * grid_resolution[0])
+        num_cols = int(size * grid_resolution[1])
+
+        heightmap = np.zeros((num_rows, num_cols))
 
         terrain_path = BaseTerrainBuilder._add_heightmap_to_world(
             heightmap,

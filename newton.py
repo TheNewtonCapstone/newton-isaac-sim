@@ -822,8 +822,8 @@ def main():
     from core.envs import NewtonMultiTerrainEnv
     from core.wrappers import RandomDelayWrapper
 
-    terrains_size = torch.tensor([10, 10])
-    terrains_resolution = torch.tensor([20, 20])
+    terrains_size = 10
+    terrains_resolution = torch.tensor([16, 16])
 
     training_env = NewtonMultiTerrainEnv(
         universe=universe,
@@ -833,24 +833,101 @@ def main():
             FlatTerrainBuilder(size=terrains_size),
             PerlinTerrainBuilder(
                 size=terrains_size,
-                resolution=terrains_resolution,
+                grid_resolution=terrains_resolution,
                 height=0.05,
                 octave=4,
                 noise_scale=2,
             ),
             PerlinTerrainBuilder(
                 size=terrains_size,
-                resolution=terrains_resolution,
+                grid_resolution=terrains_resolution,
                 height=0.03,
                 octave=8,
                 noise_scale=4,
             ),
             PerlinTerrainBuilder(
                 size=terrains_size,
-                resolution=terrains_resolution,
-                height=0.02,
+                grid_resolution=terrains_resolution,
+                height=0.01,
+                octave=16,
+                noise_scale=6,
+            ),
+            PerlinTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                height=0.05,
                 octave=16,
                 noise_scale=8,
+            ),
+            PerlinTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                height=0.03,
+                octave=8,
+                noise_scale=4,
+            ),
+            PerlinTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                height=0.05,
+                octave=8,
+                noise_scale=16,
+            ),
+            PerlinTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                height=0.03,
+                octave=4,
+                noise_scale=8,
+            ),
+            PerlinTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                height=0.01,
+                octave=2,
+                noise_scale=4,
+            ),
+            StairsTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                stair_height=0.1,
+                number_of_steps=10,
+            ),
+            StairsTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                stair_height=0.133,
+                number_of_steps=10,
+            ),
+            StairsTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                stair_height=0.166,
+                number_of_steps=10,
+            ),
+            StairsTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                stair_height=0.20,
+                number_of_steps=10,
+            ),
+            StairsTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                stair_height=0.133,
+                number_of_steps=5,
+            ),
+            StairsTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                stair_height=0.166,
+                number_of_steps=5,
+            ),
+            StairsTerrainBuilder(
+                size=terrains_size,
+                grid_resolution=terrains_resolution,
+                stair_height=0.200,
+                number_of_steps=5,
             ),
         ],
         domain_randomizer=domain_randomizer,
@@ -865,21 +942,21 @@ def main():
             FlatTerrainBuilder(size=terrains_size),
             PerlinTerrainBuilder(
                 size=terrains_size,
-                resolution=terrains_resolution,
+                grid_resolution=terrains_resolution,
                 height=0.05,
                 octave=4,
                 noise_scale=2,
             ),
             PerlinTerrainBuilder(
                 size=terrains_size,
-                resolution=terrains_resolution,
+                grid_resolution=terrains_resolution,
                 height=0.03,
                 octave=8,
                 noise_scale=4,
             ),
             PerlinTerrainBuilder(
                 size=terrains_size,
-                resolution=terrains_resolution,
+                grid_resolution=terrains_resolution,
                 height=0.02,
                 octave=16,
                 noise_scale=8,

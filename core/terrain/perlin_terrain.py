@@ -28,13 +28,13 @@ class PerlinTerrainBuilder(BaseTerrainBuilder):
     def __init__(
         self,
         size: float = None,
-        resolution: torch.Tensor = None,
+        grid_resolution: torch.Tensor = None,
         height: float = 0.05,
         root_path: str = "/Terrains",
         octave: int = 12,
         noise_scale: float = 4,
     ):
-        super().__init__(size, resolution, height, root_path)
+        super().__init__(size, grid_resolution, height, root_path)
 
         self.octaves = octave
         self.noise_scale = noise_scale

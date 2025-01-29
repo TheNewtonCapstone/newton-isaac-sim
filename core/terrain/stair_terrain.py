@@ -103,7 +103,7 @@ class StairsTerrainBuilder(BaseTerrainBuilder):
         return StairsTerrainBuild(
             size,
             grid_resolution,
-            height,
+            start_height,
             position,
             terrain_path,
             step_height,
