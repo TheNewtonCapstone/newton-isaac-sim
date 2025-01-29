@@ -2,7 +2,6 @@ import argparse
 import logging
 from typing import List, Optional, Tuple, get_args
 
-from core.terrain.ascending_stair_terrain import AscendingStairsTerrainBuilder
 from core.types import Matter, Config, ConfigCollection, Mode
 
 logger = logging.getLogger(__name__)
@@ -619,8 +618,11 @@ def main():
     from core.envs import NewtonMultiTerrainEnv
     from core.agents import NewtonVecAgent
 
-    from core.terrain.flat_terrain import FlatBaseTerrainBuilder
-    from core.terrain.perlin_terrain import PerlinBaseTerrainBuilder
+    from core.terrain import (
+        FlatTerrainBuilder,
+        PerlinTerrainBuilder,
+        StairsTerrainBuilder,
+    )
 
     from core.sensors import VecIMU, VecContact
     from core.actuators import LSTMActuator, MLPActuator, BaseActuator
@@ -643,12 +645,6 @@ def main():
     )
 
     actuators: List[BaseActuator] = []
-    effort_saturation_config: Config = robot_config["actuators"]["dc"][
-        "effort_saturation"
-    ]
-    gain_config_list: List[Config] = list(
-        robot_config["actuators"]["dc"]["gains"].values()
-    )
 
     for i in range(12):
         actuator = LSTMActuator(
@@ -751,10 +747,10 @@ def main():
             agent=newton_agent,
             num_envs=num_envs,
             terrain_builders=[
-                AscendingStairsTerrainBuilder(),
-                AscendingStairsTerrainBuilder(),
-                AscendingStairsTerrainBuilder(),
-                AscendingStairsTerrainBuilder(),
+                PerlinTerrainBuilder(),
+                StairsTerrainBuilder(),
+                StairsTerrainBuilder(),
+                StairsTerrainBuilder(),
             ],
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
@@ -800,10 +796,10 @@ def main():
             agent=newton_agent,
             num_envs=num_envs,
             terrain_builders=[
-                FlatBaseTerrainBuilder(),
-                FlatBaseTerrainBuilder(),
-                FlatBaseTerrainBuilder(),
-                FlatBaseTerrainBuilder(),
+                FlatTerrainBuilder(),
+                FlatTerrainBuilder(),
+                FlatTerrainBuilder(),
+                FlatTerrainBuilder(),
             ],
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
@@ -834,22 +830,22 @@ def main():
         agent=newton_agent,
         num_envs=num_envs,
         terrain_builders=[
-            FlatBaseTerrainBuilder(size=terrains_size),
-            PerlinBaseTerrainBuilder(
+            FlatTerrainBuilder(size=terrains_size),
+            PerlinTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.05,
                 octave=4,
                 noise_scale=2,
             ),
-            PerlinBaseTerrainBuilder(
+            PerlinTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.03,
                 octave=8,
                 noise_scale=4,
             ),
-            PerlinBaseTerrainBuilder(
+            PerlinTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.02,
@@ -866,22 +862,22 @@ def main():
         agent=newton_agent,
         num_envs=num_envs,
         terrain_builders=[
-            FlatBaseTerrainBuilder(size=terrains_size),
-            PerlinBaseTerrainBuilder(
+            FlatTerrainBuilder(size=terrains_size),
+            PerlinTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.05,
                 octave=4,
                 noise_scale=2,
             ),
-            PerlinBaseTerrainBuilder(
+            PerlinTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.03,
                 octave=8,
                 noise_scale=4,
             ),
-            PerlinBaseTerrainBuilder(
+            PerlinTerrainBuilder(
                 size=terrains_size,
                 resolution=terrains_resolution,
                 height=0.02,

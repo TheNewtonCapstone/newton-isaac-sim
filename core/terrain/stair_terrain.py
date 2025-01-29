@@ -1,44 +1,47 @@
-import torch
-from core.terrain.terrain import BaseTerrainBuild, BaseTerrainBuilder
+from typing import List
+
+import numpy as np
 from torch import Tensor
 
+from core.terrain.terrain import BaseTerrainBuild, BaseTerrainBuilder
 
-class AscendingStairsTerrainBuild(BaseTerrainBuild):
+
+class StairsTerrainBuild(BaseTerrainBuild):
     def __init__(
         self,
-        size: Tensor,
-        resolution: Tensor,
+        size: float,
+        grid_resolution: Tensor,
         height: float,
-        position: Tensor,
+        position: List[float],
         path: str,
         stair_height: float,
         number_of_steps: int,
     ):
-        super().__init__(size, resolution, height, position, path)
+        super().__init__(size, grid_resolution, height, position, path)
 
         self.stair_height = stair_height
         self.number_of_steps = number_of_steps
 
 
-class AscendingStairsTerrainBuilder(BaseTerrainBuilder):
+class StairsTerrainBuilder(BaseTerrainBuilder):
     def __init__(
         self,
-        size: Tensor = None,
-        resolution: Tensor = None,
+        size: float = None,
+        grid_resolution: Tensor = None,
         height: float = 1.0,
         root_path: str = "/Terrains",
         stair_height: float = 0.1,
         number_of_steps: int = 10,
     ):
-        super().__init__(size, resolution, height, root_path)
+        super().__init__(size, grid_resolution, height, root_path)
 
         self.stair_height = stair_height
         self.number_of_steps = number_of_steps
 
-    def build_from_self(self, position: Tensor) -> AscendingStairsTerrainBuild:
+    def build_from_self(self, position: List[float]) -> StairsTerrainBuild:
         return self.build(
             self.size,
-            self.resolution,
+            self.grid_resolution,
             self.height,
             position,
             self.root_path,
@@ -48,29 +51,18 @@ class AscendingStairsTerrainBuilder(BaseTerrainBuilder):
 
     @staticmethod
     def build(
-        size=None,
-        resolution=None,
-        height=1,
-        position=None,
-        path=None,
-        stair_height: float = 0.1,
+        size,
+        grid_resolution,
+        height,
+        position,
+        path,
+        step_height: float = 0.1,
         number_of_steps: int = 10,
-    ) -> AscendingStairsTerrainBuild:
-        from core.globals import TERRAINS_PATH
+    ) -> StairsTerrainBuild:
+        num_rows = int(size * grid_resolution[0])
+        num_cols = int(size * grid_resolution[1])
 
-        if size is None:
-            size = [10, 10]
-        if resolution is None:
-            resolution = [40, 40]
-        if position is None:
-            position = [0, 0, 0]
-        if path is None:
-            path = TERRAINS_PATH
-
-        num_rows = int(size[0] * resolution[0])
-        num_cols = int(size[1] * resolution[1])
-
-        heightmap = torch.zeros((num_rows, num_cols))
+        heightmap = np.zeros((num_rows, num_cols))
 
         # Generate pyramid-like terrain with steps (stairs)
         step_width = num_rows / (number_of_steps * 2)
@@ -82,25 +74,17 @@ class AscendingStairsTerrainBuilder(BaseTerrainBuilder):
         stop_y = num_cols
 
         while (stop_x > start_x) and (stop_y > start_y):
-            # print(
-            #     f"Before changes - height: {start_height}\nx: {start_x}, {stop_x}\ny: {start_y}, {stop_y}"
-            # )
             start_x = int(start_x + step_width)
             stop_x = int(stop_x - step_width)
             start_y = int(start_y + step_width)
             stop_y = int(stop_y - step_width)
-            start_height += stair_height
+            start_height += step_height
             heightmap[start_x:stop_x, start_y:stop_y] = start_height
-            # print(
-            #     f"After changes - height: {start_height}\nx: {start_x}, {stop_x}\ny: {start_y}, {stop_y}"
-            # )
 
         # Generate pyramid-like terrain with steps (stairs)
         terrain_path = BaseTerrainBuilder._add_heightmap_to_world(
             heightmap,
             size,
-            num_cols,
-            num_rows,
             height,
             path,
             "ascending_stairs",
@@ -116,12 +100,12 @@ class AscendingStairsTerrainBuilder(BaseTerrainBuilder):
             restitution=0.0,
         )
 
-        return AscendingStairsTerrainBuild(
+        return StairsTerrainBuild(
             size,
-            resolution,
+            grid_resolution,
             height,
             position,
             terrain_path,
-            stair_height,
+            step_height,
             number_of_steps,
         )

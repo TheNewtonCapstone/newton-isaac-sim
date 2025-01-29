@@ -1,17 +1,19 @@
+from typing import List
+
+import numpy as np
+import torch
 from perlin_noise import PerlinNoise
 
-import torch
 from core.terrain.terrain import BaseTerrainBuild, BaseTerrainBuilder
-from torch import Tensor
 
 
-class PerlinBaseTerrainBuild(BaseTerrainBuild):
+class PerlinTerrainBuild(BaseTerrainBuild):
     def __init__(
         self,
-        size: Tensor,
-        resolution: Tensor,
+        size: float,
+        resolution: torch.Tensor,
         height: float,
-        position: Tensor,
+        position: List[float],
         path: str,
         octaves: float,
         noise_scale: float,
@@ -22,11 +24,11 @@ class PerlinBaseTerrainBuild(BaseTerrainBuild):
         self.noise_scale = noise_scale
 
 
-class PerlinBaseTerrainBuilder(BaseTerrainBuilder):
+class PerlinTerrainBuilder(BaseTerrainBuilder):
     def __init__(
         self,
-        size: Tensor = None,
-        resolution: Tensor = None,
+        size: float = None,
+        resolution: torch.Tensor = None,
         height: float = 0.05,
         root_path: str = "/Terrains",
         octave: int = 12,
@@ -37,10 +39,10 @@ class PerlinBaseTerrainBuilder(BaseTerrainBuilder):
         self.octaves = octave
         self.noise_scale = noise_scale
 
-    def build_from_self(self, position: Tensor) -> PerlinBaseTerrainBuild:
+    def build_from_self(self, position: List[float]) -> PerlinTerrainBuild:
         return self.build(
             self.size,
-            self.resolution,
+            self.grid_resolution,
             self.height,
             position,
             self.root_path,
@@ -50,29 +52,29 @@ class PerlinBaseTerrainBuilder(BaseTerrainBuilder):
 
     @staticmethod
     def build(
-        size=None,
-        resolution=None,
-        height=0.05,
-        position=None,
-        path=None,
+        size,
+        grid_resolution,
+        height,
+        position,
+        path,
         octaves: int = 12,
         noise_scale: float = 4,
-    ) -> PerlinBaseTerrainBuild:
+    ) -> PerlinTerrainBuild:
         from core.globals import TERRAINS_PATH
 
         if size is None:
-            size = [10, 10]
-        if resolution is None:
-            resolution = [20, 20]
+            size = 10.0
+        if grid_resolution is None:
+            grid_resolution = [20, 20]
         if position is None:
             position = [0, 0, 0]
         if path is None:
             path = TERRAINS_PATH
 
-        num_rows = int(size[0] * resolution[0])
-        num_cols = int(size[1] * resolution[1])
+        num_rows = int(size * grid_resolution[0])
+        num_cols = int(size * grid_resolution[1])
 
-        heightmap = torch.zeros((num_rows, num_cols))
+        heightmap = np.zeros((num_rows, num_cols))
 
         noise = PerlinNoise(octaves=octaves)
 
@@ -85,8 +87,6 @@ class PerlinBaseTerrainBuilder(BaseTerrainBuilder):
         terrain_path = BaseTerrainBuilder._add_heightmap_to_world(
             heightmap,
             size,
-            num_cols,
-            num_rows,
             height,
             path,
             "perlin",
@@ -102,9 +102,9 @@ class PerlinBaseTerrainBuilder(BaseTerrainBuilder):
             restitution=0.0,
         )
 
-        return PerlinBaseTerrainBuild(
+        return PerlinTerrainBuild(
             size,
-            resolution,
+            grid_resolution,
             height,
             position,
             terrain_path,

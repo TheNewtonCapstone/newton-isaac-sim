@@ -41,8 +41,8 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         terrain_positions = torch.tensor(
             [
                 [
-                    (i % num_terrains_side) * terrains_size[0] - terrains_size[0] / 2,
-                    (i // num_terrains_side) * terrains_size[1] - terrains_size[1] / 2,
+                    (i % num_terrains_side) * terrains_size - terrains_size / 2,
+                    (i // num_terrains_side) * terrains_size - terrains_size / 2,
                     0,
                 ]
                 for i in range(num_terrains)
@@ -55,8 +55,8 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         for i, terrain_builder in enumerate(self.terrain_builders):
             terrain_spawn_position = terrain_positions[i]
 
-            assert terrain_builder.size.equal(
-                terrains_size
+            assert (
+                terrain_builder.size == terrains_size
             ), "All terrains must have the same size"
 
             self.terrain_builds.append(
