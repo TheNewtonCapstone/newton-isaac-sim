@@ -1,5 +1,5 @@
 physics_dt: 0.002500 # 400 Hz
-control_dt: 0.020000 # 50 Hz
+control_dt: 0.010000 # 50 Hz
 rendering_dt: 0.002500
 stage_units_in_meters: 1.0
 backend: torch
