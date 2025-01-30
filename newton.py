@@ -2,6 +2,7 @@ import argparse
 import logging
 from typing import List, Optional, Tuple, get_args
 
+from core.terrain.obstacle_terrain import ObstacleTerrainBuilder
 from core.types import Matter, Config, ConfigCollection, Mode
 
 logger = logging.getLogger(__name__)
@@ -750,7 +751,7 @@ def main():
                 PerlinTerrainBuilder(),
                 StairsTerrainBuilder(),
                 StairsTerrainBuilder(),
-                StairsTerrainBuilder(),
+                ObstacleTerrainBuilder(),
             ],
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
