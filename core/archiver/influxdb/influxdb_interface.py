@@ -101,10 +101,14 @@ class InfluxDBInterface(DBInterface):
 
             self._docker_client = docker.from_env()
 
-        running_container = self._get_running_container()
+        existing_container = self._get_existing_container()
 
-        if running_container is not None:
-            self._idb_docker_container = running_container
+        if existing_container:
+            self._idb_docker_container = existing_container
+
+            if existing_container.status == "exited":
+                existing_container.start()
+
             return
 
         port = self._db_config["local"]["port"]
@@ -117,7 +121,7 @@ class InfluxDBInterface(DBInterface):
             volumes=self._db_config["local"]["volumes"],
         )
 
-    def _get_running_container(self) -> Optional[Container]:
+    def _get_existing_container(self) -> Optional[Container]:
         import docker.errors
 
         try:
