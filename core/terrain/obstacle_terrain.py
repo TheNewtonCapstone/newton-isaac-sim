@@ -40,9 +40,9 @@ class ObstacleTerrainBuilder(BaseTerrainBuilder):
         grid_resolution: Tensor = None,
         height: float = 1.0,
         obstacle_height: float = 0.1,
-        obstacle_min_size: float = 0.1,
-        obstacle_max_size: float = 0.3,
-        num_obstacles: int = 5,
+        obstacle_min_size: float = 2.0,
+        obstacle_max_size: float = 10.0,
+        num_obstacles: int = 30,
         root_path: Optional[str] = None,
     ):
         super().__init__(size, grid_resolution, height, root_path)
@@ -79,10 +79,10 @@ class ObstacleTerrainBuilder(BaseTerrainBuilder):
             Resolution and height are not used for flat terrain.
         """
         # switch parameters to discrete units
-        max_height = int(self.obstacle_height / height)
-        min_size = int(self.obstacle_min_size / size)
-        max_size = int(self.obstacle_max_size / size)
-        platform_size = int(size // 10)
+        max_height = self.obstacle_height
+        min_size = int(self.obstacle_min_size / 0.25)
+        max_size = int(self.obstacle_max_size / 0.25)
+        platform_size = int(1.0 / 0.25)
 
         num_rows = int(size * grid_resolution[0])
         num_cols = int(size * grid_resolution[1])
@@ -91,32 +91,39 @@ class ObstacleTerrainBuilder(BaseTerrainBuilder):
         (i, j) = heightmap.shape
 
         height_range = torch.tensor(
-            [-max_height, -max_height // 2, max_height // 2, max_height]
+            [-max_height, -max_height / 2, max_height / 2, max_height]
         )
         width_range = torch.arange(min_size, max_size, 4)
         length_range = torch.arange(min_size, max_size, 4)
+
+        print(f"{num_rows=}, {num_cols=}, {min_size=}, {max_size=}, {max_height=}")
+        print(f"{height_range=}, {width_range=}, {length_range=}")
 
         for _ in range(self.num_obstacles):
             width = width_range[torch.randint(0, len(width_range), (1,))].item()
             length = length_range[torch.randint(0, len(length_range), (1,))].item()
             start_i = torch.randint(0, i - width, (1,)).item()
             start_j = torch.randint(0, j - length, (1,)).item()
+            rand_height = torch.randint(0, len(height_range), (1,))
+
             heightmap[start_i : start_i + width, start_j : start_j + length] = (
-                height_range[torch.randint(0, len(height_range), (1,))].item()
+                height_range[rand_height].item()
             )
 
-        x1 = (size - platform_size) // 2
-        x2 = (size + platform_size) // 2
-        y1 = (size - platform_size) // 2
-        y2 = (size + platform_size) // 2
-        heightmap[x1:x2, y1:y2] = 0
+            print(f"{start_i=}, {start_j=}, {width=}, {length=}, {rand_height=}")
+
+        x1 = int((size - platform_size) // 2)
+        x2 = int((size + platform_size) // 2)
+        y1 = int((size - platform_size) // 2)
+        y2 = int((size + platform_size) // 2)
+        heightmap[x1:x2, y1:y2] = 0.0
 
         terrain_path = BaseTerrainBuilder._add_heightmap_to_world(
             heightmap,
             size,
             height,
             path,
-            "flat",
+            "obstacle_terrain",
             position,
         )
 
@@ -131,6 +138,10 @@ class ObstacleTerrainBuilder(BaseTerrainBuilder):
 
         return ObstacleTerrainBuild(
             size,
+            self.obstacle_height,
+            self.obstacle_min_size,
+            self.obstacle_max_size,
+            self.num_obstacles,
             position,
             terrain_path,
         )
