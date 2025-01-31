@@ -191,7 +191,7 @@ class NewtonIdleTask(NewtonBaseTask):
             # if no paws are in contact with the ground
             (~in_contact_with_ground).all(dim=1),
             # ensures that the agent has time to stabilize
-            (self.progress_buf > 5).to(self.device),
+            (self.progress_buf > 50).to(self.device),
         )
 
         # base position
