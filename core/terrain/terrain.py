@@ -87,7 +87,7 @@ class BaseTerrainBuilder(ABC):
 
     @staticmethod
     def _add_heightmap_to_world(
-        heightmap: np.ndarray,
+        heightmap: np.ndarray | Tensor,
         scale: float,
         height: float,
         base_path: str,
