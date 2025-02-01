@@ -988,7 +988,7 @@ def main():
 
     universe.reset(construction=True)
 
-    from stable_baselines3 import PPO
+    from core.algorithms import CustomPPO
     from stable_baselines3.common.policies import BasePolicy
 
     # we're not exporting nor purely simulating, so we're training
@@ -1014,7 +1014,7 @@ def main():
             "ortho_init": False,
         }
 
-        model = PPO(
+        model = CustomPPO(
             rl_config["policy"],
             task,
             verbose=2,
@@ -1039,7 +1039,9 @@ def main():
         )
 
         if current_checkpoint_path is not None:
-            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
+            model = CustomPPO.load(
+                current_checkpoint_path, task, device=rl_config["device"]
+            )
 
         model.learn(
             total_timesteps=rl_config["timesteps_per_env"] * num_envs,
@@ -1055,7 +1057,7 @@ def main():
     if playing:
         from core.utils.path import get_folder_from_path
 
-        model = PPO.load(current_checkpoint_path)
+        model = CustomPPO.load(current_checkpoint_path)
 
         actions = model.predict(task.reset()[0], deterministic=True)[0]
         actions = np.array([actions])  # make sure we have a 2D tensor
@@ -1070,7 +1072,6 @@ def main():
             observations = step_return[0]
 
             actions = model.predict(observations, deterministic=True)[0]
-            actions_string = ",".join([str(ja) for ja in actions[0]])
 
             # logger.info(
             #     f"{universe.current_time},{universe.get_physics_dt()},{observations[0][0]},{actions_string}",
@@ -1084,7 +1085,7 @@ def main():
     # ----------- #
 
     # Load model from checkpoint
-    model = PPO.load(current_checkpoint_path, device="cpu")
+    model = CustomPPO.load(current_checkpoint_path, device="cpu")
 
     # Create dummy observations tensor for tracing torch model
     obs_shape = model.observation_space.shape

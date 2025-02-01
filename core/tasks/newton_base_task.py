@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Optional
 
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
 
@@ -33,6 +34,11 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
             self.model.save(f"{self.logger.dir}/{self.save_path}")
 
         self.cumulative_rewards = torch.zeros((task.num_envs,), device=task.device)
+
+    def _on_rollout_end(self) -> None:
+        super()._on_rollout_end()
+
+        self._custom_ppo_adaptive_learning_rate()
 
     def _on_step(self) -> bool:
         super()._on_step()
@@ -85,6 +91,33 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
             )
 
         return True
+
+    def _custom_ppo_adaptive_learning_rate(self):
+        # support for CustomPPO's implementation of dynamic learning rates
+
+        from core.algorithms import CustomPPO
+
+        if not isinstance(self.model, CustomPPO):
+            return
+
+        new_lr = self._get_adaptive_learning_rate(
+            self.model.target_kl,
+            self.model.current_kl,
+            self.model.learning_rate,
+        )
+        self.model.update_learning_rate(new_lr)
+
+    def _get_adaptive_learning_rate(
+        self,
+        current_lr: float,
+        current_kl: float,
+        target_kl: float,
+    ) -> float:
+        if current_kl > 2 * target_kl:
+            return max(1e-5, current_lr / 1.5)
+
+        if current_kl < 0.5 * target_kl:
+            return min(1e-2, 1.5 * current_lr)
 
 
 class NewtonBaseTask(BaseTask):

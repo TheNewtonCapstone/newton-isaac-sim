@@ -1,6 +1,6 @@
-physics_dt: 0.005000 # 200 Hz
+physics_dt: 0.002500 # 400 Hz
 control_dt: 0.010000 # 100 Hz
-rendering_dt: 0.005000
+rendering_dt: 0.002500
 stage_units_in_meters: 1.0
 backend: torch
 device: cuda
@@ -43,4 +43,4 @@ sim_params:
   gpu_max_particle_contacts: 1024 # Particle contacts are not used for Newton-related sims, so we keep it low
   gpu_heap_capacity: 268435436
   gpu_temp_buffer_capacity: 67108864
-  gpu_max_num_partitions: 8
+  gpu_max_num_parttions: 8

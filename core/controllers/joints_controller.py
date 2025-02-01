@@ -79,7 +79,7 @@ class VecJointsController(BaseObject):
         self._noise_function: NoiseFunction = noise_function
         self._target_joint_positions: Tensor = torch.zeros(
             (self._universe.num_envs, len(actuators))
-        )
+        )  # Target positions in rads
 
         self._num_joints: int = len(joint_position_limits)
 
@@ -217,7 +217,7 @@ class VecJointsController(BaseObject):
 
         self._target_joint_positions = self._process_joint_actions(
             joint_actions,
-            self._vec_joint_position_limits,
+            self._vec_joint_position_limits_rad,
             self._noise_function,
         )
         # temp_arr = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -239,7 +239,7 @@ class VecJointsController(BaseObject):
         for i, actuator in enumerate(self._actuators):
             efforts = actuator.step(
                 current_joint_positions[:, i],
-                torch.deg2rad(self._target_joint_positions[:, i]),
+                self._target_joint_positions[:, i],
                 current_velocities[:, i],
             )
             efforts_to_apply[:, i] = efforts
@@ -418,7 +418,7 @@ class VecJointsController(BaseObject):
         noise_function: Optional[NoiseFunction] = None,
     ) -> Tensor:
         """
-        Joint actions are processed by mapping them to the joint constraints (degrees) and applying noise.
+        Joint actions are processed by mapping them to the joint constraints (any unit) and applying noise.
         Args:
             joint_actions: The joint actions to be processed [-1, 1].
             vec_joint_position_limits: The joint position limits.
