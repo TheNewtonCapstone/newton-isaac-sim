@@ -1,6 +1,6 @@
-physics_dt: 0.002500 # 400 Hz
-control_dt: 0.010000 # 50 Hz
-rendering_dt: 0.002500
+physics_dt: 0.005000 # 200 Hz
+control_dt: 0.010000 # 100 Hz
+rendering_dt: 0.005000
 stage_units_in_meters: 1.0
 backend: torch
 device: cuda
@@ -37,7 +37,7 @@ sim_params:
   gpu_max_rigid_contact_count: 2097152
   gpu_max_rigid_patch_count: 655360
   gpu_found_lost_pairs_capacity: 16776216
-  gpu_found_lost_aggregate_pairs_capacity: 107701464
+  gpu_found_lost_aggregate_pairs_capacity: 215402928
   gpu_total_aggregate_pairs_capacity: 4194304
   gpu_max_soft_body_contacts: 1024 # Soft body contacts are not used for Newton-related sims, so we keep it low
   gpu_max_particle_contacts: 1024 # Particle contacts are not used for Newton-related sims, so we keep it low
