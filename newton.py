@@ -2,7 +2,6 @@ import argparse
 import logging
 from typing import List, Optional, Tuple, get_args
 
-from core.terrain.obstacle_terrain import ObstacleTerrainBuilder
 from core.types import Matter, Config, ConfigCollection, Mode
 
 logger = logging.getLogger(__name__)
@@ -115,6 +114,12 @@ def setup_argparser() -> argparse.ArgumentParser:
         type=int,
         help="Number of environments to run (will be read from the rl-config if not specified).",
         default=-1,
+    )
+    parser.add_argument(
+        "--terrain-config",
+        type=str,
+        help="Path to the configuration file for the terrain.",
+        default="configs/terrain.yaml",
     )
     parser.add_argument(
         "--train",
@@ -358,6 +363,7 @@ def setup() -> Optional[Matter]:
     ros_config = load_config(cli_args.ros_config)
     db_config = load_config(cli_args.db_config)
     secrets = load_config(cli_args.secrets)
+    terrain_config = load_config(cli_args.terrain_config)
 
     # Control Flags
     training = cli_args.train
@@ -518,6 +524,7 @@ def setup() -> Optional[Matter]:
         network_name,
         ros_config,
         db_config,
+        terrain_config,
         secrets,
         animation_clips_config,
         current_animation,
@@ -560,6 +567,7 @@ def main():
         network_name,
         ros_config,
         db_config,
+        terrain_config,
         secrets,
         animation_clips_config,
         current_animation,
@@ -616,7 +624,7 @@ def main():
     # creates a singleton instance of the archiver, to be used throughout the program
     Archiver.create(universe, db_config, secrets["db"])
 
-    from core.envs import NewtonMultiTerrainEnv
+    from core.envs import NewtonTerrainEnv
     from core.agents import NewtonVecAgent
 
     from core.terrain import (
@@ -630,6 +638,7 @@ def main():
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
+    from core.terrain.terrain import Terrain
 
     from core.utils.math import IDENTITY_QUAT
 
@@ -738,21 +747,18 @@ def main():
         randomizer_settings=randomization_config,
     )
 
+    terrain = Terrain(terrain_config, num_envs)
+
     # --------------- #
     #    ANIMATING    #
     # --------------- #
 
     if animating:
-        env = NewtonMultiTerrainEnv(
+        env = NewtonTerrainEnv(
             universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
-            terrain_builders=[
-                PerlinTerrainBuilder(),
-                StairsTerrainBuilder(),
-                StairsTerrainBuilder(),
-                ObstacleTerrainBuilder(),
-            ],
+            terrain=terrain,
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
         )
@@ -792,16 +798,11 @@ def main():
     # ---------------- #
 
     if physics_only:
-        env = NewtonMultiTerrainEnv(
+        env = NewtonTerrainEnv(
             universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
-            terrain_builders=[
-                FlatTerrainBuilder(),
-                FlatTerrainBuilder(),
-                FlatTerrainBuilder(),
-                FlatTerrainBuilder(),
-            ],
+            terrain=terrain,
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
         )
@@ -820,149 +821,22 @@ def main():
     # ----------- #
 
     from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
-    from core.envs import NewtonMultiTerrainEnv
     from core.wrappers import RandomDelayWrapper
 
-    terrains_size = 10
-    terrains_resolution = torch.tensor([16, 16])
-
-    training_env = NewtonMultiTerrainEnv(
+    training_env = NewtonTerrainEnv(
         universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
-        terrain_builders=[
-            FlatTerrainBuilder(size=terrains_size),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.05,
-                octave=4,
-                noise_scale=2,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.03,
-                octave=8,
-                noise_scale=4,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.01,
-                octave=16,
-                noise_scale=6,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.05,
-                octave=16,
-                noise_scale=8,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.03,
-                octave=8,
-                noise_scale=4,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.05,
-                octave=8,
-                noise_scale=16,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.03,
-                octave=4,
-                noise_scale=8,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.01,
-                octave=2,
-                noise_scale=4,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.1,
-                number_of_steps=10,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.133,
-                number_of_steps=10,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.166,
-                number_of_steps=10,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.20,
-                number_of_steps=10,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.133,
-                number_of_steps=5,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.166,
-                number_of_steps=5,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.200,
-                number_of_steps=5,
-            ),
-        ],
+        terrain=terrain,
         domain_randomizer=domain_randomizer,
         inverse_control_frequency=inverse_control_frequency,
     )
 
-    playing_env = NewtonMultiTerrainEnv(
+    playing_env = NewtonTerrainEnv(
         universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
-        terrain_builders=[
-            FlatTerrainBuilder(size=terrains_size),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.05,
-                octave=4,
-                noise_scale=2,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.03,
-                octave=8,
-                noise_scale=4,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.02,
-                octave=16,
-                noise_scale=8,
-            ),
-        ],
+        terrain=terrain,
         domain_randomizer=domain_randomizer,
         inverse_control_frequency=inverse_control_frequency,
     )
