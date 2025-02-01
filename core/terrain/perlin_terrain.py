@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from perlin_noise import PerlinNoise
 
-from core.terrain.terrain import BaseTerrainBuild, BaseTerrainBuilder
+from core.terrain.terrain_builder import BaseTerrainBuild, BaseTerrainBuilder
 
 
 class PerlinTerrainBuild(BaseTerrainBuild):

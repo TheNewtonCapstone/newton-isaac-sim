@@ -7,7 +7,7 @@ from core.archiver import Archiver
 from core.domain_randomizer import NewtonBaseDomainRandomizer
 from core.envs import BaseEnv
 from core.terrain import BaseTerrainBuilder
-from core.terrain.new_terrain import Terrain
+from core.terrain.terrain import Terrain
 from core.types import EnvObservations, Actions, Indices
 from core.universe import Universe
 from torch import Tensor

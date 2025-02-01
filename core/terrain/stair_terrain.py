@@ -3,7 +3,7 @@ from typing import List
 import numpy as np
 from torch import Tensor
 
-from core.terrain.terrain import BaseTerrainBuild, BaseTerrainBuilder
+from core.terrain.terrain_builder import BaseTerrainBuild, BaseTerrainBuilder
 
 
 class StairsTerrainBuild(BaseTerrainBuild):

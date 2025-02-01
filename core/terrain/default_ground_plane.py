@@ -2,7 +2,7 @@ from typing import List
 
 import torch
 
-from core.terrain.terrain import BaseTerrainBuilder, BaseTerrainBuild
+from core.terrain.terrain_builder import BaseTerrainBuilder, BaseTerrainBuild
 
 
 class DefaultGroundPlaneBuild(BaseTerrainBuild):

@@ -5,7 +5,7 @@ from ..agents import BaseAgent
 from ..base import BaseObject
 from ..domain_randomizer import BaseDomainRandomizer
 from ..terrain import BaseTerrainBuilder, BaseTerrainBuild
-from ..terrain.new_terrain import Terrain
+from ..terrain.terrain import Terrain
 from ..types import EnvObservations, Actions, Indices
 from ..universe import Universe
 
