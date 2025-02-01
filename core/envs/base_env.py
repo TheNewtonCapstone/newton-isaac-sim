@@ -5,6 +5,7 @@ from ..agents import BaseAgent
 from ..base import BaseObject
 from ..domain_randomizer import BaseDomainRandomizer
 from ..terrain import BaseTerrainBuilder, BaseTerrainBuild
+from ..terrain.new_terrain import Terrain
 from ..types import EnvObservations, Actions, Indices
 from ..universe import Universe
 
@@ -15,7 +16,7 @@ class BaseEnv(BaseObject):
         universe: Universe,
         agent: BaseAgent,
         num_envs: int,
-        terrain_builders: List[BaseTerrainBuilder],
+        terrain: Terrain,
         domain_randomizer: BaseDomainRandomizer,
     ) -> None:
         super().__init__(
@@ -28,7 +29,7 @@ class BaseEnv(BaseObject):
         self.agent: BaseAgent = agent
         self.num_envs = num_envs
 
-        self.terrain_builders: List[BaseTerrainBuilder] = terrain_builders
+        self.terrain = terrain
         self.terrain_builds: List[BaseTerrainBuild] = []
 
         self.domain_randomizer: BaseDomainRandomizer = domain_randomizer

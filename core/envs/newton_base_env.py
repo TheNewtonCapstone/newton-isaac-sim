@@ -7,6 +7,7 @@ from core.archiver import Archiver
 from core.domain_randomizer import NewtonBaseDomainRandomizer
 from core.envs import BaseEnv
 from core.terrain import BaseTerrainBuilder
+from core.terrain.new_terrain import Terrain
 from core.types import EnvObservations, Actions, Indices
 from core.universe import Universe
 from torch import Tensor
@@ -18,7 +19,7 @@ class NewtonBaseEnv(BaseEnv):
         universe: Universe,
         agent: NewtonBaseAgent,
         num_envs: int,
-        terrain_builders: List[BaseTerrainBuilder],
+        terrain: Terrain,
         domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
     ):
@@ -26,7 +27,7 @@ class NewtonBaseEnv(BaseEnv):
             universe,
             agent,
             num_envs,
-            terrain_builders,
+            terrain,
             domain_randomizer,
         )
 
