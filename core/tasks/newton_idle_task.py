@@ -40,17 +40,17 @@ class NewtonIdleTask(NewtonBaseTask):
         self.observation_space: Box = Box(
             low=np.array(
                 [-10.0] * 3  # for the projected gravity
-                + [-np.Inf] * 6  # for linear & angular velocities
+                + [-50.0] * 6  # for linear & angular velocities
                 + [-1.0] * 12  # for the joint positions
-                + [-np.Inf] * 12  # for the joint velocities
+                + [-1.0] * 12  # for the joint velocities
                 + [-1.0] * 24  # for the previous 2 actions
                 + [-1.0] * 2,  # for the transformed phase signal
             ),
             high=np.array(
                 [10.0] * 3  # for the projected gravity
-                + [np.Inf] * 6  # for linear & angular velocities
+                + [50.0] * 6  # for linear & angular velocities
                 + [1.0] * 12  # for the joint positions
-                + [np.Inf] * 12  # for the joint velocities
+                + [1.0] * 12  # for the joint velocities
                 + [1.0] * 24  # for the previous 2 actions
                 + [1.0] * 2  # for the transformed phase signal,
             ),
@@ -62,8 +62,8 @@ class NewtonIdleTask(NewtonBaseTask):
         )
 
         self.reward_space: Box = Box(
-            low=np.array([-np.Inf]),
-            high=np.array([np.Inf]),
+            low=np.array([-1.0]),
+            high=np.array([1.0]),
         )
 
         super().__init__(
@@ -115,6 +115,11 @@ class NewtonIdleTask(NewtonBaseTask):
         self.progress_buf[resets] = 0
         self.last_actions_buf[:, resets, :] = 0.0
 
+        for i in range(self.num_envs):
+            self.infos_buf[i] = {
+                "TimeLimit.truncated": self.progress_buf[i] >= self.max_episode_length
+            }
+
         return (
             obs_buf.cpu().numpy(),
             self.rewards_buf.cpu().numpy(),
@@ -145,7 +150,9 @@ class NewtonIdleTask(NewtonBaseTask):
         obs_buf[:, 3:6] = obs["linear_velocities"]
         obs_buf[:, 6:9] = obs["angular_velocities"]
         obs_buf[:, 9:21] = self.agent.joints_controller.get_normalized_joint_positions()
-        obs_buf[:, 21:33] = self.agent.joints_controller.get_joint_velocities_deg()
+        obs_buf[:, 21:33] = (
+            self.agent.joints_controller.get_normalized_joint_velocities()
+        )
 
         # 1st & 2nd set of past actions, we don't care about just-applied actions
         obs_buf[:, 33:57] = self.last_actions_buf.reshape(
@@ -159,9 +166,10 @@ class NewtonIdleTask(NewtonBaseTask):
         obs_buf[:, 57] = torch.cos(2 * torch.pi * phase_signal)
         obs_buf[:, 58] = torch.sin(2 * torch.pi * phase_signal)
 
-        obs_buf = torch.nan_to_num(
+        obs_buf = torch.clip(
             obs_buf,
-            nan=0.0,
+            torch.from_numpy(self.observation_space.low).to(obs_buf.device),
+            torch.from_numpy(self.observation_space.high).to(obs_buf.device),
         )
 
         return obs_buf
@@ -208,8 +216,8 @@ class NewtonIdleTask(NewtonBaseTask):
         )  # [-1, 1] unitless
         # joint_accelerations
         joint_efforts = (
-            self.agent.joints_controller.art_view.get_measured_joint_efforts()
-        )  # in Nm
+            self.agent.joints_controller.get_normalized_joint_efforts()
+        )  # [-1, 1] unitless
 
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
             self.progress_buf * self._universe.control_dt,
@@ -325,15 +333,4 @@ class NewtonIdleTask(NewtonBaseTask):
             + joint_action_acceleration_reward
             + in_contacts_reward
             + survival_reward
-        )
-
-        self.rewards_buf = torch.nan_to_num(
-            self.rewards_buf,
-            nan=0.0,
-        )
-
-        self.rewards_buf = torch.clip(
-            self.rewards_buf,
-            torch.from_numpy(self.reward_space.low).to(self.device),
-            torch.from_numpy(self.reward_space.high).to(self.device),
         )

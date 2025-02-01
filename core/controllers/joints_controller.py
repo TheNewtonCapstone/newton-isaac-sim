@@ -1,6 +1,5 @@
 from typing import Optional, List
 
-import numpy as np
 import torch
 from omni.isaac.core.articulations import ArticulationView
 from torch import Tensor
@@ -334,7 +333,7 @@ class VecJointsController(BaseObject):
 
         joint_velocities_normalized = map_range(
             joint_velocities,
-            self._vec_joint_velocity_limits.to(
+            -self._vec_joint_velocity_limits.to(
                 joint_velocities.device,
             ).squeeze(-1),
             self._vec_joint_velocity_limits.to(
@@ -348,6 +347,30 @@ class VecJointsController(BaseObject):
 
     # TODO: Improve naming of `JointsController` methods
     #   They are too long and too descriptive, which makes them hard to read.
+
+    def normalize_joint_efforts(self, joint_efforts: Tensor) -> Tensor:
+        """
+        Args:
+            joint_efforts: The joint efforts to be normalized.
+
+        Returns:
+            The normalized joint efforts.
+        """
+        from core.utils.math import map_range
+
+        joint_efforts_normalized = map_range(
+            joint_efforts,
+            -self._vec_joint_effort_limits.to(
+                joint_efforts.device,
+            ).squeeze(-1),
+            self._vec_joint_effort_limits.to(
+                joint_efforts.device,
+            ).squeeze(-1),
+            -1.0,
+            1.0,
+        )
+
+        return joint_efforts_normalized
 
     def get_normalized_joint_positions(self) -> Tensor:
         """
@@ -363,6 +386,13 @@ class VecJointsController(BaseObject):
         """
 
         return self.normalize_joint_velocities(self.get_joint_velocities_deg())
+
+    def get_normalized_joint_efforts(self) -> Tensor:
+        """
+        Returns:
+            The joint efforts normalized to the joint constraints [-1, 1].
+        """
+        return self.normalize_joint_efforts(self.get_applied_joint_efforts())
 
     def get_target_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._target_joint_positions)

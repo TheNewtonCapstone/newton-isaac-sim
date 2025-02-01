@@ -593,6 +593,8 @@ def main():
     import torch
     import numpy as np
 
+    torch.autograd.set_detect_anomaly(True)
+
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
 
@@ -651,6 +653,7 @@ def main():
         actuator = LSTMActuator(
             universe=universe,
             motor_model_path=robot_config["actuators"]["lstm"]["model_path"],
+            model_params=robot_config["actuators"]["lstm"]["model_params"],
         )
 
         actuators.append(actuator)
@@ -823,8 +826,8 @@ def main():
     from core.envs import NewtonMultiTerrainEnv
     from core.wrappers import RandomDelayWrapper
 
-    terrains_size = 10
-    terrains_resolution = torch.tensor([16, 16])
+    terrains_size = 5.0
+    terrains_resolution = torch.tensor([20, 20])
 
     training_env = NewtonMultiTerrainEnv(
         universe=universe,
@@ -1005,10 +1008,11 @@ def main():
                 instant_rewards=instant_rewards,
             )
 
-        policy_kwargs = dict(
-            activation_fn=network_config["activation_fn"],
-            net_arch=network_config["net_arch"],
-        )
+        policy_kwargs = {
+            "activation_fn": network_config["activation_fn"],
+            "net_arch": network_config["net_arch"],
+            "ortho_init": False,
+        }
 
         model = PPO(
             rl_config["policy"],
