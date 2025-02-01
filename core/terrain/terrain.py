@@ -1,262 +1,230 @@
-from abc import abstractmethod, ABC
-from typing import Optional, Tuple, List
+# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# Copyright (c) 2021 ETH Zurich, Nikita Rudin
 
 import numpy as np
+from core.utils import terrain_utils
+from core.utils.terrain_utils import gap_terrain, pit_terrain
 
-import torch
-from torch import Tensor
 
-
-class BaseTerrainBuild:
+class Terrain:
     def __init__(
         self,
-        size: float,
-        resolution: Tensor,
-        height: float,
-        position: List[float],
-        path: str,
-    ):
-        self.size = size
-        self.position = position
-        self.resolution = resolution
-        self.height = height
+        terrain_config: dict,
+        num_robots,
+        root_path: str = "/Terrains",
+    ) -> None:
 
-        self.path = path
-
-
-class BaseTerrainBuilder(ABC):
-    def __init__(
-        self,
-        size: float = None,
-        resolution: Tensor = None,
-        height: float = 1,
-        root_path: Optional[str] = None,
-    ):
-        from core.globals import TERRAINS_PATH
-
-        if size is None:
-            size = 10.0
-        if resolution is None:
-            resolution = torch.tensor([48, 48])
-        if root_path is None:
-            root_path = TERRAINS_PATH
-
-        self.size = size
-        self.grid_resolution = resolution
-        self.height = height
+        self.cfg = terrain_config
+        self.num_robots = num_robots
         self.root_path = root_path
-
-        from omni.isaac.core.utils.prims import create_prim
-        from omni.isaac.core.utils.prims import is_prim_path_valid
-
-        if not is_prim_path_valid(root_path):
-            create_prim(
-                prim_path=root_path,
-                prim_type="Scope",
-            )
-
-    def build_from_self(self, position: List[float]) -> BaseTerrainBuild:
-        return self.build(
-            self.size,
-            self.grid_resolution,
-            self.height,
-            position,
-            self.root_path,
-        )
-
-    @abstractmethod
-    def build(
-        self,
-        size: Optional[float],
-        resolution: Optional[Tensor],
-        height: float,
-        position: Optional[List[float]],
-        path: Optional[str],
-    ) -> BaseTerrainBuild:
-        """
-        Builds a terrain in the stage, according to the class's implementation.
-
-        Args:
-            size: Size of the terrain in the stage's units.
-            resolution: Number of vertices per terrain.
-            height: Height of the terrain in the stage's units.
-            position: Position of the terrain in the stage's units.
-            path: Path to the terrain in the stage.
-        """
-        pass
-
-    @staticmethod
-    def _add_heightmap_to_world(
-        heightmap: np.ndarray | Tensor,
-        scale: float,
-        height: float,
-        base_path: str,
-        builder_name: str,
-        position: List[float],
-    ) -> str:
-        vertices, triangles = BaseTerrainBuilder._heightmap_to_mesh(
-            heightmap,
-            height,
-            scale / heightmap.shape[0],
-        )
-
-        return BaseTerrainBuilder._add_mesh_to_world(
-            vertices,
-            triangles,
-            base_path,
-            builder_name,
-            scale,
-            position,
-        )
-
-    @staticmethod
-    def _heightmap_to_mesh(
-        heightmap: np.ndarray,
-        scale: float = 1.0,
-        grid_size: float = 1.0,
-        max_slope: float = np.deg2rad(89.0),  # 45 degrees by default
-        smoothing: bool = False,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Convert a heightmap to a 3D mesh using NumPy operations.
-
-        Args:
-            heightmap: 2D numpy array of height values
-            scale: Scale factor for heights
-            grid_size: Base distance between grid points
-            max_slope: Maximum allowed slope angle in radians
-            smoothing: Whether to apply smoothing to the mesh
-
-        Returns:
-            vertices: 2D numpy array of vertex positions
-            indices: 2D numpy array of triangle indices
-        """
-        rows, cols = heightmap.shape
-
-        # Create coordinate grids
-        x_coords, y_coords = np.meshgrid(
-            np.arange(cols) * grid_size, np.arange(rows) * grid_size
-        )
-
-        # Scale heights for Z coordinate
-        z_coords = heightmap * scale
-
-        # Handle maximum slope constraints
-        if max_slope < np.pi / 2:
-            # Calculate gradients
-            dz_dx = np.zeros_like(heightmap)
-            dz_dy = np.zeros_like(heightmap)
-
-            dz_dx[:, 1:] = np.diff(z_coords, axis=1)
-            dz_dy[1:, :] = np.diff(z_coords, axis=0)
-
-            # Maximum allowed height difference based on slope
-            max_diff = grid_size * np.tan(max_slope)
-
-            # Clamp gradients
-            dz_dx = np.clip(dz_dx, -max_diff, max_diff)
-            dz_dy = np.clip(dz_dy, -max_diff, max_diff)
-
-            # Reconstruct heights from clamped gradients
-            z_coords = np.zeros_like(heightmap)
-            z_coords[0, 0] = heightmap[0, 0] * scale
-
-            # Integrate along x
-            z_coords[0, 1:] = z_coords[0, 0] + np.cumsum(dz_dx[0, :-1])
-
-            # Integrate along y
-            for i in range(1, rows):
-                z_coords[i, :] = z_coords[i - 1, :] + dz_dy[i - 1, :]
-
-        # Optional smoothing
-        if smoothing:
-            import cv2
-
-            kernel = np.array([[0, 1, 0], [1, 4, 1], [0, 1, 0]]) / 8.0
-            z_coords = cv2.filter2D(z_coords, -1, kernel)
-
-        # Create vertices array with Z as height
-        vertices = np.stack([x_coords, y_coords, z_coords], axis=-1).reshape(-1, 3)
-
-        # Generate indices for triangles
-        i = np.arange(rows - 1)[:, None] * cols + np.arange(cols - 1)
-        i = i.reshape(-1)
-
-        # For each grid cell, create two triangles
-        triangles = np.array(
-            [
-                i,
-                i + cols,
-                i + 1,  # First triangle
-                i + 1,
-                i + cols,
-                i + cols + 1,  # Second triangle
-            ]
-        )
-
-        indices = triangles.T.reshape(-1, 3)
-
-        return vertices.astype(np.float32), indices.astype(np.int32)
-
-    @staticmethod
-    def _add_mesh_to_world(
-        vertices: np.ndarray,
-        triangles: np.ndarray,
-        base_path: str,
-        builder_name: str,
-        size: float,
-        position: List[float],
-    ) -> str:
-        from core.utils.usd import find_matching_prims
-        from omni.isaac.core.utils.prims import (
-            define_prim,
-            create_prim,
-            is_prim_path_valid,
-        )
-        from pxr import UsdPhysics, PhysxSchema
-        import numpy as np
-
-        # generate an informative and unique name from the type of builder
-        builder_group_prim_path = f"{base_path}/{builder_name}"
-        prim_path_expr = f"{builder_group_prim_path}/terrain_.*"
-        num_of_existing_terrains = len(find_matching_prims(prim_path_expr))
-        prim_path = f"{base_path}/{builder_name}/terrain_{num_of_existing_terrains}"
-        num_faces = triangles.shape[0]
-
-        if not is_prim_path_valid(builder_group_prim_path):
-            define_prim(
-                builder_group_prim_path,
-                prim_type="Scope",
-            )
-
-        centered_position = [
-            position[0] - size / 2,
-            position[1] - size / 2,
-            position[2],
+        self.type = self.cfg["mesh_type"]
+        if self.type in ["none", "plane"]:
+            return
+        self.env_length = self.cfg["terrain_length"]
+        self.env_width = self.cfg["terrain_width"]
+        self.terrain_proportions = self.cfg["terrain_proportions"]
+        self.proportions = [
+            np.sum(self.terrain_proportions[: i + 1])
+            for i in range(len(self.terrain_proportions))
         ]
 
-        # creates the terrain's root prim
-        create_prim(
-            prim_path,
-            prim_type="Xform",
-            position=np.asarray(centered_position),
+        self.num_rows = self.cfg["num_rows"]
+        self.num_cols = self.cfg["num_cols"]
+
+        self.vertical_scale = self.cfg["vertical_scale"]
+        self.horizontal_scale = self.cfg["horizontal_scale"]
+        self.slope_threshold = self.cfg["slope_threshold"]
+        self.border_size = self.cfg["border_size"]
+
+        self.curiculum = self.cfg["curriculum"]
+        self.selected = self.cfg["selected"]
+
+        self.terrain_kwargs = self.cfg["terrain_kwargs"]
+        self.num_sub_terrains = self.num_rows * self.num_cols
+        self.env_origins = np.zeros((self.num_rows, self.num_cols, 3))
+
+        self.width_per_env_pixels = int(self.env_width / self.horizontal_scale)
+        self.length_per_env_pixels = int(self.env_length / self.horizontal_scale)
+
+        self.border = int(self.border_size / self.horizontal_scale)
+        self.tot_cols = int(self.num_cols * self.width_per_env_pixels) + 2 * self.border
+        self.tot_rows = (
+            int(self.num_rows * self.length_per_env_pixels) + 2 * self.border
         )
 
-        # creates the mesh prim, that actually collides
-        mesh_prim = create_prim(
-            prim_path + "/mesh",
-            prim_type="Mesh",
-            scale=[1.05, 1.05, 1.05],
-            attributes={
-                "points": vertices,
-                "faceVertexIndices": triangles.flatten(),
-                "faceVertexCounts": np.asarray([3] * num_faces),
-                "subdivisionScheme": "bilinear",
-            },
+        self.height_field_raw = np.zeros((self.tot_rows, self.tot_cols), dtype=np.int16)
+        if self.curiculum:
+            self.curriculum()
+        elif self.selected:
+            self.selected_terrain()
+        else:
+            self.randomized_terrain()
+
+        print("Terrain initialized")
+        print(self.height_field_raw)
+        print(f"{self.env_origins.shape}")
+
+        if self.type == "trimesh":
+            terrain_utils.add_heightmap_to_world(
+                self.height_field_raw,
+                self.horizontal_scale,
+                self.vertical_scale,
+                self.root_path,
+                "terrain",
+                self.slope_threshold,
+                [0, 0, 0],
+            )
+
+    def randomized_terrain(self):
+        for k in range(self.num_sub_terrains):
+            # Env coordinates in the world
+            (i, j) = np.unravel_index(k, (self.num_rows, self.num_cols))
+
+            choice = np.random.uniform(0, 1)
+            difficulty = np.random.choice([0.5, 0.75, 0.9])
+            terrain = self.make_terrain(choice, difficulty)
+            self.add_terrain_to_map(terrain, i, j)
+
+    def curriculum(self):
+        for j in range(self.num_cols):
+            for i in range(self.num_rows):
+                difficulty = i / self.num_rows
+                choice = j / self.num_cols + 0.001
+
+                terrain = self.make_terrain(choice, difficulty)
+                print(f"Terrain {i, j} {choice, difficulty}")
+                self.add_terrain_to_map(terrain, i, j)
+
+    def selected_terrain(self):
+        terrain_type = self.terrain_kwargs.pop("type")
+        for k in range(self.num_sub_terrains):
+            # Env coordinates in the world
+            (i, j) = np.unravel_index(k, (self.num_rows, self.num_cols))
+
+            terrain = terrain_utils.SubTerrain(
+                "terrain",
+                width=self.width_per_env_pixels,
+                length=self.width_per_env_pixels,
+                vertical_scale=self.vertical_scale,
+                horizontal_scale=self.horizontal_scale,
+            )
+
+            eval(terrain_type)(terrain, **self.terrain_kwargs.terrain_kwargs)
+            self.add_terrain_to_map(terrain, i, j)
+
+    def make_terrain(self, choice, difficulty):
+        terrain = terrain_utils.SubTerrain(
+            "terrain",
+            width=self.width_per_env_pixels,
+            length=self.width_per_env_pixels,
+            vertical_scale=self.vertical_scale,
+            horizontal_scale=self.horizontal_scale,
         )
+        slope = difficulty * 0.4
+        step_height = 0.05 + 0.18 * difficulty
+        discrete_obstacles_height = 0.05 + difficulty * 0.2
+        stepping_stones_size = 1.5 * (1.05 - difficulty)
+        stone_distance = 0.05 if difficulty == 0 else 0.1
+        gap_size = 1.0 * difficulty
+        pit_depth = 1.0 * difficulty
+        if choice < self.proportions[0]:
+            if choice < self.proportions[0] / 2:
+                slope *= -1
+            terrain_utils.pyramid_sloped_terrain(
+                terrain,
+                slope=slope,
+                platform_size=3.0,
+            )
+        elif choice < self.proportions[1]:
+            terrain_utils.pyramid_sloped_terrain(
+                terrain,
+                slope=slope,
+                platform_size=3.0,
+            )
+            terrain_utils.random_uniform_terrain(
+                terrain,
+                min_height=-0.05,
+                max_height=0.05,
+                step=0.005,
+                downsampled_scale=0.2,
+            )
+        elif choice < self.proportions[3]:
+            if choice < self.proportions[2]:
+                step_height *= -1
+            terrain_utils.pyramid_stairs_terrain(
+                terrain, step_width=0.31, step_height=step_height, platform_size=3.0
+            )
+        elif choice < self.proportions[4]:
+            num_rectangles = 20
+            rectangle_min_size = 1.0
+            rectangle_max_size = 2.0
+            terrain_utils.discrete_obstacles_terrain(
+                terrain,
+                discrete_obstacles_height,
+                rectangle_min_size,
+                rectangle_max_size,
+                num_rectangles,
+                platform_size=3.0,
+            )
+        elif choice < self.proportions[5]:
+            terrain_utils.stepping_stones_terrain(
+                terrain,
+                stone_size=stepping_stones_size,
+                stone_distance=stone_distance,
+                max_height=0.0,
+                platform_size=4.0,
+            )
+        elif choice < self.proportions[6]:
+            gap_terrain(terrain, gap_size=gap_size, platform_size=3.0)
+        else:
+            pit_terrain(terrain, depth=pit_depth, platform_size=3.0)
 
-        # ensure that we have all the necessary APIs
-        collision_api = UsdPhysics.CollisionAPI.Apply(mesh_prim)
-        collision_api.CreateCollisionEnabledAttr(True)
+        return terrain
 
-        return prim_path
+    def add_terrain_to_map(self, terrain, row, col):
+        i = row
+        j = col
+        # map coordinate system
+        start_x = self.border + i * self.length_per_env_pixels
+        end_x = self.border + (i + 1) * self.length_per_env_pixels
+        start_y = self.border + j * self.width_per_env_pixels
+        end_y = self.border + (j + 1) * self.width_per_env_pixels
+        self.height_field_raw[start_x:end_x, start_y:end_y] = terrain.height_field_raw
+
+        env_origin_x = (i + 0.5) * self.env_length
+        env_origin_y = (j + 0.5) * self.env_width
+        x1 = int((self.env_length / 2.0 - 1) / terrain.horizontal_scale)
+        x2 = int((self.env_length / 2.0 + 1) / terrain.horizontal_scale)
+        y1 = int((self.env_width / 2.0 - 1) / terrain.horizontal_scale)
+        y2 = int((self.env_width / 2.0 + 1) / terrain.horizontal_scale)
+        env_origin_z = (
+            np.max(terrain.height_field_raw[x1:x2, y1:y2]) * terrain.vertical_scale
+        )
+        self.env_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
