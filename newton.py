@@ -70,6 +70,12 @@ def setup_argparser() -> argparse.ArgumentParser:
         default="configs/db.yaml",
     )
     parser.add_argument(
+        "--logger-config",
+        type=str,
+        help="Path to the configuration file for the logger.",
+        default="configs/logger.yaml",
+    )
+    parser.add_argument(
         "--secrets",
         type=str,
         help="Path to the secrets file (containing database token, API keys, etc.).",
@@ -354,6 +360,7 @@ def setup() -> Optional[Matter]:
 
     robot_config = load_config(cli_args.robot_config)
     rl_config = load_config(cli_args.rl_config)
+    logger_config = load_config(cli_args.logger_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
     ros_config = load_config(cli_args.ros_config)
@@ -468,6 +475,10 @@ def setup() -> Optional[Matter]:
 
         current_run_name = f"{rl_config['task_name']}_{new_run_id}"
 
+    log_file_path = f"runs/{mode_name}.log"
+    if current_run_name:
+        log_file_path = f"{runs_dir}/{current_run_name}_0/{current_run_name}.log"
+
     # Network config
 
     network_config: Config = {}
@@ -523,6 +534,8 @@ def setup() -> Optional[Matter]:
         network_name,
         ros_config,
         db_config,
+        logger_config,
+        log_file_path,
         secrets,
         animation_clips_config,
         current_animation,
@@ -565,6 +578,8 @@ def main():
         network_name,
         ros_config,
         db_config,
+        logger_config,
+        log_file_path,
         secrets,
         animation_clips_config,
         current_animation,
@@ -589,16 +604,19 @@ def main():
         inverse_control_frequency,
     ) = base_matter
 
-    logger.info(
-        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n",
-        f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n",
+    from core.logger import Logger
+
+    # creates a singleton instance of the logger, to be used throughout the program
+    Logger.create(logger_config, log_file_path)
+
+    Logger.info(
+        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n"
+        f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
     import torch
     import numpy as np
-
-    torch.autograd.set_detect_anomaly(True)
 
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
@@ -633,7 +651,7 @@ def main():
     )
 
     from core.sensors import VecIMU, VecContact
-    from core.actuators import LSTMActuator, MLPActuator, BaseActuator
+    from core.actuators import LSTMActuator, BaseActuator
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer

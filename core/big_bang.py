@@ -46,6 +46,10 @@ def big_bang(
 
         rclpy.init()
 
+    from core.logger import Logger
+
+    Logger.flush()
+
     from core.universe import Universe
 
     _universe = Universe(
