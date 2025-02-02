@@ -7,6 +7,7 @@ from core.types import (
 )
 from .types import AnimationClip, Keyframe, BoneData, ArmatureData
 from ..base import BaseObject
+from ..logger import Logger
 from ..universe import Universe
 
 
@@ -41,6 +42,10 @@ class AnimationEngine(BaseObject):
         self.current_clip_name = current_clip
 
         frame_dt = 1 / self.clip_configs[current_clip]["framerate"]
+
+        Logger.info(
+            f"Constructing AnimationEngine with frame_dt: {frame_dt} and current_clip: {current_clip}"
+        )
 
         for clip_name, clip_settings in self.clip_configs.items():
             saved_keyframes: List[Config] = clip_settings["keyframes"]

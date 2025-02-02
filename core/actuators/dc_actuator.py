@@ -3,6 +3,7 @@ from typing import Optional
 import torch
 
 from core.actuators import BaseActuator
+from core.logger import Logger
 from core.types import (
     VecJointsPositions,
     VecJointsVelocities,
@@ -44,10 +45,14 @@ class DCActuator(BaseActuator):
             vec_gear_ratios,
         )
 
+        Logger.info("DCActuator constructed.")
+
         self._is_constructed = True
 
     def post_construct(self) -> None:
         super().post_construct()
+
+        Logger.info("DCActuator post-constructed.")
 
         self._is_post_constructed = True
 

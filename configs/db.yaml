@@ -1,4 +1,4 @@
-enabled: False
+enabled: True
 type: influxdb
 
 influxdb:

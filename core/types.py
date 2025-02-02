@@ -78,6 +78,8 @@ Matter = Tuple[
     Config,
     Config,
     Config,
+    str,
+    Config,
     Config,
     ConfigCollection,
     str,

@@ -5,6 +5,7 @@ from torch import Tensor
 
 from omni.isaac.core.prims import RigidPrimView
 from ..base import BaseObject
+from ..logger import Logger
 from ..types import ContactData
 from ..universe import Universe
 
@@ -76,6 +77,11 @@ class VecContact(BaseObject):
         )
         self._universe.add_prim(self._rigid_prim_view)
 
+        Logger.info(
+            f"Constructed contact sensor with {self._num_contact_sensors_per_agent} sensors per agent, "
+            f"for {num_agents} agents."
+        )
+
         self._is_constructed = True
 
     def post_construct(self) -> None:
@@ -92,7 +98,7 @@ class VecContact(BaseObject):
             self._rigid_prim_view.count
             == num_agents * self._num_contact_sensors_per_agent
         ), (
-            f"Number of contact sensors ({self._rigid_prim_view.count}) does not match the number of agents "
+            f"Number of Contact sensors ({self._rigid_prim_view.count}) does not match the number of agents "
             f"({num_agents}) * number of contact sensors per agent ({self._num_contact_sensors_per_agent})"
         )
 
@@ -101,6 +107,10 @@ class VecContact(BaseObject):
         )
 
         self._is_post_constructed = True
+
+        Logger.info(
+            f"Post-constructed Contact sensor with {self._num_contact_sensors} total sensors."
+        )
 
         # required to fill the tensors with the correct number of sensors
         self.reset()

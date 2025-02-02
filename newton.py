@@ -1,11 +1,9 @@
 import argparse
-import logging
+import os
 from typing import List, Optional, Tuple, get_args
 
+from core.logger import Logger
 from core.types import Matter, Config, ConfigCollection, Mode
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(filename="newton.log", level=logging.INFO)
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -66,6 +64,12 @@ def setup_argparser() -> argparse.ArgumentParser:
         type=str,
         help="Path to the configuration file for the database integration.",
         default="configs/db.yaml",
+    )
+    parser.add_argument(
+        "--logger-config",
+        type=str,
+        help="Path to the configuration file for the logger.",
+        default="configs/logger.yaml",
     )
     parser.add_argument(
         "--secrets",
@@ -191,7 +195,7 @@ def animation_select(
     ]
 
     if len(animation_configs_paths) == 0:
-        logger.info(f"No animation files found in {animation_config_dir}.")
+        Logger.info(f"No animation files found in {animation_config_dir}.")
         return None
 
     # load animation clips settings from config files
@@ -240,7 +244,7 @@ def checkpoint_select(
 
     runs_settings: Config = build_runs_library_from_runs_folder(runs_dir)
     if not runs_settings:
-        logger.info(f"No runs found in {runs_dir}.")
+        Logger.info(f"No runs found in {runs_dir}.")
         return None
 
     save_runs_library(runs_settings, runs_dir)
@@ -277,7 +281,9 @@ def checkpoint_select(
         selected_run_name = cli.launch()
 
         if len(selected_run_name) == 0:
-            print(f"Selecting latest checkpoint: {most_recent_checkpoint}.")
+            from core.logger import Logger
+
+            Logger.info(f"Selecting latest checkpoint: {most_recent_checkpoint}.")
             selected_run_name = most_recent_checkpoint
 
     return (
@@ -348,6 +354,20 @@ def network_arch_select(
     }, network_name
 
 
+def setup_logging() -> None:
+    from core.utils.config import load_config
+
+    parser = setup_argparser()
+
+    cli_args, _ = parser.parse_known_args()
+
+    logger_config = load_config(cli_args.logger_config)
+    log_file_path = "newton.log"
+
+    # creates a singleton instance of the logger, to be used throughout the program
+    Logger.create(logger_config, log_file_path)
+
+
 def setup() -> Optional[Matter]:
     from core.utils.config import load_config
 
@@ -358,6 +378,7 @@ def setup() -> Optional[Matter]:
 
     robot_config = load_config(cli_args.robot_config)
     rl_config = load_config(cli_args.rl_config)
+    logger_config = load_config(cli_args.logger_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
     ros_config = load_config(cli_args.ros_config)
@@ -385,7 +406,7 @@ def setup() -> Optional[Matter]:
     multiple_selected = sum(modes.values()) > 1
 
     if multiple_selected:
-        logger.info(
+        Logger.error(
             "Only one of training, playing, animating, physics or exporting can be set."
         )
         return None
@@ -435,7 +456,7 @@ def setup() -> Optional[Matter]:
     no_checkpoint = cli_args.no_checkpoint
 
     if (playing or exporting) and no_checkpoint:
-        print("No checkpoint specified for playing or exporting.")
+        Logger.error("No checkpoint specified for playing or exporting.")
         return None
 
     if (
@@ -473,6 +494,10 @@ def setup() -> Optional[Matter]:
 
         current_run_name = f"{rl_config['task_name']}_{new_run_id}"
 
+    log_file_path = f"runs/{mode_name}.log"
+    if current_run_name:
+        log_file_path = f"{runs_dir}/{current_run_name}_0/{current_run_name}.log"
+
     # Network config
 
     network_config: Config = {}
@@ -484,7 +509,7 @@ def setup() -> Optional[Matter]:
         )
 
         if network_select_result is None:
-            print("No network architecture found.")
+            Logger.error("No network architecture found.")
             return None
 
         network_config, network_name = network_select_result
@@ -505,8 +530,12 @@ def setup() -> Optional[Matter]:
     num_envs = rl_config["n_envs"]
     if cli_args.num_envs != -1:
         num_envs = cli_args.num_envs
+
     if not training:
         num_envs = 1
+
+    if exporting:
+        headless = True
 
     if interactive:
         world_config["sim_params"]["enable_scene_query_support"] = True
@@ -524,6 +553,8 @@ def setup() -> Optional[Matter]:
         network_name,
         ros_config,
         db_config,
+        logger_config,
+        log_file_path,
         terrain_config,
         secrets,
         animation_clips_config,
@@ -551,10 +582,12 @@ def setup() -> Optional[Matter]:
 
 
 def main():
+    setup_logging()
+
     base_matter = setup()
 
     if base_matter is None:
-        logger.info("An error occurred during setup.")
+        Logger.fatal("An error occurred during setup.")
         return
 
     (
@@ -567,6 +600,8 @@ def main():
         network_name,
         ros_config,
         db_config,
+        logger_config,
+        log_file_path,
         terrain_config,
         secrets,
         animation_clips_config,
@@ -592,9 +627,12 @@ def main():
         inverse_control_frequency,
     ) = base_matter
 
-    logger.info(
-        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n",
-        f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n",
+    # set the log file path to the one we've determined the specific one, not the generic one
+    Logger.set_log_file_path(log_file_path)
+
+    Logger.info(
+        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
+        f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
@@ -634,7 +672,7 @@ def main():
     )
 
     from core.sensors import VecIMU, VecContact
-    from core.actuators import LSTMActuator, MLPActuator, BaseActuator
+    from core.actuators import LSTMActuator, BaseActuator
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -660,6 +698,7 @@ def main():
         actuator = LSTMActuator(
             universe=universe,
             motor_model_path=robot_config["actuators"]["lstm"]["model_path"],
+            model_params=robot_config["actuators"]["lstm"]["model_params"],
         )
 
         actuators.append(actuator)
@@ -749,6 +788,48 @@ def main():
 
     terrain = Terrain(terrain_config, num_envs)
 
+    # ----------- #
+    #    ONNX     #
+    # ----------- #
+
+    if exporting:
+        from stable_baselines3.ppo.ppo import PPO
+        from stable_baselines3.common.policies import BasePolicy
+
+        # Load model from checkpoint
+        model = PPO.load(current_checkpoint_path, device="cpu")
+
+        # Create dummy observations tensor for tracing torch model
+        obs_shape = model.observation_space.shape
+        dummy_input = torch.rand((1, *obs_shape), device="cpu")
+
+        # Simplified network for actor inference
+        # Tested for continuous_a2c_logstd
+        class OnnxablePolicy(torch.nn.Module):
+            def __init__(self, policy: BasePolicy):
+                super().__init__()
+                self.policy = policy
+
+            def forward(
+                self,
+                observation: torch.Tensor,
+            ):
+                return self.policy(observation, deterministic=True)
+
+        onnxable_model = OnnxablePolicy(model.policy)
+        torch.onnx.export(
+            onnxable_model,
+            dummy_input,
+            f"{current_checkpoint_path}.onnx",
+            verbose=True,
+            input_names=["observations"],
+            output_names=["actions"],
+        )  # outputs are mu (actions), sigma, value
+
+        Logger.info(f"Exported {current_run_name} to {current_checkpoint_path}.onnx!")
+
+        return
+
     # --------------- #
     #    ANIMATING    #
     # --------------- #
@@ -823,7 +904,10 @@ def main():
     from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
     from core.wrappers import RandomDelayWrapper
 
-    training_env = NewtonTerrainEnv(
+    terrains_size = 5.0
+    terrains_resolution = torch.tensor([20, 20])
+
+    training_env = NewtonMultiTerrainEnv(
         universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
@@ -860,7 +944,6 @@ def main():
     universe.reset(construction=True)
 
     from stable_baselines3 import PPO
-    from stable_baselines3.common.policies import BasePolicy
 
     # we're not exporting nor purely simulating, so we're training
     if training:
@@ -879,10 +962,10 @@ def main():
                 instant_rewards=instant_rewards,
             )
 
-        policy_kwargs = dict(
-            activation_fn=network_config["activation_fn"],
-            net_arch=network_config["net_arch"],
-        )
+        policy_kwargs = {
+            "activation_fn": network_config["activation_fn"],
+            "net_arch": network_config["net_arch"],
+        }
 
         model = PPO(
             rl_config["policy"],
@@ -908,6 +991,28 @@ def main():
             policy_kwargs=policy_kwargs,
         )
 
+        from core.utils.config import save_config
+
+        record_directory = f"{runs_dir}/{current_run_name}_0/records"
+        os.makedirs(record_directory)
+
+        rl_config_record_path = f"{record_directory}/rl_config_record.yaml"
+        save_config(rl_config, rl_config_record_path)
+
+        world_config_record_path = f"{record_directory}/world_config_record.yaml"
+        save_config(world_config, world_config_record_path)
+
+        robot_config_record_path = f"{record_directory}/robot_config_record.yaml"
+        save_config(robot_config, robot_config_record_path)
+
+        network_config_record_path = f"{record_directory}/network_config_record.yaml"
+        save_config(network_config, network_config_record_path)
+
+        randomizer_config_record_path = (
+            f"{record_directory}/randomizer_config_record.yaml"
+        )
+        save_config(randomization_config, randomizer_config_record_path)
+
         if current_checkpoint_path is not None:
             model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
 
@@ -923,67 +1028,18 @@ def main():
         exit(1)
 
     if playing:
-        from core.utils.path import get_folder_from_path
-
         model = PPO.load(current_checkpoint_path)
 
         actions = model.predict(task.reset()[0], deterministic=True)[0]
         actions = np.array([actions])  # make sure we have a 2D tensor
-
-        log_file = open(
-            f"{get_folder_from_path(current_checkpoint_path)}/playing.csv", "w"
-        )
-        # logger.info("time,dt,roll,action1,action2", file=log_file)
 
         while universe.is_playing:
             step_return = task.step(actions)
             observations = step_return[0]
 
             actions = model.predict(observations, deterministic=True)[0]
-            actions_string = ",".join([str(ja) for ja in actions[0]])
-
-            # logger.info(
-            #     f"{universe.current_time},{universe.get_physics_dt()},{observations[0][0]},{actions_string}",
-            #     file=log_file,
-            # )
 
         exit(1)
-
-    # ----------- #
-    #    ONNX     #
-    # ----------- #
-
-    # Load model from checkpoint
-    model = PPO.load(current_checkpoint_path, device="cpu")
-
-    # Create dummy observations tensor for tracing torch model
-    obs_shape = model.observation_space.shape
-    dummy_input = torch.rand((1, *obs_shape), device="cpu")
-
-    # Simplified network for actor inference
-    # Tested for continuous_a2c_logstd
-    class OnnxablePolicy(torch.nn.Module):
-        def __init__(self, policy: BasePolicy):
-            super().__init__()
-            self.policy = policy
-
-        def forward(
-            self,
-            observation: torch.Tensor,
-        ):
-            return self.policy(observation, deterministic=True)
-
-    onnxable_model = OnnxablePolicy(model.policy)
-    torch.onnx.export(
-        onnxable_model,
-        dummy_input,
-        f"{current_checkpoint_path}.onnx",
-        verbose=True,
-        input_names=["observations"],
-        output_names=["actions"],
-    )  # outputs are mu (actions), sigma, value
-
-    logger.info(f"Exported to {current_checkpoint_path}.onnx!")
 
 
 if __name__ == "__main__":

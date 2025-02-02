@@ -15,3 +15,6 @@ networks:
   descending:
     net_arch: [1024, 512, 256]
     activation_fn: torch.nn.ReLU
+  descending2:
+    net_arch: [512, 256, 128]
+    activation_fn: torch.nn.ReLU

@@ -5,6 +5,7 @@ import torch
 from torch import nn
 
 from core.actuators import BaseActuator
+from core.logger import Logger
 from core.types import (
     VecJointsPositions,
     VecJointsVelocities,
@@ -82,13 +83,18 @@ class MLPActuator(BaseActuator):
         self._model.load_state_dict(
             torch.load(self._model_path, map_location=self._universe.device)
         )
-
         self._model.eval()
+
+        Logger.info(
+            f"MLPActuator constructed with model from {self._model_path}, running on {self._universe.device}."
+        )
 
         self._is_constructed = True
 
     def post_construct(self) -> None:
         super().post_construct()
+
+        Logger.info("MLPActuator post-constructed.")
 
         self._is_post_constructed = True
 
@@ -128,7 +134,6 @@ class MLPActuator(BaseActuator):
         output_current_velocities = output_current_velocities / (2 * torch.pi)
 
         # the given positions & velocities are of the output, not the input, which is why we multiply by the gear ratio
-        # todo: format the data formating of the _update_efforts to fit current implementation of lstm
         input_pos_error = (
             output_target_positions - output_current_positions
         ) * self._vec_gear_ratios

@@ -4,7 +4,11 @@ robot_type: quadruped
 # Actuators
 actuators:
   lstm: # of the input (i.e. the motor; before applying any gear ratio)
-    model_path: assets/newton/models/lstm_v2.pth
+    model_path: assets/newton/models/lstm.pth
+    model_params:
+      hidden_size: 32
+      num_layers: 1
+
   mlp:
     model_path: assets/newton/models/mlp.pth
     scaler_params_path: assets/newton/models/mlp_scaler.json
@@ -122,15 +126,15 @@ joints:
       HR_KFE: 5440
 
     efforts: # Nm
-      FL_HAA: 3.375
-      FR_HAA: 3.375
-      HL_HAA: 3.375
-      HR_HAA: 3.375
-      FL_HFE: 3.375
-      FR_HFE: 3.375
-      HL_HFE: 3.375
-      HR_HFE: 3.375
-      FL_KFE: 3.375
-      FR_KFE: 3.375
-      HL_KFE: 3.375
-      HR_KFE: 3.375
+      FL_HAA: 3.6
+      FR_HAA: 3.6
+      HL_HAA: 3.6
+      HR_HAA: 3.6
+      FL_HFE: 3.6
+      FR_HFE: 3.6
+      HL_HFE: 3.6
+      HR_HFE: 3.6
+      FL_KFE: 3.6
+      FR_KFE: 3.6
+      HL_KFE: 3.6
+      HR_KFE: 3.6

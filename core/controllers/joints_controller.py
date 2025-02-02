@@ -1,10 +1,13 @@
 from typing import Optional, List
 
-import numpy as np
 import torch
+
+from core.logger import Logger
 from omni.isaac.core.articulations import ArticulationView
 from torch import Tensor
 
+from core.archiver import Archiver
+from core.base import BaseObject
 from core.actuators import BaseActuator
 from core.archiver import Archiver
 from core.base import BaseObject
@@ -78,7 +81,7 @@ class VecJointsController(BaseObject):
         self._noise_function: NoiseFunction = noise_function
         self._target_joint_positions: Tensor = torch.zeros(
             (self._universe.num_envs, len(actuators))
-        )
+        )  # Target positions in rads
 
         self._num_joints: int = len(joint_position_limits)
 
@@ -159,6 +162,8 @@ class VecJointsController(BaseObject):
                 self._vec_gear_ratios[i],
             )
 
+        Logger.info("JointsController constructed.")
+
         self._is_constructed = True
 
     def post_construct(self):
@@ -216,19 +221,13 @@ class VecJointsController(BaseObject):
 
         self._target_joint_positions = self._process_joint_actions(
             joint_actions,
-            self._vec_joint_position_limits,
+            self._vec_joint_position_limits_rad,
             self._noise_function,
         )
-        # temp_arr = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        # self._target_joint_positions = torch.tensor(temp_arr)
-        # print(temp_arr)
 
         current_joint_positions = (
             self._articulation_view.get_joint_positions()
         )  # in radians
-        # current_joint_positions = torch.tensor(np.array(temp_arr))
-        # print(current_joint_positions)
-        # print(type(current_joint_positions))
         current_velocities = (
             self._articulation_view.get_joint_velocities()
         )  # in radians per second
@@ -238,7 +237,7 @@ class VecJointsController(BaseObject):
         for i, actuator in enumerate(self._actuators):
             efforts = actuator.step(
                 current_joint_positions[:, i],
-                torch.deg2rad(self._target_joint_positions[:, i]),
+                self._target_joint_positions[:, i],
                 current_velocities[:, i],
             )
             efforts_to_apply[:, i] = efforts
@@ -332,7 +331,7 @@ class VecJointsController(BaseObject):
 
         joint_velocities_normalized = map_range(
             joint_velocities,
-            self._vec_joint_velocity_limits.to(
+            -self._vec_joint_velocity_limits.to(
                 joint_velocities.device,
             ).squeeze(-1),
             self._vec_joint_velocity_limits.to(
@@ -346,6 +345,30 @@ class VecJointsController(BaseObject):
 
     # TODO: Improve naming of `JointsController` methods
     #   They are too long and too descriptive, which makes them hard to read.
+
+    def normalize_joint_efforts(self, joint_efforts: Tensor) -> Tensor:
+        """
+        Args:
+            joint_efforts: The joint efforts to be normalized.
+
+        Returns:
+            The normalized joint efforts.
+        """
+        from core.utils.math import map_range
+
+        joint_efforts_normalized = map_range(
+            joint_efforts,
+            -self._vec_joint_effort_limits.to(
+                joint_efforts.device,
+            ).squeeze(-1),
+            self._vec_joint_effort_limits.to(
+                joint_efforts.device,
+            ).squeeze(-1),
+            -1.0,
+            1.0,
+        )
+
+        return joint_efforts_normalized
 
     def get_normalized_joint_positions(self) -> Tensor:
         """
@@ -361,6 +384,13 @@ class VecJointsController(BaseObject):
         """
 
         return self.normalize_joint_velocities(self.get_joint_velocities_deg())
+
+    def get_normalized_joint_efforts(self) -> Tensor:
+        """
+        Returns:
+            The joint efforts normalized to the joint constraints [-1, 1].
+        """
+        return self.normalize_joint_efforts(self.get_applied_joint_efforts())
 
     def get_target_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._target_joint_positions)
@@ -386,7 +416,7 @@ class VecJointsController(BaseObject):
         noise_function: Optional[NoiseFunction] = None,
     ) -> Tensor:
         """
-        Joint actions are processed by mapping them to the joint constraints (degrees) and applying noise.
+        Joint actions are processed by mapping them to the joint constraints (any unit) and applying noise.
         Args:
             joint_actions: The joint actions to be processed [-1, 1].
             vec_joint_position_limits: The joint position limits.
