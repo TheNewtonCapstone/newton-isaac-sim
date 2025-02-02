@@ -4,7 +4,9 @@ from typing import Tuple, List, Optional
 
 from core.types import Config
 
-RUN_REGEX_STR = r"([a-zA-Z_]*)_([0-9]*)(?:_)?(?:rew_([-.0-9]*))?(?:_)?(?:step_([-.0-9]*))?"
+RUN_REGEX_STR = (
+    r"([a-zA-Z_]*)_([0-9]*)(?:_)?(?:rew_([-.0-9]*))?(?:_)?(?:step_([-.0-9]*))?"
+)
 TENSORBOARD_REGEX_STR = r"events\.out\.tfevents\.([0-9]*)"
 TENSORBOARD_FILE_NAME_START = "events.out.tfevents"
 
@@ -27,7 +29,11 @@ def does_folder_contain_run(folder: str) -> bool:
 def find_all_runs_subfolders(library_folder: str) -> list[str]:
     folders = os.listdir(library_folder)
 
-    return [folder for folder in folders if does_folder_contain_run(os.path.join(library_folder, folder))]
+    return [
+        folder
+        for folder in folders
+        if does_folder_contain_run(os.path.join(library_folder, folder))
+    ]
 
 
 def create_runs_library(runs_folder: str) -> Config:
@@ -63,14 +69,20 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
                 date = int(tensorboard_regex.match(file).group(1))
                 continue
 
+            # it's an exported file, we don't care about it here
+            if file.endswith(".onnx") or file.endswith(".yaml"):
+                continue
+
             count += 1
 
             if file.endswith(".zip"):
-                checkpoints.append({
-                    "reward": -1,
-                    "step": -1,
-                    "path": f"{runs_folder}/{run_folder}/{file}",
-                })
+                checkpoints.append(
+                    {
+                        "reward": -1,
+                        "step": -1,
+                        "path": f"{runs_folder}/{run_folder}/{file}",
+                    }
+                )
                 continue
 
             if run_regex.match(file) is None:
@@ -80,11 +92,13 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
             reward: float = float(save_matches[2]) if save_matches[2] != "" else -1
             step: int = int(save_matches[3]) if save_matches[3] != "" else -1
 
-            checkpoints.append({
-                "reward": reward,
-                "step": step,
-                "path": f"{runs_folder}/{run_folder}/{file}",
-            })
+            checkpoints.append(
+                {
+                    "reward": reward,
+                    "step": step,
+                    "path": f"{runs_folder}/{run_folder}/{file}",
+                }
+            )
 
         checkpoints.sort(key=lambda x: x["reward"], reverse=False)
 

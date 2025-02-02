@@ -17,4 +17,4 @@ networks:
     activation_fn: torch.nn.ReLU
   descending2:
     net_arch: [512, 256, 128]
-    activation_fn: torch.nn.ELU
+    activation_fn: torch.nn.ReLU

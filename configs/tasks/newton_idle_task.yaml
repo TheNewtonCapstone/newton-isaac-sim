@@ -16,7 +16,7 @@ delay:
 
 ppo:
   n_steps: 64 # 0.64 seconds of real time (64 * 0.01 = 0.64)
-  batch_size: 196_608
+  batch_size: 131_072
   n_epochs: 5
 
   gamma: 0.99
@@ -27,7 +27,7 @@ ppo:
 
   normalize_advantage: True
 
-  ent_coef: 0.0
+  ent_coef: 0.01
   vf_coef: 0.5
 
   max_grad_norm: 1.0

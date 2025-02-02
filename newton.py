@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 from typing import List, Optional, Tuple, get_args
 
 from core.terrain.obstacle_terrain import ObstacleTerrainBuilder
@@ -499,8 +500,12 @@ def setup() -> Optional[Matter]:
     num_envs = rl_config["n_envs"]
     if cli_args.num_envs != -1:
         num_envs = cli_args.num_envs
+
     if not training:
         num_envs = 1
+
+    if exporting:
+        headless = True
 
     if interactive:
         world_config["sim_params"]["enable_scene_query_support"] = True
@@ -740,6 +745,48 @@ def main():
         agent=newton_agent,
         randomizer_settings=randomization_config,
     )
+
+    # ----------- #
+    #    ONNX     #
+    # ----------- #
+
+    if exporting:
+        from stable_baselines3.ppo.ppo import PPO
+        from stable_baselines3.common.policies import BasePolicy
+
+        # Load model from checkpoint
+        model = PPO.load(current_checkpoint_path, device="cpu")
+
+        # Create dummy observations tensor for tracing torch model
+        obs_shape = model.observation_space.shape
+        dummy_input = torch.rand((1, *obs_shape), device="cpu")
+
+        # Simplified network for actor inference
+        # Tested for continuous_a2c_logstd
+        class OnnxablePolicy(torch.nn.Module):
+            def __init__(self, policy: BasePolicy):
+                super().__init__()
+                self.policy = policy
+
+            def forward(
+                self,
+                observation: torch.Tensor,
+            ):
+                return self.policy(observation, deterministic=True)
+
+        onnxable_model = OnnxablePolicy(model.policy)
+        torch.onnx.export(
+            onnxable_model,
+            dummy_input,
+            f"{current_checkpoint_path}.onnx",
+            verbose=True,
+            input_names=["observations"],
+            output_names=["actions"],
+        )  # outputs are mu (actions), sigma, value
+
+        logger.info(f"Exported to {current_checkpoint_path}.onnx!")
+
+        return
 
     # --------------- #
     #    ANIMATING    #
@@ -988,8 +1035,7 @@ def main():
 
     universe.reset(construction=True)
 
-    from core.algorithms import CustomPPO
-    from stable_baselines3.common.policies import BasePolicy
+    from stable_baselines3 import PPO
 
     # we're not exporting nor purely simulating, so we're training
     if training:
@@ -1011,10 +1057,9 @@ def main():
         policy_kwargs = {
             "activation_fn": network_config["activation_fn"],
             "net_arch": network_config["net_arch"],
-            "ortho_init": False,
         }
 
-        model = CustomPPO(
+        model = PPO(
             rl_config["policy"],
             task,
             verbose=2,
@@ -1038,10 +1083,30 @@ def main():
             policy_kwargs=policy_kwargs,
         )
 
+        from core.utils.config import save_config
+
+        record_directory = f"{runs_dir}/{current_run_name}_0/records"
+        os.makedirs(record_directory)
+
+        rl_config_record_path = f"{record_directory}/rl_config_record.yaml"
+        save_config(rl_config, rl_config_record_path)
+
+        world_config_record_path = f"{record_directory}/world_config_record.yaml"
+        save_config(world_config, world_config_record_path)
+
+        robot_config_record_path = f"{record_directory}/robot_config_record.yaml"
+        save_config(robot_config, robot_config_record_path)
+
+        network_config_record_path = f"{record_directory}/network_config_record.yaml"
+        save_config(network_config, network_config_record_path)
+
+        randomizer_config_record_path = (
+            f"{record_directory}/randomizer_config_record.yaml"
+        )
+        save_config(randomization_config, randomizer_config_record_path)
+
         if current_checkpoint_path is not None:
-            model = CustomPPO.load(
-                current_checkpoint_path, task, device=rl_config["device"]
-            )
+            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
 
         model.learn(
             total_timesteps=rl_config["timesteps_per_env"] * num_envs,
@@ -1055,17 +1120,10 @@ def main():
         exit(1)
 
     if playing:
-        from core.utils.path import get_folder_from_path
-
-        model = CustomPPO.load(current_checkpoint_path)
+        model = PPO.load(current_checkpoint_path)
 
         actions = model.predict(task.reset()[0], deterministic=True)[0]
         actions = np.array([actions])  # make sure we have a 2D tensor
-
-        log_file = open(
-            f"{get_folder_from_path(current_checkpoint_path)}/playing.csv", "w"
-        )
-        # logger.info("time,dt,roll,action1,action2", file=log_file)
 
         while universe.is_playing:
             step_return = task.step(actions)
@@ -1073,48 +1131,7 @@ def main():
 
             actions = model.predict(observations, deterministic=True)[0]
 
-            # logger.info(
-            #     f"{universe.current_time},{universe.get_physics_dt()},{observations[0][0]},{actions_string}",
-            #     file=log_file,
-            # )
-
         exit(1)
-
-    # ----------- #
-    #    ONNX     #
-    # ----------- #
-
-    # Load model from checkpoint
-    model = CustomPPO.load(current_checkpoint_path, device="cpu")
-
-    # Create dummy observations tensor for tracing torch model
-    obs_shape = model.observation_space.shape
-    dummy_input = torch.rand((1, *obs_shape), device="cpu")
-
-    # Simplified network for actor inference
-    # Tested for continuous_a2c_logstd
-    class OnnxablePolicy(torch.nn.Module):
-        def __init__(self, policy: BasePolicy):
-            super().__init__()
-            self.policy = policy
-
-        def forward(
-            self,
-            observation: torch.Tensor,
-        ):
-            return self.policy(observation, deterministic=True)
-
-    onnxable_model = OnnxablePolicy(model.policy)
-    torch.onnx.export(
-        onnxable_model,
-        dummy_input,
-        f"{current_checkpoint_path}.onnx",
-        verbose=True,
-        input_names=["observations"],
-        output_names=["actions"],
-    )  # outputs are mu (actions), sigma, value
-
-    logger.info(f"Exported to {current_checkpoint_path}.onnx!")
 
 
 if __name__ == "__main__":
