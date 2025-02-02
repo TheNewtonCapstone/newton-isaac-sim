@@ -2,7 +2,7 @@ level: "info" # "info", "debug", "warning", "error", "fatal"
 outputs: ["file", "omni"] # "omni", "file"
 
 format:
-  date: True
+  date: False
   time: True
   level: True
   source: True

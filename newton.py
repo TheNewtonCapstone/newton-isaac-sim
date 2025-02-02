@@ -1,13 +1,10 @@
 import argparse
-import logging
 import os
 from typing import List, Optional, Tuple, get_args
 
+from core.logger import Logger
 from core.terrain.obstacle_terrain import ObstacleTerrainBuilder
 from core.types import Matter, Config, ConfigCollection, Mode
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(filename="newton.log", level=logging.INFO)
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -193,7 +190,7 @@ def animation_select(
     ]
 
     if len(animation_configs_paths) == 0:
-        logger.info(f"No animation files found in {animation_config_dir}.")
+        Logger.info(f"No animation files found in {animation_config_dir}.")
         return None
 
     # load animation clips settings from config files
@@ -242,7 +239,7 @@ def checkpoint_select(
 
     runs_settings: Config = build_runs_library_from_runs_folder(runs_dir)
     if not runs_settings:
-        logger.info(f"No runs found in {runs_dir}.")
+        Logger.info(f"No runs found in {runs_dir}.")
         return None
 
     save_runs_library(runs_settings, runs_dir)
@@ -279,7 +276,9 @@ def checkpoint_select(
         selected_run_name = cli.launch()
 
         if len(selected_run_name) == 0:
-            print(f"Selecting latest checkpoint: {most_recent_checkpoint}.")
+            from core.logger import Logger
+
+            Logger.info(f"Selecting latest checkpoint: {most_recent_checkpoint}.")
             selected_run_name = most_recent_checkpoint
 
     return (
@@ -350,6 +349,20 @@ def network_arch_select(
     }, network_name
 
 
+def setup_logging() -> None:
+    from core.utils.config import load_config
+
+    parser = setup_argparser()
+
+    cli_args, _ = parser.parse_known_args()
+
+    logger_config = load_config(cli_args.logger_config)
+    log_file_path = "newton.log"
+
+    # creates a singleton instance of the logger, to be used throughout the program
+    Logger.create(logger_config, log_file_path)
+
+
 def setup() -> Optional[Matter]:
     from core.utils.config import load_config
 
@@ -387,7 +400,7 @@ def setup() -> Optional[Matter]:
     multiple_selected = sum(modes.values()) > 1
 
     if multiple_selected:
-        logger.info(
+        Logger.error(
             "Only one of training, playing, animating, physics or exporting can be set."
         )
         return None
@@ -437,7 +450,7 @@ def setup() -> Optional[Matter]:
     no_checkpoint = cli_args.no_checkpoint
 
     if (playing or exporting) and no_checkpoint:
-        print("No checkpoint specified for playing or exporting.")
+        Logger.error("No checkpoint specified for playing or exporting.")
         return None
 
     if (
@@ -490,7 +503,7 @@ def setup() -> Optional[Matter]:
         )
 
         if network_select_result is None:
-            print("No network architecture found.")
+            Logger.error("No network architecture found.")
             return None
 
         network_config, network_name = network_select_result
@@ -562,10 +575,12 @@ def setup() -> Optional[Matter]:
 
 
 def main():
+    setup_logging()
+
     base_matter = setup()
 
     if base_matter is None:
-        logger.info("An error occurred during setup.")
+        Logger.fatal("An error occurred during setup.")
         return
 
     (
@@ -604,13 +619,11 @@ def main():
         inverse_control_frequency,
     ) = base_matter
 
-    from core.logger import Logger
-
-    # creates a singleton instance of the logger, to be used throughout the program
-    Logger.create(logger_config, log_file_path)
+    # set the log file path to the one we've determined the specific one, not the generic one
+    Logger.set_log_file_path(log_file_path)
 
     Logger.info(
-        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, and {'headless' if headless else 'GUI'} mode.\n"
+        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled',} and {'headless' if headless else 'GUI'} mode.\n"
         f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )

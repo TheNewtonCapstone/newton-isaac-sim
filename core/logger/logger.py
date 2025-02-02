@@ -21,7 +21,8 @@ class Logger:
         self._log_omni_buffer: List[Tuple[str, int]] = []
 
         if self._output & LogOutput.File and log_file_path is not None:
-            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+            if os.path.dirname(log_file_path) != "":
+                os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
             self._log_file = open(log_file_path, "w")
 
@@ -76,6 +77,23 @@ class Logger:
             logger_config=logger_config,
             log_file_path=log_file_path,
         )
+
+    @staticmethod
+    def set_log_file_path(log_file_path: str) -> None:
+        global _logger
+
+        _logger._log_file_path = log_file_path
+
+        if not (_logger._output & LogOutput.File):
+            return
+
+        if _logger._log_file is not None:
+            _logger._log_file.close()
+
+        if os.path.dirname(log_file_path) != "":
+            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+
+        _logger._log_file = open(log_file_path, "w")
 
     @staticmethod
     def log_level() -> LogLevel:

@@ -220,16 +220,10 @@ class VecJointsController(BaseObject):
             self._vec_joint_position_limits_rad,
             self._noise_function,
         )
-        # temp_arr = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        # self._target_joint_positions = torch.tensor(temp_arr)
-        # print(temp_arr)
 
         current_joint_positions = (
             self._articulation_view.get_joint_positions()
         )  # in radians
-        # current_joint_positions = torch.tensor(np.array(temp_arr))
-        # print(current_joint_positions)
-        # print(type(current_joint_positions))
         current_velocities = (
             self._articulation_view.get_joint_velocities()
         )  # in radians per second
