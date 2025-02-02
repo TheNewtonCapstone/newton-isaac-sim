@@ -5,6 +5,7 @@ from torch import Tensor
 
 import omni.isaac.core.prims
 from ..base import BaseObject
+from ..logger import Logger
 from ..types import IMUData, NoiseFunction
 from ..universe import Universe
 
@@ -100,12 +101,16 @@ class VecIMU(BaseObject):
         )
         self._universe.add_prim(self._rigid_prim_view)
 
+        Logger.info(f"Constructed IMU sensor at {self._path_expr}.")
+
         self._is_constructed = True
 
     def post_construct(self) -> None:
         super().post_construct()
 
         self._num_imus = self._rigid_prim_view.count
+
+        Logger.info(f"Post-constructed IMU sensor with {self._num_imus} IMUs.")
 
         self._is_post_constructed = True
 

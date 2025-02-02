@@ -2,6 +2,7 @@ from typing import Optional
 
 from .db_interface import DBInterface
 from .types import ArchivableConvertible, Tags
+from ..logger import Logger
 from ..types import Config
 from ..universe import Universe
 
@@ -67,6 +68,8 @@ class Archiver:
             return None
 
         if self.db_config["type"] == "influxdb":
+            Logger.info("Connecting to InfluxDB...")
+
             from .influxdb import InfluxDBInterface
 
             self._db_interface = InfluxDBInterface(

@@ -67,7 +67,7 @@ class Logger:
         return output
 
     @staticmethod
-    def create(logger_config: Config, log_file_path: str) -> None:
+    def create(logger_config: Config, log_file_path: Optional[str] = None) -> None:
         global _logger
 
         if _logger is not None:
@@ -77,6 +77,8 @@ class Logger:
             logger_config=logger_config,
             log_file_path=log_file_path,
         )
+
+        _logger.info("Logger initialized!")
 
     @staticmethod
     def set_log_file_path(log_file_path: str) -> None:
@@ -120,6 +122,8 @@ class Logger:
         if _logger is None:
             return
 
+        _logger.debug("Flushing log buffer.")
+
         if _logger.output() & LogOutput.OmniConsole:
             _logger._flush_omni_buffer()
 
@@ -137,29 +141,29 @@ class Logger:
         if level < _logger.log_level():
             return
 
-        _logger._print(msg, src_depth + 1)
+        _logger._print(msg, level, src_depth + 1)
 
     @staticmethod
-    def info(msg: Any, src_depth: int = 1):
+    def info(msg: Any, src_depth: int = 0):
         Logger.log(msg, src_depth + 1, LogLevel.Info)
 
     @staticmethod
-    def debug(msg: Any, src_depth: int = 1):
+    def debug(msg: Any, src_depth: int = 0):
         Logger.log(msg, src_depth + 1, LogLevel.Debug)
 
     @staticmethod
-    def warning(msg: Any, src_depth: int = 1):
+    def warning(msg: Any, src_depth: int = 0):
         Logger.log(msg, src_depth + 1, LogLevel.Warning)
 
     @staticmethod
-    def error(msg: Any, src_depth: int = 1):
+    def error(msg: Any, src_depth: int = 0):
         Logger.log(msg, src_depth + 1, LogLevel.Error)
 
     @staticmethod
-    def fatal(msg: Any, src_depth: int = 1):
+    def fatal(msg: Any, src_depth: int = 0):
         Logger.log(msg, src_depth + 1, LogLevel.Fatal)
 
-    def _print(self, msg: Any, src_depth: int = 1):
+    def _print(self, msg: Any, level: LogLevel, src_depth: int = 1):
         if _logger.output() & LogOutput.OmniConsole:
             # If omni is not available, buffer the log message to print it later
             if "omni" not in globals():
@@ -173,11 +177,11 @@ class Logger:
 
             file, ln, fnc, mod = get_caller_info(src_depth + 1)
             src = f"{mod}.{fnc}():{ln}"
-            msg = self._format(msg, src)
+            msg = self._format(msg, src, level)
 
             _logger._log_to_file(msg)
 
-    def _format(self, msg: Any, src: str) -> str:
+    def _format(self, msg: Any, src: str, level: LogLevel) -> str:
         print_date = self._logger_config["format"]["date"]
         print_time = self._logger_config["format"]["time"]
         print_level = self._logger_config["format"]["level"]
@@ -198,7 +202,7 @@ class Logger:
             format_msg += f"[{time}]"
 
         if print_level:
-            format_msg += f"[{self.log_level().name.upper()}]"
+            format_msg += f"[{level.name.upper()}]"
 
         if print_src:
             format_msg += f"[{src}]"

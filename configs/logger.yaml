@@ -1,4 +1,4 @@
-level: "info" # "info", "debug", "warning", "error", "fatal"
+level: "debug" # "debug", "info", "warning", "error", "fatal"
 outputs: ["file", "omni"] # "omni", "file"
 
 format:

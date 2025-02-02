@@ -623,7 +623,7 @@ def main():
     Logger.set_log_file_path(log_file_path)
 
     Logger.info(
-        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled',} and {'headless' if headless else 'GUI'} mode.\n"
+        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
         f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
         f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
@@ -815,7 +815,7 @@ def main():
             output_names=["actions"],
         )  # outputs are mu (actions), sigma, value
 
-        logger.info(f"Exported to {current_checkpoint_path}.onnx!")
+        Logger.info(f"Exported {current_run_name} to {current_checkpoint_path}.onnx!")
 
         return
 

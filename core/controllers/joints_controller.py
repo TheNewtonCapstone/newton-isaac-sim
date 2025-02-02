@@ -1,6 +1,8 @@
 from typing import Optional, List
 
 import torch
+
+from core.logger import Logger
 from omni.isaac.core.articulations import ArticulationView
 from torch import Tensor
 
@@ -159,6 +161,8 @@ class VecJointsController(BaseObject):
                 self._vec_joint_effort_limits[i] / self._vec_gear_ratios[i],
                 self._vec_gear_ratios[i],
             )
+
+        Logger.info("JointsController constructed.")
 
         self._is_constructed = True
 

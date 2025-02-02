@@ -4,6 +4,7 @@ from typing import Type, List, Dict
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
 
+from ..logger import Logger
 from ..universe import Universe
 
 
@@ -63,6 +64,10 @@ class BaseNode(Node):
             )
 
             self._indexed_publishers[topic] = pub
+
+        Logger.info(
+            f"{self.__class__.__name__} constructed with {len(self._pub_topics)} publishers."
+        )
 
         self._is_node_constructed = True
 

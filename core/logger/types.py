@@ -3,8 +3,8 @@ from enum import IntFlag, auto
 
 class LogLevel(IntFlag):
     None_ = 0
-    Info = auto()
     Debug = auto()
+    Info = auto()
     Warning = auto()
     Error = auto()
     Fatal = auto()

@@ -4,6 +4,7 @@ import torch
 from ..agents import NewtonBaseAgent
 from ..domain_randomizer import NewtonBaseDomainRandomizer
 from . import NewtonBaseEnv
+from ..logger import Logger
 from ..terrain import BaseTerrainBuilder
 from ..types import EnvObservations, Actions, Indices
 from ..universe import Universe
@@ -88,10 +89,16 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
         self.domain_randomizer.set_initial_orientations(self.reset_newton_orientations)
 
+        Logger.info(
+            f"NewtonMultiTerrainEnv constructed with {num_terrains} terrains and {self.num_envs} agents."
+        )
+
         self._is_constructed = True
 
     def post_construct(self):
         super().post_construct()
+
+        Logger.info("NewtonMultiTerrainEnv post-constructed.")
 
         self._is_post_constructed = True
 
