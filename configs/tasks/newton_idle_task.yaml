@@ -3,7 +3,6 @@ device: "cuda"
 policy: "MlpPolicy"
 seed: 14321
 
-
 n_envs: 2048
 timesteps_per_env: 100_000
 base_lr: 1e-6

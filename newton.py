@@ -362,7 +362,7 @@ def setup_logging() -> None:
     cli_args, _ = parser.parse_known_args()
 
     logger_config = load_config(cli_args.logger_config)
-    log_file_path = "newton.log"
+    log_file_path = "logs/newton.log"
 
     # creates a singleton instance of the logger, to be used throughout the program
     Logger.create(logger_config, log_file_path)
@@ -494,7 +494,7 @@ def setup() -> Optional[Matter]:
 
         current_run_name = f"{rl_config['task_name']}_{new_run_id}"
 
-    log_file_path = f"{mode_name.lower().replace(' ', '_')}.log"
+    log_file_path = f"logs/{mode_name.lower().replace(' ', '_')}.log"
     if current_run_name:
         log_file_path = f"{runs_dir}/{current_run_name}_0/{current_run_name}.log"
 

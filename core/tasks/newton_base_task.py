@@ -1,10 +1,9 @@
 from abc import abstractmethod
-from typing import Optional
-
-from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
 
 import numpy as np
-import torch
+import torch as th
+from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
+
 from core.agents import NewtonBaseAgent
 from core.animation import AnimationEngine
 from core.envs.newton_base_env import NewtonBaseEnv
@@ -13,7 +12,6 @@ from core.types import Actions
 from core.universe import Universe
 from gymnasium import Space
 from gymnasium.spaces import Box
-from torch import Tensor
 
 
 class NewtonBaseTaskCallback(BaseTaskCallback):
@@ -23,7 +21,7 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
         self.check_freq: int = check_freq
         self.save_path: str = save_path
         self.best_median_reward: float = -np.inf
-        self.cumulative_rewards: Tensor = torch.zeros((0,))
+        self.cumulative_rewards: th.Tensor = th.zeros((0,))
 
     def _init_callback(self) -> None:
         super()._init_callback()
@@ -33,7 +31,7 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
         if self.save_path is not None:
             self.model.save(f"{self.logger.dir}/{self.save_path}")
 
-        self.cumulative_rewards = torch.zeros((task.num_envs,), device=task.device)
+        self.cumulative_rewards = th.zeros((task.num_envs,), device=task.device)
 
     def _on_step(self) -> bool:
         super()._on_step()
@@ -45,9 +43,9 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
 
         # Saves best cumulative rewards
         if can_check:
-            self.cumulative_rewards = torch.where(
+            self.cumulative_rewards = th.where(
                 task.dones_buf,
-                torch.zeros_like(task.rewards_buf),
+                th.zeros_like(task.rewards_buf),
                 self.cumulative_rewards + task.rewards_buf,
             )
 
@@ -73,16 +71,16 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
                 continue
 
             # if it's a bool (i.e. contact data), we want to know the percentage of contacts
-            if v.dtype == torch.bool:
+            if v.dtype == th.bool:
                 self.logger.record(
                     f"observations/{k}",
-                    v.to(dtype=torch.float32).mean(dim=-1).mean().item(),
+                    v.to(dtype=th.float32).mean(dim=-1).mean().item(),
                 )
                 continue
 
             self.logger.record(
                 f"observations/{k}",
-                torch.linalg.norm(v, dim=-1).mean().item(),
+                th.linalg.norm(v, dim=-1).mean().item(),
             )
 
         return True
@@ -123,9 +121,13 @@ class NewtonBaseTask(BaseTask):
         self.agent: NewtonBaseAgent = agent
 
         self.animation_engine: AnimationEngine = animation_engine
-        self.last_actions_buf: Actions = torch.zeros(
+        self.air_time: th.Tensor = th.zeros(
+            (self.num_envs, 4),
+            device=self.device,
+        )  # air time per paw
+        self.last_actions_buf: Actions = th.zeros(
             (2, self.num_envs, self.num_actions),
-            dtype=torch.float32,
+            dtype=th.float32,
             device=self.device,
         )  # 2 sets of past actions, 0: t - 1, 1: t - 2
 

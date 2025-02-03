@@ -50,7 +50,7 @@ class NewtonTerrainEnv(NewtonBaseEnv):
         )  # Shape (num_rows, num_cols, 3)
         env_origins[
             :, :, 2
-        ] += 0.3  # Add a small offset to the z-axis to accommodate the agent's height
+        ] += 0.35  # Add a small offset to the z-axis to accommodate the agent's height
 
         # Flatten terrain origins to a (num_envs, 3) shape
         flat_origins = env_origins.reshape(-1, 3)
