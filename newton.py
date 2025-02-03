@@ -3,7 +3,6 @@ import os
 from typing import List, Optional, Tuple, get_args
 
 from core.logger import Logger
-from core.terrain.obstacle_terrain import ObstacleTerrainBuilder
 from core.types import Matter, Config, ConfigCollection, Mode
 
 
@@ -119,6 +118,12 @@ def setup_argparser() -> argparse.ArgumentParser:
         type=int,
         help="Number of environments to run (will be read from the rl-config if not specified).",
         default=-1,
+    )
+    parser.add_argument(
+        "--terrain-config",
+        type=str,
+        help="Path to the configuration file for the terrain.",
+        default="configs/terrain.yaml",
     )
     parser.add_argument(
         "--train",
@@ -357,7 +362,7 @@ def setup_logging() -> None:
     cli_args, _ = parser.parse_known_args()
 
     logger_config = load_config(cli_args.logger_config)
-    log_file_path = "newton.log"
+    log_file_path = "logs/newton.log"
 
     # creates a singleton instance of the logger, to be used throughout the program
     Logger.create(logger_config, log_file_path)
@@ -379,6 +384,7 @@ def setup() -> Optional[Matter]:
     ros_config = load_config(cli_args.ros_config)
     db_config = load_config(cli_args.db_config)
     secrets = load_config(cli_args.secrets)
+    terrain_config = load_config(cli_args.terrain_config)
 
     # Control Flags
     training = cli_args.train
@@ -488,7 +494,7 @@ def setup() -> Optional[Matter]:
 
         current_run_name = f"{rl_config['task_name']}_{new_run_id}"
 
-    log_file_path = f"runs/{mode_name}.log"
+    log_file_path = f"logs/{mode_name.lower().replace(' ', '_')}.log"
     if current_run_name:
         log_file_path = f"{runs_dir}/{current_run_name}_0/{current_run_name}.log"
 
@@ -549,6 +555,7 @@ def setup() -> Optional[Matter]:
         db_config,
         logger_config,
         log_file_path,
+        terrain_config,
         secrets,
         animation_clips_config,
         current_animation,
@@ -595,6 +602,7 @@ def main():
         db_config,
         logger_config,
         log_file_path,
+        terrain_config,
         secrets,
         animation_clips_config,
         current_animation,
@@ -654,20 +662,15 @@ def main():
     # creates a singleton instance of the archiver, to be used throughout the program
     Archiver.create(universe, db_config, secrets["db"])
 
-    from core.envs import NewtonMultiTerrainEnv
+    from core.envs import NewtonTerrainEnv
     from core.agents import NewtonVecAgent
-
-    from core.terrain import (
-        FlatTerrainBuilder,
-        PerlinTerrainBuilder,
-        StairsTerrainBuilder,
-    )
 
     from core.sensors import VecIMU, VecContact
     from core.actuators import LSTMActuator, BaseActuator
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
+    from core.terrain.terrain import Terrain, TerrainType, SubTerrainType
 
     from core.utils.math import IDENTITY_QUAT
 
@@ -777,6 +780,8 @@ def main():
         randomizer_settings=randomization_config,
     )
 
+    terrain = Terrain(universe, terrain_config, num_envs)
+
     # ----------- #
     #    ONNX     #
     # ----------- #
@@ -824,24 +829,29 @@ def main():
     # --------------- #
 
     if animating:
-        env = NewtonMultiTerrainEnv(
+        env = NewtonTerrainEnv(
             universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
-            terrain_builders=[
-                PerlinTerrainBuilder(),
-                StairsTerrainBuilder(),
-                StairsTerrainBuilder(),
-                ObstacleTerrainBuilder(),
-            ],
+            terrain=terrain,
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
         )
 
+        terrain.register_self(
+            TerrainType.Specific,
+            1,  # num_rows
+            1,  # num_cols
+            SubTerrainType.RandomUniform,
+        )  # done manually, since we're changing some default construction parameters
         env.register_self()  # done manually, generally the task would do this
-        animation_engine.register_self(current_animation)
+        animation_engine.register_self(
+            current_animation
+        )  # done manually, generally the task would do this
 
-        universe.reset(construction=True)
+        universe.construct_registrations()
+
+        env.reset()  # reset the environment to get correctly position the agent
 
         ordered_dof_names = joints_controller.art_view.dof_names
 
@@ -873,23 +883,25 @@ def main():
     # ---------------- #
 
     if physics_only:
-        env = NewtonMultiTerrainEnv(
+        env = NewtonTerrainEnv(
             universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
-            terrain_builders=[
-                FlatTerrainBuilder(),
-                FlatTerrainBuilder(),
-                FlatTerrainBuilder(),
-                FlatTerrainBuilder(),
-            ],
+            terrain=terrain,
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
         )
 
+        terrain.register_self(
+            TerrainType.Random,
+            1,  # num_rows
+            1,  # num_cols
+        )  # done manually, since we're changing some default construction parameters
         env.register_self()  # done manually, generally the task would do this
 
-        universe.reset(construction=True)
+        universe.construct_registrations()
+
+        env.reset()  # reset the environment to get correctly position the agent
 
         while universe.is_playing:
             env.step(torch.zeros((num_envs, 12)))
@@ -901,149 +913,22 @@ def main():
     # ----------- #
 
     from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
-    from core.envs import NewtonMultiTerrainEnv
     from core.wrappers import RandomDelayWrapper
 
-    terrains_size = 5.0
-    terrains_resolution = torch.tensor([20, 20])
-
-    training_env = NewtonMultiTerrainEnv(
+    training_env = NewtonTerrainEnv(
         universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
-        terrain_builders=[
-            FlatTerrainBuilder(size=terrains_size),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.05,
-                octave=4,
-                noise_scale=2,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.03,
-                octave=8,
-                noise_scale=4,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.01,
-                octave=16,
-                noise_scale=6,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.05,
-                octave=16,
-                noise_scale=8,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.03,
-                octave=8,
-                noise_scale=4,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.05,
-                octave=8,
-                noise_scale=16,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.03,
-                octave=4,
-                noise_scale=8,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.01,
-                octave=2,
-                noise_scale=4,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.1,
-                number_of_steps=10,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.133,
-                number_of_steps=10,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.166,
-                number_of_steps=10,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.20,
-                number_of_steps=10,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.133,
-                number_of_steps=5,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.166,
-                number_of_steps=5,
-            ),
-            StairsTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                stair_height=0.200,
-                number_of_steps=5,
-            ),
-        ],
+        terrain=terrain,
         domain_randomizer=domain_randomizer,
         inverse_control_frequency=inverse_control_frequency,
     )
 
-    playing_env = NewtonMultiTerrainEnv(
+    playing_env = NewtonTerrainEnv(
         universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
-        terrain_builders=[
-            FlatTerrainBuilder(size=terrains_size),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.05,
-                octave=4,
-                noise_scale=2,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.03,
-                octave=8,
-                noise_scale=4,
-            ),
-            PerlinTerrainBuilder(
-                size=terrains_size,
-                grid_resolution=terrains_resolution,
-                height=0.02,
-                octave=16,
-                noise_scale=8,
-            ),
-        ],
+        terrain=terrain,
         domain_randomizer=domain_randomizer,
         inverse_control_frequency=inverse_control_frequency,
     )
@@ -1063,8 +948,6 @@ def main():
         check_freq=64,
         save_path=current_run_name,
     )
-
-    universe.reset(construction=True)
 
     from stable_baselines3 import PPO
 
@@ -1117,7 +1000,7 @@ def main():
         from core.utils.config import save_config
 
         record_directory = f"{runs_dir}/{current_run_name}_0/records"
-        os.makedirs(record_directory)
+        os.makedirs(record_directory, exist_ok=True)
 
         rl_config_record_path = f"{record_directory}/rl_config_record.yaml"
         save_config(rl_config, rl_config_record_path)
@@ -1139,6 +1022,10 @@ def main():
         if current_checkpoint_path is not None:
             model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
 
+        terrain.register_self()  # we need to do it manually
+
+        universe.construct_registrations()
+
         model.learn(
             total_timesteps=rl_config["timesteps_per_env"] * num_envs,
             tb_log_name=current_run_name,
@@ -1151,6 +1038,14 @@ def main():
         exit(1)
 
     if playing:
+        terrain.register_self(
+            TerrainType.Random,
+            1,  # num_rows
+            1,  # num_cols
+        )  # done manually, since we're changing some default construction parameters
+
+        universe.construct_registrations()
+
         model = PPO.load(current_checkpoint_path)
 
         actions = model.predict(task.reset()[0], deterministic=True)[0]

@@ -1,0 +1,23 @@
+mesh_type: 'trimesh' # "none", "plane", "heightfield" or "trimesh"
+
+generation:
+  horizontal_resolution: 0.1 # in meters
+  vertical_resolution: 0.005 # in meters
+
+  default_num_rows: 3 # number of terrain rows (levels)
+  default_num_cols: 5 # number of terrain cols (types)
+
+  # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete, stepping stones, gap, pit]
+  terrain_proportion: [0.1, 0.1, 0.15, 0.2, 0.15, 0.1, 0.1, 0.1]
+  slope_threshold: 0.75 # slopes above this threshold will be corrected to vertical surfaces (trimesh only)
+
+dimensions:
+  border_size: 0.1 # in meters
+
+  terrain_length: 8.0 # in meters
+  terrain_width: 8.0 # in meters
+
+physics_material:
+  static_friction: 1.0
+  dynamic_friction: 1.0
+  restitution: 0.0

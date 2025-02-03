@@ -1,262 +1,362 @@
-from abc import abstractmethod, ABC
-from typing import Optional, Tuple, List
+# SPDX-FileCopyrightText: Copyright (c) 2021 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from
+# this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+# Copyright (c) 2021 ETH Zurich, Nikita Rudin
+from typing import List, Optional
 
 import numpy as np
 
-import torch
-from torch import Tensor
+from .generators import (
+    pyramid_sloped_terrain,
+    pyramid_stairs_terrain,
+    random_uniform_terrain,
+    discrete_obstacles_terrain,
+    stepping_stones_terrain,
+    gap_terrain,
+    pit_terrain,
+)
+from .sub_terrain import SubTerrain
+from .types import SubTerrainType, TerrainType
+from ..base import BaseObject
+from ..logger import Logger
+from ..types import Config
+from ..universe import Universe
+from ..utils.terrain import add_heightmap_to_world
 
 
-class BaseTerrainBuild:
+class Terrain(BaseObject):
     def __init__(
         self,
-        size: float,
-        resolution: Tensor,
-        height: float,
-        position: List[float],
-        path: str,
+        universe: Universe,
+        terrain_config: Config,
+        num_robots: int,
+        root_path: str = "/Terrains",
     ):
-        self.size = size
-        self.position = position
-        self.resolution = resolution
-        self.height = height
+        super().__init__(universe=universe)
 
-        self.path = path
+        self._terrain_config: Config = terrain_config
+        self._num_robots: int = num_robots
+        self._root_path: str = root_path
 
+        self._mesh_type: str = self._terrain_config["mesh_type"]
+        if self._mesh_type in ["none", "plane"]:
+            Logger.warning("No terrain mesh will be generated.")
+            return
 
-class BaseTerrainBuilder(ABC):
-    def __init__(
-        self,
-        size: float = None,
-        resolution: Tensor = None,
-        height: float = 1,
-        root_path: Optional[str] = None,
-    ):
-        from core.globals import TERRAINS_PATH
-
-        if size is None:
-            size = 10.0
-        if resolution is None:
-            resolution = torch.tensor([48, 48])
-        if root_path is None:
-            root_path = TERRAINS_PATH
-
-        self.size = size
-        self.grid_resolution = resolution
-        self.height = height
-        self.root_path = root_path
-
-        from omni.isaac.core.utils.prims import create_prim
-        from omni.isaac.core.utils.prims import is_prim_path_valid
-
-        if not is_prim_path_valid(root_path):
-            create_prim(
-                prim_path=root_path,
-                prim_type="Scope",
-            )
-
-    def build_from_self(self, position: List[float]) -> BaseTerrainBuild:
-        return self.build(
-            self.size,
-            self.grid_resolution,
-            self.height,
-            position,
-            self.root_path,
-        )
-
-    @abstractmethod
-    def build(
-        self,
-        size: Optional[float],
-        resolution: Optional[Tensor],
-        height: float,
-        position: Optional[List[float]],
-        path: Optional[str],
-    ) -> BaseTerrainBuild:
-        """
-        Builds a terrain in the stage, according to the class's implementation.
-
-        Args:
-            size: Size of the terrain in the stage's units.
-            resolution: Number of vertices per terrain.
-            height: Height of the terrain in the stage's units.
-            position: Position of the terrain in the stage's units.
-            path: Path to the terrain in the stage.
-        """
-        pass
-
-    @staticmethod
-    def _add_heightmap_to_world(
-        heightmap: np.ndarray | Tensor,
-        scale: float,
-        height: float,
-        base_path: str,
-        builder_name: str,
-        position: List[float],
-    ) -> str:
-        vertices, triangles = BaseTerrainBuilder._heightmap_to_mesh(
-            heightmap,
-            height,
-            scale / heightmap.shape[0],
-        )
-
-        return BaseTerrainBuilder._add_mesh_to_world(
-            vertices,
-            triangles,
-            base_path,
-            builder_name,
-            scale,
-            position,
-        )
-
-    @staticmethod
-    def _heightmap_to_mesh(
-        heightmap: np.ndarray,
-        scale: float = 1.0,
-        grid_size: float = 1.0,
-        max_slope: float = np.deg2rad(89.0),  # 45 degrees by default
-        smoothing: bool = False,
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Convert a heightmap to a 3D mesh using NumPy operations.
-
-        Args:
-            heightmap: 2D numpy array of height values
-            scale: Scale factor for heights
-            grid_size: Base distance between grid points
-            max_slope: Maximum allowed slope angle in radians
-            smoothing: Whether to apply smoothing to the mesh
-
-        Returns:
-            vertices: 2D numpy array of vertex positions
-            indices: 2D numpy array of triangle indices
-        """
-        rows, cols = heightmap.shape
-
-        # Create coordinate grids
-        x_coords, y_coords = np.meshgrid(
-            np.arange(cols) * grid_size, np.arange(rows) * grid_size
-        )
-
-        # Scale heights for Z coordinate
-        z_coords = heightmap * scale
-
-        # Handle maximum slope constraints
-        if max_slope < np.pi / 2:
-            # Calculate gradients
-            dz_dx = np.zeros_like(heightmap)
-            dz_dy = np.zeros_like(heightmap)
-
-            dz_dx[:, 1:] = np.diff(z_coords, axis=1)
-            dz_dy[1:, :] = np.diff(z_coords, axis=0)
-
-            # Maximum allowed height difference based on slope
-            max_diff = grid_size * np.tan(max_slope)
-
-            # Clamp gradients
-            dz_dx = np.clip(dz_dx, -max_diff, max_diff)
-            dz_dy = np.clip(dz_dy, -max_diff, max_diff)
-
-            # Reconstruct heights from clamped gradients
-            z_coords = np.zeros_like(heightmap)
-            z_coords[0, 0] = heightmap[0, 0] * scale
-
-            # Integrate along x
-            z_coords[0, 1:] = z_coords[0, 0] + np.cumsum(dz_dx[0, :-1])
-
-            # Integrate along y
-            for i in range(1, rows):
-                z_coords[i, :] = z_coords[i - 1, :] + dz_dy[i - 1, :]
-
-        # Optional smoothing
-        if smoothing:
-            import cv2
-
-            kernel = np.array([[0, 1, 0], [1, 4, 1], [0, 1, 0]]) / 8.0
-            z_coords = cv2.filter2D(z_coords, -1, kernel)
-
-        # Create vertices array with Z as height
-        vertices = np.stack([x_coords, y_coords, z_coords], axis=-1).reshape(-1, 3)
-
-        # Generate indices for triangles
-        i = np.arange(rows - 1)[:, None] * cols + np.arange(cols - 1)
-        i = i.reshape(-1)
-
-        # For each grid cell, create two triangles
-        triangles = np.array(
-            [
-                i,
-                i + cols,
-                i + 1,  # First triangle
-                i + 1,
-                i + cols,
-                i + cols + 1,  # Second triangle
-            ]
-        )
-
-        indices = triangles.T.reshape(-1, 3)
-
-        return vertices.astype(np.float32), indices.astype(np.int32)
-
-    @staticmethod
-    def _add_mesh_to_world(
-        vertices: np.ndarray,
-        triangles: np.ndarray,
-        base_path: str,
-        builder_name: str,
-        size: float,
-        position: List[float],
-    ) -> str:
-        from core.utils.usd import find_matching_prims
-        from omni.isaac.core.utils.prims import (
-            define_prim,
-            create_prim,
-            is_prim_path_valid,
-        )
-        from pxr import UsdPhysics, PhysxSchema
-        import numpy as np
-
-        # generate an informative and unique name from the type of builder
-        builder_group_prim_path = f"{base_path}/{builder_name}"
-        prim_path_expr = f"{builder_group_prim_path}/terrain_.*"
-        num_of_existing_terrains = len(find_matching_prims(prim_path_expr))
-        prim_path = f"{base_path}/{builder_name}/terrain_{num_of_existing_terrains}"
-        num_faces = triangles.shape[0]
-
-        if not is_prim_path_valid(builder_group_prim_path):
-            define_prim(
-                builder_group_prim_path,
-                prim_type="Scope",
-            )
-
-        centered_position = [
-            position[0] - size / 2,
-            position[1] - size / 2,
-            position[2],
+        self._sub_terrain_length: float = self._terrain_config["dimensions"][
+            "terrain_length"
+        ]
+        self._sub_terrain_width: float = self._terrain_config["dimensions"][
+            "terrain_width"
         ]
 
-        # creates the terrain's root prim
-        create_prim(
-            prim_path,
-            prim_type="Xform",
-            position=np.asarray(centered_position),
+        self._sub_terrain_type_proportion: List[float] = self._terrain_config[
+            "generation"
+        ]["terrain_proportion"]
+        self._sub_terrain_type_proportion = [
+            np.sum(self._sub_terrain_type_proportion[: i + 1])
+            for i in range(len(self._sub_terrain_type_proportion))
+        ]
+
+        self._num_rows: int = self._terrain_config["generation"]["default_num_rows"]
+        self._num_cols: int = self._terrain_config["generation"]["default_num_cols"]
+
+        self._vertical_resolution: float = self._terrain_config["generation"][
+            "vertical_resolution"
+        ]
+        self._horizontal_resolution: float = self._terrain_config["generation"][
+            "horizontal_resolution"
+        ]
+        self._slope_threshold: float = self._terrain_config["generation"][
+            "slope_threshold"
+        ]
+        self._sub_terrain_border_size: float = self._terrain_config["dimensions"][
+            "border_size"
+        ]
+
+        self._sub_terrain_num_width_vertex: int = int(
+            self._sub_terrain_width // self._horizontal_resolution
+        )
+        self._sub_terrain_num_length_vertex: int = int(
+            self._sub_terrain_length // self._horizontal_resolution
+        )
+        self._sub_terrain_num_border_vertex: int = int(
+            self._sub_terrain_border_size // self._horizontal_resolution
         )
 
-        # creates the mesh prim, that actually collides
-        mesh_prim = create_prim(
-            prim_path + "/mesh",
-            prim_type="Mesh",
-            scale=[1.05, 1.05, 1.05],
-            attributes={
-                "points": vertices,
-                "faceVertexIndices": triangles.flatten(),
-                "faceVertexCounts": np.asarray([3] * num_faces),
-                "subdivisionScheme": "bilinear",
-            },
+        self._terrain_position: np.ndarray = np.array(
+            [0, 0, 0],
+            dtype=np.float32,
         )
 
-        # ensure that we have all the necessary APIs
-        collision_api = UsdPhysics.CollisionAPI.Apply(mesh_prim)
-        collision_api.CreateCollisionEnabledAttr(True)
+        self._update_rows_cols_dependents()
 
-        return prim_path
+    @property
+    def sub_terrain_origins(self) -> np.ndarray[float]:
+        return self._sub_terrain_origins + self._terrain_position
+
+    def construct(
+        self,
+        terrain_type: TerrainType = TerrainType.Curriculum,
+        num_rows: Optional[int] = None,
+        num_cols: Optional[int] = None,
+        sub_terrain_type: Optional[SubTerrainType] = None,
+    ) -> None:
+        super().construct()
+
+        if num_rows is not None:
+            self._num_rows = num_rows
+        if num_cols is not None:
+            self._num_cols = num_cols
+
+        if num_cols or num_rows:
+            self._update_rows_cols_dependents()
+
+        if terrain_type == TerrainType.Random:
+            self._construct_randomized()
+        elif terrain_type == TerrainType.Specific:
+            assert sub_terrain_type is not None, "Sub terrain type must be specified."
+
+            self._construct_selected(terrain_type=sub_terrain_type)
+        elif terrain_type == TerrainType.Curriculum:
+            self._construct_curriculum()
+
+        if self._mesh_type == "trimesh":
+            add_heightmap_to_world(
+                self._height_field,
+                self._horizontal_resolution,
+                self._vertical_resolution,
+                self._root_path,
+                self._slope_threshold,
+                self._terrain_position.tolist(),
+            )
+
+        self._is_constructed = True
+
+    def post_construct(self) -> None:
+        super().post_construct()
+
+        self._is_post_constructed = True
+
+    def get_terrain_height_at_position(self, position: np.ndarray) -> float:
+        x = position[0] - self._terrain_position[0]
+        y = position[1] - self._terrain_position[1]
+
+        if x < 0 or y < 0:
+            return 0
+
+        i = int(x // self._horizontal_resolution)
+        j = int(y // self._horizontal_resolution)
+
+        return self._height_field[i, j] * self._vertical_resolution
+
+    def get_terrain_heights_at_positions(
+        self,
+        position: np.ndarray,
+    ) -> np.ndarray[float]:
+        x = position[:, 0] - self._terrain_position[0]
+        y = position[:, 1] - self._terrain_position[1]
+
+        i = (x // self._horizontal_resolution).astype(int)
+        j = (y // self._horizontal_resolution).astype(int)
+
+        return self._height_field[i, j] * self._vertical_resolution
+
+    def _update_rows_cols_dependents(self) -> None:
+        self._num_sub_terrains = self._num_rows * self._num_cols
+        self._sub_terrain_origins = np.zeros((self._num_rows, self._num_cols, 3))
+
+        self._total_num_rows = (
+            int(self._num_rows * self._sub_terrain_num_length_vertex)
+            + 2 * self._sub_terrain_num_border_vertex
+        )
+        self._total_num_cols = (
+            int(self._num_cols * self._sub_terrain_num_width_vertex)
+            + 2 * self._sub_terrain_num_border_vertex
+        )
+
+        self._height_field: np.ndarray = np.zeros(
+            (self._total_num_rows, self._total_num_cols),
+            dtype=np.int16,
+        )
+
+    def _construct_randomized(self):
+        for k in range(self._num_sub_terrains):
+            # Env coordinates in the world
+            (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
+
+            choice = np.random.uniform(0, 1)
+            difficulty = np.random.choice([0.5, 0.75, 0.9])
+            terrain = self._generate_curriculum_terrains(choice, difficulty)
+
+            self._add_sub_terrain(terrain, i, j)
+
+    def _construct_curriculum(self):
+        for j in range(self._num_cols):
+            for i in range(self._num_rows):
+                difficulty = i / self._num_rows
+                choice = j / self._num_cols + 0.001
+
+                terrain = self._generate_curriculum_terrains(choice, difficulty)
+
+                self._add_sub_terrain(terrain, i, j)
+
+    def _construct_selected(self, terrain_type: SubTerrainType, **kwargs):
+        for k in range(self._num_sub_terrains):
+            # Env coordinates in the world
+            (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
+
+            terrain = SubTerrain(
+                width=self._sub_terrain_num_width_vertex,
+                length=self._sub_terrain_num_width_vertex,
+                vertical_resolution=self._vertical_resolution,
+                horizontal_resolution=self._horizontal_resolution,
+            )
+
+            # luckily, the terrain_type enums' names correspond to the function names
+            eval(terrain_type.value)(terrain, **kwargs)
+            self._add_sub_terrain(terrain, i, j)
+
+    def _generate_curriculum_terrains(self, choice: float, difficulty: float):
+        terrain = SubTerrain(
+            width=self._sub_terrain_num_width_vertex,
+            length=self._sub_terrain_num_width_vertex,
+            vertical_resolution=self._vertical_resolution,
+            horizontal_resolution=self._horizontal_resolution,
+        )
+
+        slope = int(difficulty * 0.4)
+        step_height = 0.05 + 0.18 * difficulty
+        discrete_obstacles_height = 0.05 + difficulty * 0.2
+        stepping_stones_size = 1.5 * (1.05 - difficulty)
+        stone_distance = 0.05 if difficulty == 0 else 0.1
+        gap_size = 1.0 * difficulty
+        pit_depth = 1.0 * difficulty
+
+        if choice < self._sub_terrain_type_proportion[0]:
+            slope *= -1 if choice < self._sub_terrain_type_proportion[0] / 2 else 1
+
+            pyramid_sloped_terrain(
+                terrain,
+                slope=slope,
+                platform_size=3.0,
+            )
+        elif choice < self._sub_terrain_type_proportion[1]:
+            pyramid_sloped_terrain(
+                terrain,
+                slope=slope,
+                platform_size=3.0,
+            )
+            random_uniform_terrain(
+                terrain,
+                min_height=-0.05,
+                max_height=0.05,
+                step=0.005,
+                downsampled_scale=0.2,
+            )
+        elif choice < self._sub_terrain_type_proportion[3]:
+            step_height *= -1 if choice < self._sub_terrain_type_proportion[2] else 1
+
+            pyramid_stairs_terrain(
+                terrain,
+                step_width=0.31,
+                step_height=step_height,
+                platform_size=3.0,
+            )
+        elif choice < self._sub_terrain_type_proportion[4]:
+            num_rectangles = 20
+            rectangle_min_size = 1.0
+            rectangle_max_size = 2.0
+
+            discrete_obstacles_terrain(
+                terrain,
+                discrete_obstacles_height,
+                rectangle_min_size,
+                rectangle_max_size,
+                num_rectangles,
+                platform_size=3.0,
+            )
+        elif choice < self._sub_terrain_type_proportion[5]:
+            stepping_stones_terrain(
+                terrain,
+                stone_size=stepping_stones_size,
+                stone_distance=stone_distance,
+                max_height=0.0,
+                platform_size=4.0,
+            )
+        elif choice < self._sub_terrain_type_proportion[6]:
+            gap_terrain(
+                terrain,
+                gap_size=gap_size,
+                platform_size=3.0,
+            )
+        else:
+            pit_terrain(
+                terrain,
+                depth=pit_depth,
+                platform_size=3.0,
+            )
+
+        return terrain
+
+    def _add_sub_terrain(self, terrain: SubTerrain, row: int, col: int):
+        i = row
+        j = col
+
+        # map coordinate system
+        start_x = (
+            self._sub_terrain_num_border_vertex
+            + i * self._sub_terrain_num_length_vertex
+        )
+        end_x = (
+            self._sub_terrain_num_border_vertex
+            + (i + 1) * self._sub_terrain_num_length_vertex
+        )
+        start_y = (
+            self._sub_terrain_num_border_vertex + j * self._sub_terrain_num_width_vertex
+        )
+        end_y = (
+            self._sub_terrain_num_border_vertex
+            + (j + 1) * self._sub_terrain_num_width_vertex
+        )
+
+        self._height_field[start_x:end_x, start_y:end_y] = terrain.height_field
+
+        env_origin_x = (i + 0.5) * self._sub_terrain_length
+        env_origin_y = (j + 0.5) * self._sub_terrain_width
+
+        x1 = int((self._sub_terrain_length / 2.0 - 1) / terrain.horizontal_resolution)
+        x2 = int((self._sub_terrain_length / 2.0 + 1) / terrain.horizontal_resolution)
+        y1 = int((self._sub_terrain_width / 2.0 - 1) / terrain.horizontal_resolution)
+        y2 = int((self._sub_terrain_width / 2.0 + 1) / terrain.horizontal_resolution)
+
+        env_origin_z = (
+            np.max(terrain.height_field[x1:x2, y1:y2]) * terrain.vertical_resolution
+        )
+
+        self._sub_terrain_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]

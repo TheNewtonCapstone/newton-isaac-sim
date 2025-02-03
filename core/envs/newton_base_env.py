@@ -1,15 +1,16 @@
 from abc import abstractmethod
-from typing import List, Optional
+from typing import Optional
 
-import torch
-from core.agents import NewtonBaseAgent
-from core.archiver import Archiver
-from core.domain_randomizer import NewtonBaseDomainRandomizer
-from core.envs import BaseEnv
-from core.terrain import BaseTerrainBuilder
-from core.types import EnvObservations, Actions, Indices
-from core.universe import Universe
-from torch import Tensor
+import torch as th
+from pxr import UsdGeom
+
+from ..agents import NewtonBaseAgent
+from ..archiver import Archiver
+from ..domain_randomizer import NewtonBaseDomainRandomizer
+from .base_env import BaseEnv
+from ..terrain.terrain import Terrain
+from ..types import EnvObservations, Actions, Indices
+from ..universe import Universe
 
 
 class NewtonBaseEnv(BaseEnv):
@@ -18,7 +19,7 @@ class NewtonBaseEnv(BaseEnv):
         universe: Universe,
         agent: NewtonBaseAgent,
         num_envs: int,
-        terrain_builders: List[BaseTerrainBuilder],
+        terrain: Terrain,
         domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
     ):
@@ -26,17 +27,21 @@ class NewtonBaseEnv(BaseEnv):
             universe,
             agent,
             num_envs,
-            terrain_builders,
+            terrain,
             domain_randomizer,
         )
 
         self.agent: NewtonBaseAgent = agent
         self.domain_randomizer: NewtonBaseDomainRandomizer = domain_randomizer
+        self._bbox_cache: Optional[UsdGeom.BBoxCache] = None
+        self._sub_terrain_origins: Optional[th.Tensor] = None
 
         from core.utils.math import IDENTITY_QUAT
 
-        self.reset_newton_positions: Tensor = torch.zeros((self.num_envs, 3))
-        self.reset_newton_orientations: Tensor = IDENTITY_QUAT.repeat(self.num_envs, 1)
+        self.reset_newton_positions: th.Tensor = th.zeros((self.num_envs, 3))
+        self.reset_newton_orientations: th.Tensor = IDENTITY_QUAT.repeat(
+            self.num_envs, 1
+        )
 
         self._inverse_control_frequency = inverse_control_frequency
 
@@ -77,7 +82,7 @@ class NewtonBaseEnv(BaseEnv):
         )
 
         env_obs["world_gravities"] = (
-            torch.tensor(
+            th.tensor(
                 gravity_direction,
                 device=self._universe.device,
             )
@@ -86,7 +91,7 @@ class NewtonBaseEnv(BaseEnv):
 
         Archiver.put(
             "env_obs",
-            {"world_gravity": torch.tensor(gravity_direction) * gravity_magnitude},
+            {"world_gravity": th.tensor(gravity_direction) * gravity_magnitude},
         )
 
         return env_obs

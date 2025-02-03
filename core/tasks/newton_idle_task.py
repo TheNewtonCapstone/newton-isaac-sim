@@ -197,11 +197,17 @@ class NewtonIdleTask(NewtonBaseTask):
         dof_ordered_names = self.agent.joints_controller.art_view.dof_names
         has_flipped = projected_gravities_norm[:, 2] > 0.0
 
-        terminated_by_no_contact = torch.logical_and(
-            # if no paws are in contact with the ground
-            (~in_contact_with_ground).all(dim=1),
-            # ensures that the agent has time to stabilize
-            (self.progress_buf > 50).to(self.device),
+        self.air_time += torch.where(
+            in_contact_with_ground,
+            0.0,
+            ~in_contact_with_ground * self._universe.control_dt,
+        )
+
+        terminated_by_long_airtime = torch.logical_and(
+            # less than half a second of overall airtime (all paws)
+            torch.sum(self.air_time, dim=1) > 2.0,
+            # ensures that the agent has time to stabilize (0.5s)
+            (self.progress_buf > 0.5 // self._universe.control_dt).to(self.device),
         )
 
         # base position
@@ -240,7 +246,7 @@ class NewtonIdleTask(NewtonBaseTask):
         # DONES
 
         # terminated agents (i.e. they failed)
-        terminated = torch.logical_or(has_flipped, terminated_by_no_contact)
+        terminated = torch.logical_or(has_flipped, terminated_by_long_airtime)
 
         # truncated agents (i.e. they reached the max episode length)
         truncated = torch.logical_and(
@@ -315,7 +321,7 @@ class NewtonIdleTask(NewtonBaseTask):
             self.last_actions_buf[1],
             weight=0.45,
         )
-        in_contacts_reward = in_contact_with_ground.sum(dim=-1)  # 1 reward per contact
+        air_time_penalty = torch.sum(self.air_time - 2.0, dim=1) * 2.0
         survival_reward = torch.where(
             terminated,
             0.0,
@@ -333,6 +339,8 @@ class NewtonIdleTask(NewtonBaseTask):
             + joint_efforts_reward
             + joint_action_rate_reward
             + joint_action_acceleration_reward
-            + in_contacts_reward
+            + air_time_penalty
             + survival_reward
         )
+
+        self.rewards_buf *= self._universe.control_dt
