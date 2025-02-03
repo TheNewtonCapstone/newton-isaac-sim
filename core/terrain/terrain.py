@@ -59,54 +59,54 @@ class Terrain(BaseObject):
     ):
         super().__init__(universe=universe)
 
-        self.terrain_config: Config = terrain_config
-        self.num_robots: int = num_robots
-        self.root_path: str = root_path
+        self._terrain_config: Config = terrain_config
+        self._num_robots: int = num_robots
+        self._root_path: str = root_path
 
-        self.mesh_type: str = self.terrain_config["mesh_type"]
-        if self.mesh_type in ["none", "plane"]:
+        self._mesh_type: str = self._terrain_config["mesh_type"]
+        if self._mesh_type in ["none", "plane"]:
             Logger.warning("No terrain mesh will be generated.")
             return
 
-        self.sub_terrain_length: float = self.terrain_config["dimensions"][
+        self._sub_terrain_length: float = self._terrain_config["dimensions"][
             "terrain_length"
         ]
-        self.sub_terrain_width: float = self.terrain_config["dimensions"][
+        self._sub_terrain_width: float = self._terrain_config["dimensions"][
             "terrain_width"
         ]
 
-        self.sub_terrain_type_proportion: List[float] = self.terrain_config[
+        self._sub_terrain_type_proportion: List[float] = self._terrain_config[
             "generation"
         ]["terrain_proportion"]
-        self.sub_terrain_type_proportion = [
-            np.sum(self.sub_terrain_type_proportion[: i + 1])
-            for i in range(len(self.sub_terrain_type_proportion))
+        self._sub_terrain_type_proportion = [
+            np.sum(self._sub_terrain_type_proportion[: i + 1])
+            for i in range(len(self._sub_terrain_type_proportion))
         ]
 
-        self.num_rows: int = self.terrain_config["generation"]["default_num_rows"]
-        self.num_cols: int = self.terrain_config["generation"]["default_num_cols"]
+        self._num_rows: int = self._terrain_config["generation"]["default_num_rows"]
+        self._num_cols: int = self._terrain_config["generation"]["default_num_cols"]
 
-        self.vertical_resolution: float = self.terrain_config["generation"][
+        self._vertical_resolution: float = self._terrain_config["generation"][
             "vertical_resolution"
         ]
-        self.horizontal_resolution: float = self.terrain_config["generation"][
+        self._horizontal_resolution: float = self._terrain_config["generation"][
             "horizontal_resolution"
         ]
-        self.slope_threshold: float = self.terrain_config["generation"][
+        self._slope_threshold: float = self._terrain_config["generation"][
             "slope_threshold"
         ]
-        self.sub_terrain_border_size: float = self.terrain_config["dimensions"][
+        self._sub_terrain_border_size: float = self._terrain_config["dimensions"][
             "border_size"
         ]
 
-        self.sub_terrain_num_width_vertex: int = int(
-            self.sub_terrain_width / self.horizontal_resolution
+        self._sub_terrain_num_width_vertex: int = int(
+            self._sub_terrain_width / self._horizontal_resolution
         )
-        self.sub_terrain_num_length_vertex: int = int(
-            self.sub_terrain_length / self.horizontal_resolution
+        self._sub_terrain_num_length_vertex: int = int(
+            self._sub_terrain_length / self._horizontal_resolution
         )
-        self.sub_terrain_num_border_vertex: int = int(
-            self.sub_terrain_border_size / self.horizontal_resolution
+        self._sub_terrain_num_border_vertex: int = int(
+            self._sub_terrain_border_size / self._horizontal_resolution
         )
 
         self._update_rows_cols_dependents()
@@ -121,9 +121,9 @@ class Terrain(BaseObject):
         super().construct()
 
         if num_rows is not None:
-            self.num_rows = num_rows
+            self._num_rows = num_rows
         if num_cols is not None:
-            self.num_cols = num_cols
+            self._num_cols = num_cols
 
         if num_cols or num_rows:
             self._update_rows_cols_dependents()
@@ -137,13 +137,13 @@ class Terrain(BaseObject):
         elif terrain_type == TerrainType.Curriculum:
             self._construct_curriculum()
 
-        if self.mesh_type == "trimesh":
+        if self._mesh_type == "trimesh":
             add_heightmap_to_world(
                 self.height_field,
-                self.horizontal_resolution,
-                self.vertical_resolution,
-                self.root_path,
-                self.slope_threshold,
+                self._horizontal_resolution,
+                self._vertical_resolution,
+                self._root_path,
+                self._slope_threshold,
                 [0, 0, 0],
             )
 
@@ -155,16 +155,16 @@ class Terrain(BaseObject):
         self._is_post_constructed = True
 
     def _update_rows_cols_dependents(self) -> None:
-        self.num_sub_terrains = self.num_rows * self.num_cols
-        self.sub_terrain_origins = np.zeros((self.num_rows, self.num_cols, 3))
+        self.num_sub_terrains = self._num_rows * self._num_cols
+        self.sub_terrain_origins = np.zeros((self._num_rows, self._num_cols, 3))
 
         self.total_num_rows = (
-            int(self.num_rows * self.sub_terrain_num_length_vertex)
-            + 2 * self.sub_terrain_num_border_vertex
+            int(self._num_rows * self._sub_terrain_num_length_vertex)
+            + 2 * self._sub_terrain_num_border_vertex
         )
         self.total_num_cols = (
-            int(self.num_cols * self.sub_terrain_num_width_vertex)
-            + 2 * self.sub_terrain_num_border_vertex
+            int(self._num_cols * self._sub_terrain_num_width_vertex)
+            + 2 * self._sub_terrain_num_border_vertex
         )
 
         self.height_field: np.ndarray = np.zeros(
@@ -175,7 +175,7 @@ class Terrain(BaseObject):
     def _construct_randomized(self):
         for k in range(self.num_sub_terrains):
             # Env coordinates in the world
-            (i, j) = np.unravel_index(k, (self.num_rows, self.num_cols))
+            (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
 
             choice = np.random.uniform(0, 1)
             difficulty = np.random.choice([0.5, 0.75, 0.9])
@@ -184,10 +184,10 @@ class Terrain(BaseObject):
             self._add_sub_terrain(terrain, i, j)
 
     def _construct_curriculum(self):
-        for j in range(self.num_cols):
-            for i in range(self.num_rows):
-                difficulty = i / self.num_rows
-                choice = j / self.num_cols + 0.001
+        for j in range(self._num_cols):
+            for i in range(self._num_rows):
+                difficulty = i / self._num_rows
+                choice = j / self._num_cols + 0.001
 
                 terrain = self._generate_curriculum_terrains(choice, difficulty)
 
@@ -196,13 +196,13 @@ class Terrain(BaseObject):
     def _construct_selected(self, terrain_type: SubTerrainType, **kwargs):
         for k in range(self.num_sub_terrains):
             # Env coordinates in the world
-            (i, j) = np.unravel_index(k, (self.num_rows, self.num_cols))
+            (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
 
             terrain = SubTerrain(
-                width=self.sub_terrain_num_width_vertex,
-                length=self.sub_terrain_num_width_vertex,
-                vertical_resolution=self.vertical_resolution,
-                horizontal_resolution=self.horizontal_resolution,
+                width=self._sub_terrain_num_width_vertex,
+                length=self._sub_terrain_num_width_vertex,
+                vertical_resolution=self._vertical_resolution,
+                horizontal_resolution=self._horizontal_resolution,
             )
 
             # luckily, the terrain_type enums' names correspond to the function names
@@ -211,10 +211,10 @@ class Terrain(BaseObject):
 
     def _generate_curriculum_terrains(self, choice: float, difficulty: float):
         terrain = SubTerrain(
-            width=self.sub_terrain_num_width_vertex,
-            length=self.sub_terrain_num_width_vertex,
-            vertical_resolution=self.vertical_resolution,
-            horizontal_resolution=self.horizontal_resolution,
+            width=self._sub_terrain_num_width_vertex,
+            length=self._sub_terrain_num_width_vertex,
+            vertical_resolution=self._vertical_resolution,
+            horizontal_resolution=self._horizontal_resolution,
         )
 
         slope = int(difficulty * 0.4)
@@ -225,15 +225,15 @@ class Terrain(BaseObject):
         gap_size = 1.0 * difficulty
         pit_depth = 1.0 * difficulty
 
-        if choice < self.sub_terrain_type_proportion[0]:
-            slope *= -1 if choice < self.sub_terrain_type_proportion[0] / 2 else 1
+        if choice < self._sub_terrain_type_proportion[0]:
+            slope *= -1 if choice < self._sub_terrain_type_proportion[0] / 2 else 1
 
             pyramid_sloped_terrain(
                 terrain,
                 slope=slope,
                 platform_size=3.0,
             )
-        elif choice < self.sub_terrain_type_proportion[1]:
+        elif choice < self._sub_terrain_type_proportion[1]:
             pyramid_sloped_terrain(
                 terrain,
                 slope=slope,
@@ -246,8 +246,8 @@ class Terrain(BaseObject):
                 step=0.005,
                 downsampled_scale=0.2,
             )
-        elif choice < self.sub_terrain_type_proportion[3]:
-            step_height *= -1 if choice < self.sub_terrain_type_proportion[2] else 1
+        elif choice < self._sub_terrain_type_proportion[3]:
+            step_height *= -1 if choice < self._sub_terrain_type_proportion[2] else 1
 
             pyramid_stairs_terrain(
                 terrain,
@@ -255,7 +255,7 @@ class Terrain(BaseObject):
                 step_height=step_height,
                 platform_size=3.0,
             )
-        elif choice < self.sub_terrain_type_proportion[4]:
+        elif choice < self._sub_terrain_type_proportion[4]:
             num_rectangles = 20
             rectangle_min_size = 1.0
             rectangle_max_size = 2.0
@@ -268,7 +268,7 @@ class Terrain(BaseObject):
                 num_rectangles,
                 platform_size=3.0,
             )
-        elif choice < self.sub_terrain_type_proportion[5]:
+        elif choice < self._sub_terrain_type_proportion[5]:
             stepping_stones_terrain(
                 terrain,
                 stone_size=stepping_stones_size,
@@ -276,7 +276,7 @@ class Terrain(BaseObject):
                 max_height=0.0,
                 platform_size=4.0,
             )
-        elif choice < self.sub_terrain_type_proportion[6]:
+        elif choice < self._sub_terrain_type_proportion[6]:
             gap_terrain(
                 terrain,
                 gap_size=gap_size,
@@ -297,29 +297,30 @@ class Terrain(BaseObject):
 
         # map coordinate system
         start_x = (
-            self.sub_terrain_num_border_vertex + i * self.sub_terrain_num_length_vertex
+            self._sub_terrain_num_border_vertex
+            + i * self._sub_terrain_num_length_vertex
         )
         end_x = (
-            self.sub_terrain_num_border_vertex
-            + (i + 1) * self.sub_terrain_num_length_vertex
+            self._sub_terrain_num_border_vertex
+            + (i + 1) * self._sub_terrain_num_length_vertex
         )
         start_y = (
-            self.sub_terrain_num_border_vertex + j * self.sub_terrain_num_width_vertex
+            self._sub_terrain_num_border_vertex + j * self._sub_terrain_num_width_vertex
         )
         end_y = (
-            self.sub_terrain_num_border_vertex
-            + (j + 1) * self.sub_terrain_num_width_vertex
+            self._sub_terrain_num_border_vertex
+            + (j + 1) * self._sub_terrain_num_width_vertex
         )
 
         self.height_field[start_x:end_x, start_y:end_y] = terrain.height_field
 
-        env_origin_x = (i + 0.5) * self.sub_terrain_length
-        env_origin_y = (j + 0.5) * self.sub_terrain_width
+        env_origin_x = (i + 0.5) * self._sub_terrain_length
+        env_origin_y = (j + 0.5) * self._sub_terrain_width
 
-        x1 = int((self.sub_terrain_length / 2.0 - 1) / terrain.horizontal_resolution)
-        x2 = int((self.sub_terrain_length / 2.0 + 1) / terrain.horizontal_resolution)
-        y1 = int((self.sub_terrain_width / 2.0 - 1) / terrain.horizontal_resolution)
-        y2 = int((self.sub_terrain_width / 2.0 + 1) / terrain.horizontal_resolution)
+        x1 = int((self._sub_terrain_length / 2.0 - 1) / terrain.horizontal_resolution)
+        x2 = int((self._sub_terrain_length / 2.0 + 1) / terrain.horizontal_resolution)
+        y1 = int((self._sub_terrain_width / 2.0 - 1) / terrain.horizontal_resolution)
+        y2 = int((self._sub_terrain_width / 2.0 + 1) / terrain.horizontal_resolution)
 
         env_origin_z = (
             np.max(terrain.height_field[x1:x2, y1:y2]) * terrain.vertical_resolution
