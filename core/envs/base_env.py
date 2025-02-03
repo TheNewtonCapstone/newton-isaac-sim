@@ -1,11 +1,10 @@
 from abc import abstractmethod
-from typing import List, Optional
+from typing import Optional
 
 from ..agents import BaseAgent
 from ..base import BaseObject
 from ..domain_randomizer import BaseDomainRandomizer
-from ..terrain import BaseTerrainBuilder, BaseTerrainBuild
-from ..terrain.terrain import Terrain
+from ..terrain import Terrain
 from ..types import EnvObservations, Actions, Indices
 from ..universe import Universe
 
@@ -27,10 +26,9 @@ class BaseEnv(BaseObject):
         self._universe: Universe = universe
 
         self.agent: BaseAgent = agent
-        self.num_envs = num_envs
+        self.num_envs: int = num_envs
 
-        self.terrain = terrain
-        self.terrain_builds: List[BaseTerrainBuild] = []
+        self.terrain: Terrain = terrain
 
         self.domain_randomizer: BaseDomainRandomizer = domain_randomizer
 

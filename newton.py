@@ -494,7 +494,7 @@ def setup() -> Optional[Matter]:
 
         current_run_name = f"{rl_config['task_name']}_{new_run_id}"
 
-    log_file_path = f"runs/{mode_name}.log"
+    log_file_path = f"{mode_name.lower().replace(' ', '_')}.log"
     if current_run_name:
         log_file_path = f"{runs_dir}/{current_run_name}_0/{current_run_name}.log"
 
@@ -665,18 +665,12 @@ def main():
     from core.envs import NewtonTerrainEnv
     from core.agents import NewtonVecAgent
 
-    from core.terrain import (
-        FlatTerrainBuilder,
-        PerlinTerrainBuilder,
-        StairsTerrainBuilder,
-    )
-
     from core.sensors import VecIMU, VecContact
     from core.actuators import LSTMActuator, BaseActuator
     from core.controllers import VecJointsController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
-    from core.terrain.terrain import Terrain
+    from core.terrain.terrain import Terrain, TerrainType, SubTerrainType
 
     from core.utils.math import IDENTITY_QUAT
 
@@ -786,7 +780,7 @@ def main():
         randomizer_settings=randomization_config,
     )
 
-    terrain = Terrain(terrain_config, num_envs)
+    terrain = Terrain(universe, terrain_config, num_envs)
 
     # ----------- #
     #    ONNX     #
@@ -844,10 +838,20 @@ def main():
             inverse_control_frequency=inverse_control_frequency,
         )
 
+        terrain.register_self(
+            TerrainType.Specific,
+            1,  # num_rows
+            1,  # num_cols
+            SubTerrainType.RandomUniform,
+        )  # done manually, since we're changing some default construction parameters
         env.register_self()  # done manually, generally the task would do this
-        animation_engine.register_self(current_animation)
+        animation_engine.register_self(
+            current_animation
+        )  # done manually, generally the task would do this
 
-        universe.reset(construction=True)
+        universe.construct_registrations()
+
+        env.reset()  # reset the environment to get correctly position the agent
 
         ordered_dof_names = joints_controller.art_view.dof_names
 
@@ -888,9 +892,16 @@ def main():
             inverse_control_frequency=inverse_control_frequency,
         )
 
+        terrain.register_self(
+            TerrainType.Random,
+            1,  # num_rows
+            1,  # num_cols
+        )  # done manually, since we're changing some default construction parameters
         env.register_self()  # done manually, generally the task would do this
 
-        universe.reset(construction=True)
+        universe.construct_registrations()
+
+        env.reset()  # reset the environment to get correctly position the agent
 
         while universe.is_playing:
             env.step(torch.zeros((num_envs, 12)))
@@ -904,10 +915,7 @@ def main():
     from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
     from core.wrappers import RandomDelayWrapper
 
-    terrains_size = 5.0
-    terrains_resolution = torch.tensor([20, 20])
-
-    training_env = NewtonMultiTerrainEnv(
+    training_env = NewtonTerrainEnv(
         universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
@@ -940,8 +948,6 @@ def main():
         check_freq=64,
         save_path=current_run_name,
     )
-
-    universe.reset(construction=True)
 
     from stable_baselines3 import PPO
 
@@ -1016,6 +1022,10 @@ def main():
         if current_checkpoint_path is not None:
             model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
 
+        terrain.register_self()  # we need to do it manually
+
+        universe.construct_registrations()
+
         model.learn(
             total_timesteps=rl_config["timesteps_per_env"] * num_envs,
             tb_log_name=current_run_name,
@@ -1028,6 +1038,14 @@ def main():
         exit(1)
 
     if playing:
+        terrain.register_self(
+            TerrainType.Random,
+            1,  # num_rows
+            1,  # num_cols
+        )  # done manually, since we're changing some default construction parameters
+
+        universe.construct_registrations()
+
         model = PPO.load(current_checkpoint_path)
 
         actions = model.predict(task.reset()[0], deterministic=True)[0]

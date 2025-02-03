@@ -149,7 +149,7 @@ class Universe(SimulationContext):
         # otherwise, we need to manually update the app (without stepping the simulation)
         self.update_app_no_sim()
 
-    def reset(self, soft: bool = False, construction: bool = False) -> None:
+    def reset(self, soft: bool = False) -> None:
         Logger.debug("Universe reset")
 
         # From Isaac Lab (SimulationContext): https://github.com/isaac-sim/IsaacLab/blob/main/source/extensions/omni.isaac.lab/omni/isaac/lab/sim/simulation_context.py#L423
@@ -168,9 +168,7 @@ class Universe(SimulationContext):
             for _ in range(2):
                 self.render()
 
-        if not construction:
-            return
-
+    def construct_registrations(self) -> None:
         Logger.info("Constructing registered objects")
 
         # This is generally the first time the universe is being reset, let's construct all registered objects
@@ -210,7 +208,7 @@ class Universe(SimulationContext):
                 continue
 
             # make sure that physics is updated before post-construction
-            self.reset(soft=False, construction=False)
+            self.reset()
 
             # Post-construct all registered objects, no new registrations should be added during this process
             for obj in registrations:
