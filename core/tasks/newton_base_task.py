@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Optional
 
 import numpy as np
 import torch as th
