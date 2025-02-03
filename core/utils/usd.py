@@ -1,9 +1,11 @@
 import re
-from typing import Any, List
+from typing import Any, List, Optional
 
 from pxr.UsdShade import Material
 
-from pxr import Usd
+from omni.isaac.core.utils.prims import get_prim_at_path
+from omni.isaac.core.utils.stage import get_current_stage
+from pxr import Usd, Gf, UsdGeom
 
 
 def get_or_define_material(material_prim_path: str) -> Material:
@@ -125,8 +127,8 @@ def find_matching_prims_count(prim_path_regex: str) -> int:
 
 
 def path_expr_to_paths(
-        root_path_expr: str,
-        child_path_expr: str,
+    root_path_expr: str,
+    child_path_expr: str,
 ) -> List[List[str]]:
     """Convert a path expression to a list of paths (2-deep).
 
@@ -193,3 +195,39 @@ def get_parent_expr_path_from_expr_path(prim_path: str) -> str:
     """
 
     return "/".join(prim_path.split("/")[:-1])
+
+
+def get_prim_bounds_range(
+    prim_path: str,
+    bbox_cache: Optional[UsdGeom.BBoxCache] = None,
+) -> Gf.Range3d:
+    """Get the extent of the prim.
+
+    Args:
+        prim: The prim to get the extent of.
+
+    Returns:
+        The extent of the prim.
+    """
+
+    import omni.timeline
+
+    from pxr import UsdGeom
+
+    timeline = omni.timeline.get_timeline_interface()
+    stage = get_current_stage()
+    current_timecode = timeline.get_current_time()
+
+    if bbox_cache is None:
+        bbox_cache = UsdGeom.BBoxCache(
+            current_timecode,
+            includedPurposes=[UsdGeom.Tokens.default_],
+        )
+
+    bbox_cache.Clear()
+    bbox_cache.SetTime(current_timecode - stage.GetStartTimeCode())
+
+    agent_prim = get_prim_at_path(prim_path)
+    bounds = bbox_cache.ComputeWorldBound(agent_prim)
+
+    return bounds.GetRange()

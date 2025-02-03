@@ -1000,7 +1000,7 @@ def main():
         from core.utils.config import save_config
 
         record_directory = f"{runs_dir}/{current_run_name}_0/records"
-        os.makedirs(record_directory)
+        os.makedirs(record_directory, exist_ok=True)
 
         rl_config_record_path = f"{record_directory}/rl_config_record.yaml"
         save_config(rl_config, rl_config_record_path)

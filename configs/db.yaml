@@ -3,9 +3,9 @@ type: influxdb
 
 influxdb:
   org: "TheNewtonCapstone"
-  url: "http://localhost:8086"
+  url: "https://newton-influxdb.happyfir.com"
   local:
-    enabled: True
+    enabled: False
     persistent: True # container will run beyond the lifecycle of the application
     image: "influxdb:2"
     container_name: "newton-influxdb"

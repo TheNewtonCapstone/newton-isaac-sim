@@ -2,14 +2,15 @@ from abc import abstractmethod
 from typing import Optional
 
 import torch as th
+from pxr import UsdGeom
 
-from core.agents import NewtonBaseAgent
-from core.archiver import Archiver
-from core.domain_randomizer import NewtonBaseDomainRandomizer
-from core.envs import BaseEnv
-from core.terrain.terrain import Terrain
-from core.types import EnvObservations, Actions, Indices
-from core.universe import Universe
+from ..agents import NewtonBaseAgent
+from ..archiver import Archiver
+from ..domain_randomizer import NewtonBaseDomainRandomizer
+from .base_env import BaseEnv
+from ..terrain.terrain import Terrain
+from ..types import EnvObservations, Actions, Indices
+from ..universe import Universe
 
 
 class NewtonBaseEnv(BaseEnv):
@@ -32,6 +33,8 @@ class NewtonBaseEnv(BaseEnv):
 
         self.agent: NewtonBaseAgent = agent
         self.domain_randomizer: NewtonBaseDomainRandomizer = domain_randomizer
+        self._bbox_cache: Optional[UsdGeom.BBoxCache] = None
+        self._sub_terrain_origins: Optional[th.Tensor] = None
 
         from core.utils.math import IDENTITY_QUAT
 

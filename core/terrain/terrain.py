@@ -100,16 +100,25 @@ class Terrain(BaseObject):
         ]
 
         self._sub_terrain_num_width_vertex: int = int(
-            self._sub_terrain_width / self._horizontal_resolution
+            self._sub_terrain_width // self._horizontal_resolution
         )
         self._sub_terrain_num_length_vertex: int = int(
-            self._sub_terrain_length / self._horizontal_resolution
+            self._sub_terrain_length // self._horizontal_resolution
         )
         self._sub_terrain_num_border_vertex: int = int(
-            self._sub_terrain_border_size / self._horizontal_resolution
+            self._sub_terrain_border_size // self._horizontal_resolution
+        )
+
+        self._terrain_position: np.ndarray = np.array(
+            [0, 0, 0],
+            dtype=np.float32,
         )
 
         self._update_rows_cols_dependents()
+
+    @property
+    def sub_terrain_origins(self) -> np.ndarray[float]:
+        return self._sub_terrain_origins + self._terrain_position
 
     def construct(
         self,
@@ -139,12 +148,12 @@ class Terrain(BaseObject):
 
         if self._mesh_type == "trimesh":
             add_heightmap_to_world(
-                self.height_field,
+                self._height_field,
                 self._horizontal_resolution,
                 self._vertical_resolution,
                 self._root_path,
                 self._slope_threshold,
-                [0, 0, 0],
+                self._terrain_position.tolist(),
             )
 
         self._is_constructed = True
@@ -154,26 +163,50 @@ class Terrain(BaseObject):
 
         self._is_post_constructed = True
 
-    def _update_rows_cols_dependents(self) -> None:
-        self.num_sub_terrains = self._num_rows * self._num_cols
-        self.sub_terrain_origins = np.zeros((self._num_rows, self._num_cols, 3))
+    def get_terrain_height_at_position(self, position: np.ndarray) -> float:
+        x = position[0] - self._terrain_position[0]
+        y = position[1] - self._terrain_position[1]
 
-        self.total_num_rows = (
+        if x < 0 or y < 0:
+            return 0
+
+        i = int(x // self._horizontal_resolution)
+        j = int(y // self._horizontal_resolution)
+
+        return self._height_field[i, j] * self._vertical_resolution
+
+    def get_terrain_heights_at_positions(
+        self,
+        position: np.ndarray,
+    ) -> np.ndarray[float]:
+        x = position[:, 0] - self._terrain_position[0]
+        y = position[:, 1] - self._terrain_position[1]
+
+        i = (x // self._horizontal_resolution).astype(int)
+        j = (y // self._horizontal_resolution).astype(int)
+
+        return self._height_field[i, j] * self._vertical_resolution
+
+    def _update_rows_cols_dependents(self) -> None:
+        self._num_sub_terrains = self._num_rows * self._num_cols
+        self._sub_terrain_origins = np.zeros((self._num_rows, self._num_cols, 3))
+
+        self._total_num_rows = (
             int(self._num_rows * self._sub_terrain_num_length_vertex)
             + 2 * self._sub_terrain_num_border_vertex
         )
-        self.total_num_cols = (
+        self._total_num_cols = (
             int(self._num_cols * self._sub_terrain_num_width_vertex)
             + 2 * self._sub_terrain_num_border_vertex
         )
 
-        self.height_field: np.ndarray = np.zeros(
-            (self.total_num_rows, self.total_num_cols),
+        self._height_field: np.ndarray = np.zeros(
+            (self._total_num_rows, self._total_num_cols),
             dtype=np.int16,
         )
 
     def _construct_randomized(self):
-        for k in range(self.num_sub_terrains):
+        for k in range(self._num_sub_terrains):
             # Env coordinates in the world
             (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
 
@@ -194,7 +227,7 @@ class Terrain(BaseObject):
                 self._add_sub_terrain(terrain, i, j)
 
     def _construct_selected(self, terrain_type: SubTerrainType, **kwargs):
-        for k in range(self.num_sub_terrains):
+        for k in range(self._num_sub_terrains):
             # Env coordinates in the world
             (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
 
@@ -312,7 +345,7 @@ class Terrain(BaseObject):
             + (j + 1) * self._sub_terrain_num_width_vertex
         )
 
-        self.height_field[start_x:end_x, start_y:end_y] = terrain.height_field
+        self._height_field[start_x:end_x, start_y:end_y] = terrain.height_field
 
         env_origin_x = (i + 0.5) * self._sub_terrain_length
         env_origin_y = (j + 0.5) * self._sub_terrain_width
@@ -326,4 +359,4 @@ class Terrain(BaseObject):
             np.max(terrain.height_field[x1:x2, y1:y2]) * terrain.vertical_resolution
         )
 
-        self.sub_terrain_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
+        self._sub_terrain_origins[i, j] = [env_origin_x, env_origin_y, env_origin_z]
