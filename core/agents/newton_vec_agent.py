@@ -1,5 +1,6 @@
 from core.agents import NewtonBaseAgent
 from core.globals import TERRAINS_PATH, COLLISION_GROUPS_PATH
+from core.logger import Logger
 from core.types import EnvObservations, Actions
 
 
@@ -13,12 +14,18 @@ class NewtonVecAgent(NewtonBaseAgent):
 
         import omni.isaac.core.utils.stage as stage_utils
 
+        usd_path = "assets/newton/newton.usd"
         stage_utils.add_reference_to_stage(
-            "assets/newton/newton.usd",
+            usd_path,
             prim_path=self.path,
+        )
+        Logger.info(
+            f"Added reference agent from '{usd_path}' to '{self.path}' to the USD stage."
         )
 
         if self.num_agents > 1:
+            Logger.info(f"Cloning {self.num_agents} agents from {self.path}.")
+
             from omni.isaac.cloner import Cloner
 
             cloner = Cloner()
@@ -46,6 +53,8 @@ class NewtonVecAgent(NewtonBaseAgent):
 
     def post_construct(self) -> None:
         super().post_construct()
+
+        Logger.info("NewtonVecAgent post-constructed.")
 
         self._is_post_constructed = True
 

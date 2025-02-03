@@ -1,5 +1,7 @@
 from abc import abstractmethod, ABC
-from typing import Optional
+from typing import Optional, Tuple, List
+
+import numpy as np
 
 import torch
 from torch import Tensor
@@ -8,10 +10,10 @@ from torch import Tensor
 class BaseTerrainBuild:
     def __init__(
         self,
-        size: Tensor,
+        size: float,
         resolution: Tensor,
         height: float,
-        position: Tensor,
+        position: List[float],
         path: str,
     ):
         self.size = size
@@ -25,7 +27,7 @@ class BaseTerrainBuild:
 class BaseTerrainBuilder(ABC):
     def __init__(
         self,
-        size: Tensor = None,
+        size: float = None,
         resolution: Tensor = None,
         height: float = 1,
         root_path: Optional[str] = None,
@@ -33,14 +35,14 @@ class BaseTerrainBuilder(ABC):
         from core.globals import TERRAINS_PATH
 
         if size is None:
-            size = torch.tensor([10, 10])
+            size = 10.0
         if resolution is None:
-            resolution = torch.tensor([20, 20])
+            resolution = torch.tensor([48, 48])
         if root_path is None:
             root_path = TERRAINS_PATH
 
         self.size = size
-        self.resolution = resolution
+        self.grid_resolution = resolution
         self.height = height
         self.root_path = root_path
 
@@ -53,10 +55,10 @@ class BaseTerrainBuilder(ABC):
                 prim_type="Scope",
             )
 
-    def build_from_self(self, position: Tensor) -> BaseTerrainBuild:
+    def build_from_self(self, position: List[float]) -> BaseTerrainBuild:
         return self.build(
             self.size,
-            self.resolution,
+            self.grid_resolution,
             self.height,
             position,
             self.root_path,
@@ -65,11 +67,11 @@ class BaseTerrainBuilder(ABC):
     @abstractmethod
     def build(
         self,
-        size: Optional[Tensor] = None,
-        resolution: Optional[Tensor] = None,
-        height: float = 1,
-        position: Optional[Tensor] = None,
-        path: Optional[str] = None,
+        size: Optional[float],
+        resolution: Optional[Tensor],
+        height: float,
+        position: Optional[List[float]],
+        path: Optional[str],
     ) -> BaseTerrainBuild:
         """
         Builds a terrain in the stage, according to the class's implementation.
@@ -85,76 +87,125 @@ class BaseTerrainBuilder(ABC):
 
     @staticmethod
     def _add_heightmap_to_world(
-        heightmap: Tensor,
-        size: Tensor,
-        num_cols: int,
-        num_rows: int,
+        heightmap: np.ndarray | Tensor,
+        scale: float,
         height: float,
         base_path: str,
         builder_name: str,
-        position: Tensor,
+        position: List[float],
     ) -> str:
         vertices, triangles = BaseTerrainBuilder._heightmap_to_mesh(
-            heightmap, size, num_cols, num_rows, height
+            heightmap,
+            height,
+            scale / heightmap.shape[0],
         )
 
         return BaseTerrainBuilder._add_mesh_to_world(
-            vertices, triangles, base_path, builder_name, size, position
+            vertices,
+            triangles,
+            base_path,
+            builder_name,
+            scale,
+            position,
         )
 
     @staticmethod
     def _heightmap_to_mesh(
-        heightmap: Tensor,
-        size: Tensor,
-        num_cols: int,
-        num_rows: int,
-        height: float,
-    ) -> tuple[Tensor, Tensor]:
-        # from https://github.com/isaac-sim/OmniIsaacGymEnvs/blob/main/omniisaacgymenvs/utils/terrain_utils/terrain_utils.py
+        heightmap: np.ndarray,
+        scale: float = 1.0,
+        grid_size: float = 1.0,
+        max_slope: float = np.deg2rad(89.0),  # 45 degrees by default
+        smoothing: bool = False,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Convert a heightmap to a 3D mesh using NumPy operations.
 
-        x = torch.linspace(0, (size[0]), num_cols)
-        y = torch.linspace(0, (size[1]), num_rows)
-        xx, yy = torch.meshgrid(x, y)
+        Args:
+            heightmap: 2D numpy array of height values
+            scale: Scale factor for heights
+            grid_size: Base distance between grid points
+            max_slope: Maximum allowed slope angle in radians
+            smoothing: Whether to apply smoothing to the mesh
 
-        vertices = torch.zeros((num_cols * num_rows, 3), dtype=torch.float32)
-        vertices[:, 0] = xx.flatten()
-        vertices[:, 1] = yy.flatten()
-        vertices[:, 2] = heightmap.flatten() * height
-        triangles = torch.ones(
-            (2 * (num_rows - 1) * (num_cols - 1), 3), dtype=torch.int32
+        Returns:
+            vertices: 2D numpy array of vertex positions
+            indices: 2D numpy array of triangle indices
+        """
+        rows, cols = heightmap.shape
+
+        # Create coordinate grids
+        x_coords, y_coords = np.meshgrid(
+            np.arange(cols) * grid_size, np.arange(rows) * grid_size
         )
-        for i in range(num_cols - 1):
-            # indices for the 4 vertices of the square
-            ind0 = torch.arange(0, num_rows - 1) + i * num_rows
-            ind1 = ind0 + 1
-            ind2 = ind0 + num_rows
-            ind3 = ind2 + 1
 
-            # there are 2 triangles per square
-            # and self.size[1] - 1 squares per col
-            start = i * (num_rows - 1) * 2
-            end = start + (num_rows - 1) * 2
+        # Scale heights for Z coordinate
+        z_coords = heightmap * scale
 
-            # first set of triangles (top left)
-            triangles[start:end:2, 0] = ind0
-            triangles[start:end:2, 1] = ind3
-            triangles[start:end:2, 2] = ind1
+        # Handle maximum slope constraints
+        if max_slope < np.pi / 2:
+            # Calculate gradients
+            dz_dx = np.zeros_like(heightmap)
+            dz_dy = np.zeros_like(heightmap)
 
-            # second set of triangles (bottom right)
-            triangles[start + 1 : end : 2, 0] = ind0
-            triangles[start + 1 : end : 2, 1] = ind2
-            triangles[start + 1 : end : 2, 2] = ind3
+            dz_dx[:, 1:] = np.diff(z_coords, axis=1)
+            dz_dy[1:, :] = np.diff(z_coords, axis=0)
 
-        return vertices, triangles
+            # Maximum allowed height difference based on slope
+            max_diff = grid_size * np.tan(max_slope)
+
+            # Clamp gradients
+            dz_dx = np.clip(dz_dx, -max_diff, max_diff)
+            dz_dy = np.clip(dz_dy, -max_diff, max_diff)
+
+            # Reconstruct heights from clamped gradients
+            z_coords = np.zeros_like(heightmap)
+            z_coords[0, 0] = heightmap[0, 0] * scale
+
+            # Integrate along x
+            z_coords[0, 1:] = z_coords[0, 0] + np.cumsum(dz_dx[0, :-1])
+
+            # Integrate along y
+            for i in range(1, rows):
+                z_coords[i, :] = z_coords[i - 1, :] + dz_dy[i - 1, :]
+
+        # Optional smoothing
+        if smoothing:
+            import cv2
+
+            kernel = np.array([[0, 1, 0], [1, 4, 1], [0, 1, 0]]) / 8.0
+            z_coords = cv2.filter2D(z_coords, -1, kernel)
+
+        # Create vertices array with Z as height
+        vertices = np.stack([x_coords, y_coords, z_coords], axis=-1).reshape(-1, 3)
+
+        # Generate indices for triangles
+        i = np.arange(rows - 1)[:, None] * cols + np.arange(cols - 1)
+        i = i.reshape(-1)
+
+        # For each grid cell, create two triangles
+        triangles = np.array(
+            [
+                i,
+                i + cols,
+                i + 1,  # First triangle
+                i + 1,
+                i + cols,
+                i + cols + 1,  # Second triangle
+            ]
+        )
+
+        indices = triangles.T.reshape(-1, 3)
+
+        return vertices.astype(np.float32), indices.astype(np.int32)
 
     @staticmethod
     def _add_mesh_to_world(
-        vertices: Tensor,
-        triangles: Tensor,
+        vertices: np.ndarray,
+        triangles: np.ndarray,
         base_path: str,
         builder_name: str,
-        size: Tensor,
-        position: Tensor,
+        size: float,
+        position: List[float],
     ) -> str:
         from core.utils.usd import find_matching_prims
         from omni.isaac.core.utils.prims import (
@@ -179,8 +230,8 @@ class BaseTerrainBuilder(ABC):
             )
 
         centered_position = [
-            position[0] - size[0] / 2,
-            position[1] - size[1] / 2,
+            position[0] - size / 2,
+            position[1] - size / 2,
             position[2],
         ]
 
@@ -195,10 +246,10 @@ class BaseTerrainBuilder(ABC):
         mesh_prim = create_prim(
             prim_path + "/mesh",
             prim_type="Mesh",
-            scale=[1, 1, 1],
+            scale=[1.05, 1.05, 1.05],
             attributes={
-                "points": vertices.numpy(),
-                "faceVertexIndices": triangles.flatten().numpy(),
+                "points": vertices,
+                "faceVertexIndices": triangles.flatten(),
                 "faceVertexCounts": np.asarray([3] * num_faces),
                 "subdivisionScheme": "bilinear",
             },

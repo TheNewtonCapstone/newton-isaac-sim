@@ -1,18 +1,20 @@
-from torch import Tensor, tensor
+from typing import List
+
+import torch
 
 from core.terrain.terrain import BaseTerrainBuilder, BaseTerrainBuild
 
 
-class DefaultGroundPlaneBuildBase(BaseTerrainBuild):
+class DefaultGroundPlaneBuild(BaseTerrainBuild):
     def __init__(
         self,
         path: str,
     ):
-        super().__init__(tensor([]), tensor([]), 0, tensor([]), path)
+        super().__init__(0.0, torch.tensor([]), 0, [0, 0, 0], path)
 
 
-class DefaultGroundPlaneBuilderBase(BaseTerrainBuilder):
-    def build_from_self(self, position: Tensor) -> DefaultGroundPlaneBuildBase:
+class DefaultGroundPlaneBuilder(BaseTerrainBuilder):
+    def build_from_self(self, position: List[float]) -> DefaultGroundPlaneBuild:
         """
         Notes:
             None of the parameters are used for the default ground plane.
@@ -20,7 +22,7 @@ class DefaultGroundPlaneBuilderBase(BaseTerrainBuilder):
 
         return self.build(
             self.size,
-            self.resolution,
+            self.grid_resolution,
             self.height,
             position,
             self.root_path,
@@ -28,12 +30,12 @@ class DefaultGroundPlaneBuilderBase(BaseTerrainBuilder):
 
     def build(
         self,
-        size=None,
-        resolution=None,
-        height=0,
-        position=None,
-        path=None,
-    ) -> DefaultGroundPlaneBuildBase:
+        size,
+        resolution,
+        height,
+        position,
+        path,
+    ) -> DefaultGroundPlaneBuild:
         """
         Notes:
             None of the parameters are used for the default ground plane.
@@ -44,4 +46,4 @@ class DefaultGroundPlaneBuilderBase(BaseTerrainBuilder):
 
         get_current_stage().scene.add_default_ground_plane()
 
-        return DefaultGroundPlaneBuildBase(path)
+        return DefaultGroundPlaneBuild(path)

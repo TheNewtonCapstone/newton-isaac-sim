@@ -2,6 +2,7 @@ import torch
 from torch import nn
 
 from core.actuators import BaseActuator
+from core.logger import Logger
 from core.types import (
     VecJointsPositions,
     VecJointsVelocities,
@@ -9,6 +10,7 @@ from core.types import (
     VecJointVelocityLimits,
     VecJointEffortLimits,
     VecJointGearRatios,
+    Config,
 )
 from core.universe import Universe
 
@@ -31,6 +33,7 @@ class LSTMActuator(BaseActuator):
         self,
         universe: Universe,
         motor_model_path: str,
+        model_params: Config,
     ):
         super().__init__(
             universe=universe,
@@ -38,8 +41,8 @@ class LSTMActuator(BaseActuator):
 
         self._model_path: str = motor_model_path
         self._model: LSTMActuatorModel = LSTMActuatorModel(
-            hidden_size=64,
-            num_layers=2,
+            hidden_size=model_params["hidden_size"],
+            num_layers=model_params["num_layers"],
         ).to(self._universe.device)
 
     def construct(
@@ -59,10 +62,16 @@ class LSTMActuator(BaseActuator):
         )
         self._model.eval()
 
+        Logger.info(
+            f"LSTMActuator constructed with model from {self._model_path} running on {self._universe.device}."
+        )
+
         self._is_constructed = True
 
     def post_construct(self) -> None:
         super().post_construct()
+
+        Logger.info("LSTMActuator post-constructed.")
 
         self._is_post_constructed = True
 
@@ -89,10 +98,6 @@ class LSTMActuator(BaseActuator):
         output_target_positions: VecJointsPositions,
         output_current_velocities: VecJointsVelocities,
     ) -> None:
-        output_current_positions = output_current_positions / (2 * torch.pi)
-        output_target_positions = output_target_positions / (2 * torch.pi)
-        output_current_velocities = output_current_velocities / (2 * torch.pi)
-
         # the given positions & velocities are of the output, not the input, which is why we multiply by the gear ratio
         input_position_errors = (
             output_target_positions - output_current_positions

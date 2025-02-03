@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import Optional
 
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
 

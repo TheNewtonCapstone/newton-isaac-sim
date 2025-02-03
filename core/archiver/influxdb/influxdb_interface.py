@@ -6,6 +6,7 @@ from influxdb_client import InfluxDBClient, WriteApi, QueryApi
 
 from ..db_interface import DBInterface
 from ..types import Archivable, Tags
+from ...logger import Logger
 from ...types import Config
 
 
@@ -91,6 +92,8 @@ class InfluxDBInterface(DBInterface):
         bucket = buckets_api.find_bucket_by_name(name)
 
         if bucket is None:
+            Logger.info(f"Creating InfluxDB bucket: {name}")
+
             buckets_api.create_bucket(bucket_name=name)
 
         operator_client.close()
@@ -104,14 +107,20 @@ class InfluxDBInterface(DBInterface):
         existing_container = self._get_existing_container()
 
         if existing_container:
+            Logger.info("InfluxDB container already exists.")
+
             self._idb_docker_container = existing_container
 
             if existing_container.status == "exited":
+                Logger.debug("Starting existing InfluxDB container.")
+
                 existing_container.start()
 
             return
 
         port = self._db_config["local"]["port"]
+
+        Logger.info("Starting new InfluxDB container...")
 
         self._idb_docker_container = self._docker_client.containers.run(
             image=self._db_config["local"]["image"],

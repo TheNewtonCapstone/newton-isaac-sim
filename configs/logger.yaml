@@ -1,0 +1,8 @@
+level: "debug" # "debug", "info", "warning", "error", "fatal"
+outputs: ["file", "omni"] # "omni", "file"
+
+format:
+  date: False
+  time: True
+  level: True
+  source: True

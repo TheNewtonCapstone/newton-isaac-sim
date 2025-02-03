@@ -4,6 +4,7 @@ import torch
 from ..agents import NewtonBaseAgent
 from ..domain_randomizer import NewtonBaseDomainRandomizer
 from . import NewtonBaseEnv
+from ..logger import Logger
 from ..terrain import BaseTerrainBuilder
 from ..types import EnvObservations, Actions, Indices
 from ..universe import Universe
@@ -41,8 +42,8 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         terrain_positions = torch.tensor(
             [
                 [
-                    (i % num_terrains_side) * terrains_size[0] - terrains_size[0] / 2,
-                    (i // num_terrains_side) * terrains_size[1] - terrains_size[1] / 2,
+                    (i % num_terrains_side) * terrains_size - terrains_size / 2,
+                    (i // num_terrains_side) * terrains_size - terrains_size / 2,
                     0,
                 ]
                 for i in range(num_terrains)
@@ -55,8 +56,8 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         for i, terrain_builder in enumerate(self.terrain_builders):
             terrain_spawn_position = terrain_positions[i]
 
-            assert terrain_builder.size.equal(
-                terrains_size
+            assert (
+                terrain_builder.size == terrains_size
             ), "All terrains must have the same size"
 
             self.terrain_builds.append(
@@ -88,10 +89,16 @@ class NewtonMultiTerrainEnv(NewtonBaseEnv):
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
         self.domain_randomizer.set_initial_orientations(self.reset_newton_orientations)
 
+        Logger.info(
+            f"NewtonMultiTerrainEnv constructed with {num_terrains} terrains and {self.num_envs} agents."
+        )
+
         self._is_constructed = True
 
     def post_construct(self):
         super().post_construct()
+
+        Logger.info("NewtonMultiTerrainEnv post-constructed.")
 
         self._is_post_constructed = True
 

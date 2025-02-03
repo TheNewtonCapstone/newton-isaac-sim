@@ -1,15 +1,17 @@
-from typing import Optional
+from typing import Optional, List
+
+import numpy as np
 
 import torch
 from core.terrain.terrain import BaseTerrainBuild, BaseTerrainBuilder
 from torch import Tensor
 
 
-class FlatBaseTerrainBuild(BaseTerrainBuild):
+class FlatTerrainBuild(BaseTerrainBuild):
     def __init__(
         self,
-        size: Tensor,
-        position: Tensor,
+        size: float,
+        position: List[float],
         path: str,
     ):
         super().__init__(
@@ -22,17 +24,17 @@ class FlatBaseTerrainBuild(BaseTerrainBuild):
 
 
 # detail does not affect the flat terrain, the number of vertices is determined by the size
-class FlatBaseTerrainBuilder(BaseTerrainBuilder):
+class FlatTerrainBuilder(BaseTerrainBuilder):
     def __init__(
         self,
-        size: Tensor = None,
-        resolution: Tensor = None,
+        size: float = None,
+        grid_resolution: Tensor = None,
         height: float = 0,
         root_path: Optional[str] = None,
     ):
-        super().__init__(size, resolution, height, root_path)
+        super().__init__(size, grid_resolution, height, root_path)
 
-    def build_from_self(self, position: Tensor) -> FlatBaseTerrainBuild:
+    def build_from_self(self, position: List[float]) -> FlatTerrainBuild:
         """
         Notes:
             Resolution and height are not used for flat terrain.
@@ -40,7 +42,7 @@ class FlatBaseTerrainBuilder(BaseTerrainBuilder):
 
         return self.build(
             self.size,
-            self.resolution,
+            self.grid_resolution,
             self.height,
             position,
             self.root_path,
@@ -48,33 +50,24 @@ class FlatBaseTerrainBuilder(BaseTerrainBuilder):
 
     def build(
         self,
-        size=None,
-        resolution=None,
-        height=0,
-        position=None,
-        path=None,
-    ) -> FlatBaseTerrainBuild:
+        size,
+        grid_resolution,
+        height,
+        position,
+        path,
+    ) -> FlatTerrainBuild:
         """
         Notes:
             Resolution and height are not used for flat terrain.
         """
+        num_rows = int(size * grid_resolution[0])
+        num_cols = int(size * grid_resolution[1])
 
-        from core.globals import TERRAINS_PATH
-
-        if size is None:
-            size = [20, 20]
-        if position is None:
-            position = [0, 0, 0]
-        if path is None:
-            path = TERRAINS_PATH
-
-        heightmap = torch.tensor([[0.0] * 2] * 2)
+        heightmap = np.zeros((num_rows, num_cols))
 
         terrain_path = BaseTerrainBuilder._add_heightmap_to_world(
             heightmap,
             size,
-            2,
-            2,
             height,
             path,
             "flat",
@@ -90,7 +83,7 @@ class FlatBaseTerrainBuilder(BaseTerrainBuilder):
             restitution=0.0,
         )
 
-        return FlatBaseTerrainBuild(
+        return FlatTerrainBuild(
             size,
             position,
             terrain_path,

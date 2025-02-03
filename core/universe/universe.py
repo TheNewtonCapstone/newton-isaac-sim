@@ -7,6 +7,7 @@ from omni.isaac.kit import SimulationApp
 from pxr import Usd
 from ..base import BaseObject
 from ..globals import LIGHTS_PATH, PHYSICS_PATH
+from ..logger import Logger
 from ..types import Config, Mode
 
 
@@ -149,11 +150,7 @@ class Universe(SimulationContext):
         self.update_app_no_sim()
 
     def reset(self, soft: bool = False, construction: bool = False) -> None:
-        import omni.log
-
-        # TODO: implement proper logging, probably with a logger class and different channels for different things (
-        #  e.g. rl, physics, etc.)
-        omni.log.info("Universe reset", "newton.core.universe")
+        Logger.debug("Universe reset")
 
         # From Isaac Lab (SimulationContext): https://github.com/isaac-sim/IsaacLab/blob/main/source/extensions/omni.isaac.lab/omni/isaac/lab/sim/simulation_context.py#L423
         # perform additional rendering steps to warm up replicator buffers
@@ -173,6 +170,8 @@ class Universe(SimulationContext):
 
         if not construction:
             return
+
+        Logger.info("Constructing registered objects")
 
         # This is generally the first time the universe is being reset, let's construct all registered objects
 
@@ -322,6 +321,7 @@ class Universe(SimulationContext):
 
         # -- Gravity
         self.get_physics_context().set_gravity(-9.81)
+        Logger.info("Set gravity to -9.81 m/s^2.")
 
         # -- Global Contact Processing
         self.set_carb_setting(
@@ -368,5 +368,7 @@ class Universe(SimulationContext):
                 "restitution"
             ],
         )
+
+        Logger.info("Set additional PhysX parameters.")
 
         self.update_app_no_sim()
