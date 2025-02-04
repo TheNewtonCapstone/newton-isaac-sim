@@ -7,6 +7,7 @@ from .base_domain_randomizer import BaseDomainRandomizer
 from ..agents import NewtonBaseAgent
 from ..types import Config, Indices
 from ..universe import Universe
+from ..terrain import Terrain
 
 
 class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
@@ -16,16 +17,17 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         seed: int,
         agent: NewtonBaseAgent,
         randomizer_settings: Config,
+        terrain: Terrain,
     ):
         super().__init__(
             universe,
             seed,
             agent,
             randomizer_settings,
+            terrain,
         )
 
         self._agent: NewtonBaseAgent = agent
-
         self._rigid_prim_view: Optional[RigidPrimView] = None
         self.initial_positions: torch.Tensor = torch.zeros((1, 3))
         self.initial_orientations: torch.Tensor = torch.zeros((1, 4))

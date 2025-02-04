@@ -5,7 +5,7 @@ from ..agents import BaseAgent
 from ..base import BaseObject
 from ..types import Config, Indices
 from ..universe import Universe
-
+from ..terrain import Terrain
 
 class BaseDomainRandomizer(BaseObject):
     def __init__(
@@ -14,6 +14,7 @@ class BaseDomainRandomizer(BaseObject):
         seed: int,
         agent: BaseAgent,
         randomizer_settings: Config,
+        terrain: Terrain,
     ):
         super().__init__(universe=universe)
 
@@ -24,6 +25,8 @@ class BaseDomainRandomizer(BaseObject):
         self.randomizer_settings: Config = randomizer_settings
 
         self._time: int = 0
+
+        self.terrain: Terrain = terrain
 
     @abstractmethod
     def construct(self) -> None:
