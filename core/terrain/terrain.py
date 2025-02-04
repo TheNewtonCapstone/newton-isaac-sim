@@ -31,6 +31,7 @@ from typing import List, Optional
 
 import numpy as np
 
+import omni.isaac.core.utils.prims as prims_utils
 from .generators import (
     pyramid_sloped_terrain,
     pyramid_stairs_terrain,
@@ -63,6 +64,7 @@ class Terrain(BaseObject):
         self._num_robots: int = num_robots
         self._root_path: str = root_path
         self._terrain_path = None
+        self._terrain_prim = None
 
         self._mesh_type: str = self._terrain_config["mesh_type"]
         if self._mesh_type in ["none", "plane"]:
@@ -156,6 +158,8 @@ class Terrain(BaseObject):
                 self._slope_threshold,
                 self._terrain_position.tolist(),
             )
+
+        self._terrain_prim = prims_utils.get_prim_at_path(self._terrain_path)
 
         self._is_constructed = True
 
