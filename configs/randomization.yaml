@@ -2,59 +2,8 @@
 
 randomize: True
 randomization_params:
-  frequency: 256   # Define how many environment steps between generating new randomizations
-  color: True
-
-  # The following parameters are used to randomize the environment
-  # The values will by grouped by "on interval" or "on reset" then by the type of object they are applied to, then by the operation type.
-  twip:
-
-    ##############################
-    # DR config from chatgpt
-    ##############################
-
-    on_interval:
-      articulation_view_properties:
-        additive:
-          
-          #orientation:
-          #  range: [[-0.2, 0.2], [-0.3, 0.3], [-0.1, 0.1]]
-          #  distribution: "uniform"
-          #  setup_only: False
-          
-          velocity:
-            range: [[-0.5, 0.5], [-0.5, 0.5], [0, 0.1], [-0.05, 0.05], [-0.2, 0.2], [-0.05, 0.05]]
-            distribution: "uniform"
-            setup_only: False
-          
-        scaling:
-          body_masses:
-            range: [0.9, 1.1]
-            distribution: "uniform"
-            setup_only: False
-          
-          stiffness:
-            range: [0.9, 1.1]
-            distribution: "uniform"
-            setup_only: False
-
-          
-          
-      dof_properties:
-        scaling:
-          joint_friction:
-            range: [0.6, 1.4]
-            distribution: "uniform"
-            setup_only: False
-
-          joint_velocities:
-            range: [-0.3, 0.3]
-            distribution: "uniform"
-            setup_only: False
-
-          max_efforts:
-            range: [0.6, 1.0]
-            distribution: "uniform"
-            setup_only: False
-
-
+  friction_range: [0.5, 1.25]
+  randomize_base_mass: False
+  added_mass_range: [-1., 1.]
+  push_robots: True
+  push_force_xy: [0.5, 1.5]

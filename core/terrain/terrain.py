@@ -63,8 +63,7 @@ class Terrain(BaseObject):
         self._terrain_config: Config = terrain_config
         self._num_robots: int = num_robots
         self._root_path: str = root_path
-        self._terrain_path = None
-        self._terrain_prim = None
+        self.terrain_path = None
 
         self._mesh_type: str = self._terrain_config["mesh_type"]
         if self._mesh_type in ["none", "plane"]:
@@ -150,7 +149,7 @@ class Terrain(BaseObject):
             self._construct_curriculum()
 
         if self._mesh_type == "trimesh":
-            self._terrain_path = add_heightmap_to_world(
+            self.terrain_path = add_heightmap_to_world(
                 self._height_field,
                 self._horizontal_resolution,
                 self._vertical_resolution,
@@ -158,8 +157,6 @@ class Terrain(BaseObject):
                 self._slope_threshold,
                 self._terrain_position.tolist(),
             )
-
-        self._terrain_prim = prims_utils.get_prim_at_path(self._terrain_path)
 
         self._is_constructed = True
 
