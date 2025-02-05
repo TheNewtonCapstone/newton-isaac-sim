@@ -8,7 +8,7 @@ def random_uniform_terrain(
     terrain: SubTerrain,
     min_height: float = 0.0,
     max_height: float = 0.05,
-    step: float = 1,
+    step: float = 0.01,
     downsampled_scale: float = None,
 ) -> SubTerrain:
     """

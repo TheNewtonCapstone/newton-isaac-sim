@@ -1,7 +1,6 @@
 from typing import Optional
 
 import torch as th
-from omni.isaac.core.utils.stage import get_current_stage
 
 from . import NewtonBaseEnv
 from ..agents import NewtonBaseAgent
@@ -46,28 +45,14 @@ class NewtonTerrainEnv(NewtonBaseEnv):
     def post_construct(self):
         super().post_construct()
 
-        from core.utils.usd import get_prim_bounds
-
         self._sub_terrain_origins = th.from_numpy(self.terrain.sub_terrain_origins).to(
             self._universe.device,
             dtype=th.float32,
         )
 
-        from pxr import UsdGeom
-
-        stage = get_current_stage()
-        self._bbox_cache = UsdGeom.BBoxCache(
-            stage.GetStartTimeCode(),
-            includedPurposes=[UsdGeom.Tokens.default_],
-        )
-
-        spawn_height = abs(
-            get_prim_bounds(self.agent.path, self._bbox_cache).GetMin()[2]
-        )
-
         # Convert to the correct device
         self.reset_newton_positions = self._compute_agent_reset_positions(
-            th.ones((self.num_envs,)) * spawn_height
+            th.ones((self.num_envs,)) * self.agent.transformed_position[2]
         )
 
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
@@ -82,18 +67,6 @@ class NewtonTerrainEnv(NewtonBaseEnv):
         super().step(actions)  # advances the simulation by one step
 
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
-        from core.utils.usd import get_prim_bounds
-
-        # Calculate the spawn height of the agent (depending on the size of the agent)
-
-        spawn_height = abs(
-            get_prim_bounds(self.agent.path, self._bbox_cache).GetMin()[2]
-        )
-
-        self.reset_newton_positions = self._compute_agent_reset_positions(
-            th.ones((self.num_envs,)) * spawn_height
-        )
-
         super().reset(indices)
 
         return self.get_observations()
