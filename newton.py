@@ -942,6 +942,7 @@ def main():
         device=rl_config["device"],
         num_envs=num_envs,
         playing=playing,
+        reset_in_play=rl_config["reset_in_play"],
         max_episode_length=rl_config["episode_length"],
     )
     callback = NewtonBaseTaskCallback(
@@ -1020,6 +1021,8 @@ def main():
         save_config(randomization_config, randomizer_config_record_path)
 
         if current_checkpoint_path is not None:
+            Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
+
             model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
 
         terrain.register_self()  # we need to do it manually
@@ -1045,6 +1048,8 @@ def main():
         )  # done manually, since we're changing some default construction parameters
 
         universe.construct_registrations()
+
+        Logger.info(f"Loading checkpoint from {current_checkpoint_path} for play.")
 
         model = PPO.load(current_checkpoint_path)
 
