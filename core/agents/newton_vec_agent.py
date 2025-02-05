@@ -15,14 +15,14 @@ class NewtonVecAgent(NewtonBaseAgent):
         load_path = f"{agents_path}/Newton_0"
 
         # real path is after the transform prim (i.e. ensures the agent is spawned at the correct height)
-        self.path = f"{load_path}/_trans"
+        self.path = f"{load_path}/trans"
 
         # expression path to the base of all agents
-        self.base_path_expr = f"{agents_path}/Newton_.*/_trans/base"
+        self.base_path_expr = f"{agents_path}/Newton_.*/trans/base"
 
         # expression path to the root of all agents (i.e. right after the transform prim, basically the same as
         # self.path but as an expression)
-        transformed_path_expr = f"{agents_path}/Newton_.*/_trans"
+        transformed_path_expr = f"{agents_path}/Newton_.*/trans"
 
         import omni.isaac.core.utils.stage as stage_utils
         import omni.isaac.core.utils.prims as prim_utils
@@ -50,9 +50,9 @@ class NewtonVecAgent(NewtonBaseAgent):
             from omni.isaac.cloner import Cloner
 
             cloner = Cloner()
-            cloner.define_base_env(self.path)
+            cloner.define_base_env(load_path)
 
-            agent_paths = cloner.generate_paths(self.path[:-2], self.num_agents)
+            agent_paths = cloner.generate_paths(load_path[:-2], self.num_agents)
 
             cloner.filter_collisions(
                 prim_paths=agent_paths,
@@ -61,7 +61,7 @@ class NewtonVecAgent(NewtonBaseAgent):
                 global_paths=[TERRAINS_PATH],
             )
             cloner.clone(
-                source_prim_path=self.path,
+                source_prim_path=load_path,
                 prim_paths=agent_paths,
                 copy_from_source=True,
             )
