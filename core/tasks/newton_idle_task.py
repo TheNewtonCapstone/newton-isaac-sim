@@ -11,6 +11,8 @@ from core.tasks import NewtonBaseTask, NewtonBaseTaskCallback
 from core.types import Observations
 from core.universe import Universe
 from gymnasium.spaces import Box
+from ..archiver.archiver import Config
+from ..domain_randomizer import NewtonBaseDomainRandomizer
 
 
 class NewtonIdleTaskCallback(NewtonBaseTaskCallback):
@@ -38,6 +40,7 @@ class NewtonIdleTask(NewtonBaseTask):
         device: str,
         playing: bool,
         max_episode_length: int,
+        dr_configurations: Config,
     ):
         self.observation_space: Box = Box(
             low=np.array(
@@ -81,9 +84,20 @@ class NewtonIdleTask(NewtonBaseTask):
             self.observation_space,
             self.action_space,
             self.reward_space,
+            dr_configurations,
         )
 
         self.reset_height: float = 0.1
+        self.seed = 14321
+        # To change later on. Either move it to BaseTask or NewtonBaseTask if it's common to all tasks
+        if self.randomize:
+            self.domain_randomizer = NewtonBaseDomainRandomizer(
+                universe=universe,
+                seed=self.seed,
+                agent=agent,
+                randomizer_settings=self.dr_configurations,
+                terrain=env.terrain,
+            )
 
     def construct(self) -> None:
         super().construct()

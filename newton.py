@@ -24,7 +24,7 @@ def setup_argparser() -> argparse.ArgumentParser:
         default="configs/robots/newton.yaml",
     )
     parser.add_argument(
-        "--rl-config",
+        "--task-config",
         type=str,
         help="Path to the configuration file for RL.",
         default="configs/tasks/newton_idle_task.yaml",
@@ -377,10 +377,10 @@ def setup() -> Optional[Matter]:
     cli_args, _ = parser.parse_known_args()
 
     robot_config = load_config(cli_args.robot_config)
-    rl_config = load_config(cli_args.rl_config)
+    task_config = load_config(cli_args.task_config)
     logger_config = load_config(cli_args.logger_config)
     world_config = load_config(cli_args.world_config)
-    randomization_config = load_config(cli_args.randomization_config)
+    # randomization_config = load_config(cli_args.randomization_config)
     ros_config = load_config(cli_args.ros_config)
     db_config = load_config(cli_args.db_config)
     secrets = load_config(cli_args.secrets)
@@ -492,7 +492,7 @@ def setup() -> Optional[Matter]:
 
             new_run_id = get_unused_run_id(runs_library)
 
-        current_run_name = f"{rl_config['task_name']}_{new_run_id}"
+        current_run_name = f"{task_config['task_name']}_{new_run_id}"
 
     log_file_path = f"logs/{mode_name.lower().replace(' ', '_')}.log"
     if current_run_name:
@@ -527,7 +527,7 @@ def setup() -> Optional[Matter]:
     enable_db = db_config["enabled"]
 
     # override some config with CLI num_envs, if specified
-    num_envs = rl_config["n_envs"]
+    num_envs = task_config["n_envs"]
     if cli_args.num_envs != -1:
         num_envs = cli_args.num_envs
 
@@ -546,9 +546,8 @@ def setup() -> Optional[Matter]:
     return (
         cli_args,
         robot_config,
-        rl_config,
+        task_config,
         world_config,
-        randomization_config,
         network_config,
         network_name,
         ros_config,
@@ -593,9 +592,8 @@ def main():
     (
         cli_args,
         robot_config,
-        rl_config,
+        task_config,
         world_config,
-        randomization_config,
         network_config,
         network_name,
         ros_config,
@@ -631,9 +629,9 @@ def main():
     Logger.set_log_file_path(log_file_path)
 
     Logger.info(
-        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
+        f"Running with {num_envs} environments, {task_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
         f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
-        f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
+        f"Using {task_config['device']} as the RL device and {world_config['device']} as the physics device.",
     )
 
     import torch
@@ -775,7 +773,7 @@ def main():
 
     domain_randomizer = NewtonBaseDomainRandomizer(
         universe=universe,
-        seed=rl_config["seed"],
+        seed=task_config["seed"],
         agent=newton_agent,
         randomizer_settings=randomization_config,
     )
@@ -939,10 +937,11 @@ def main():
         env=playing_env if playing else training_env,
         agent=newton_agent,
         animation_engine=animation_engine,
-        device=rl_config["device"],
+        device=task_config["device"],
         num_envs=num_envs,
         playing=playing,
-        max_episode_length=rl_config["episode_length"],
+        max_episode_length=task_config["episode_length"],
+        dr_configurations=task_config["dr_config"],
     )
     callback = NewtonBaseTaskCallback(
         check_freq=64,
@@ -953,10 +952,10 @@ def main():
 
     # we're not exporting nor purely simulating, so we're training
     if training:
-        if rl_config["delay"]["enabled"]:
-            list_obs_delay_range = rl_config["delay"]["obs_delay_range"]
-            list_act_delay_range = rl_config["delay"]["act_delay_range"]
-            instant_rewards = rl_config["delay"]["instant_rewards"]
+        if task_config["delay"]["enabled"]:
+            list_obs_delay_range = task_config["delay"]["obs_delay_range"]
+            list_act_delay_range = task_config["delay"]["act_delay_range"]
+            instant_rewards = task_config["delay"]["instant_rewards"]
 
             obs_delay_range = range(list_obs_delay_range[0], list_obs_delay_range[1])
             act_delay_range = range(list_act_delay_range[0], list_act_delay_range[1])
@@ -974,25 +973,25 @@ def main():
         }
 
         model = PPO(
-            rl_config["policy"],
+            task_config["policy"],
             task,
             verbose=2,
-            device=rl_config["device"],
-            seed=rl_config["seed"],
-            learning_rate=float(rl_config["base_lr"]),
-            n_steps=rl_config["ppo"]["n_steps"],
-            batch_size=rl_config["ppo"]["batch_size"],
-            n_epochs=rl_config["ppo"]["n_epochs"],
-            gamma=rl_config["ppo"]["gamma"],
-            gae_lambda=rl_config["ppo"]["gae_lambda"],
-            clip_range=float(rl_config["ppo"]["clip_range"]),
-            clip_range_vf=rl_config["ppo"]["clip_range_vf"],
-            ent_coef=rl_config["ppo"]["ent_coef"],
-            vf_coef=rl_config["ppo"]["vf_coef"],
-            max_grad_norm=rl_config["ppo"]["max_grad_norm"],
-            use_sde=rl_config["ppo"]["use_sde"],
-            sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
-            target_kl=rl_config["ppo"]["target_kl"],
+            device=task_config["device"],
+            seed=task_config["seed"],
+            learning_rate=float(task_config["base_lr"]),
+            n_steps=task_config["ppo"]["n_steps"],
+            batch_size=task_config["ppo"]["batch_size"],
+            n_epochs=task_config["ppo"]["n_epochs"],
+            gamma=task_config["ppo"]["gamma"],
+            gae_lambda=task_config["ppo"]["gae_lambda"],
+            clip_range=float(task_config["ppo"]["clip_range"]),
+            clip_range_vf=task_config["ppo"]["clip_range_vf"],
+            ent_coef=task_config["ppo"]["ent_coef"],
+            vf_coef=task_config["ppo"]["vf_coef"],
+            max_grad_norm=task_config["ppo"]["max_grad_norm"],
+            use_sde=task_config["ppo"]["use_sde"],
+            sde_sample_freq=task_config["ppo"]["sde_sample_freq"],
+            target_kl=task_config["ppo"]["target_kl"],
             tensorboard_log=runs_dir,
             policy_kwargs=policy_kwargs,
         )
@@ -1002,8 +1001,8 @@ def main():
         record_directory = f"{runs_dir}/{current_run_name}_0/records"
         os.makedirs(record_directory, exist_ok=True)
 
-        rl_config_record_path = f"{record_directory}/rl_config_record.yaml"
-        save_config(rl_config, rl_config_record_path)
+        task_config_record_path = f"{record_directory}/task_config_record.yaml"
+        save_config(task_config, task_config_record_path)
 
         world_config_record_path = f"{record_directory}/world_config_record.yaml"
         save_config(world_config, world_config_record_path)
@@ -1014,20 +1013,22 @@ def main():
         network_config_record_path = f"{record_directory}/network_config_record.yaml"
         save_config(network_config, network_config_record_path)
 
-        randomizer_config_record_path = (
-            f"{record_directory}/randomizer_config_record.yaml"
-        )
-        save_config(randomization_config, randomizer_config_record_path)
+        # randomizer_config_record_path = (
+        #     f"{record_directory}/randomizer_config_record.yaml"
+        # )
+        # save_config(randomization_config, randomizer_config_record_path)
 
         if current_checkpoint_path is not None:
-            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
+            model = PPO.load(
+                current_checkpoint_path, task, device=task_config["device"]
+            )
 
         terrain.register_self()  # we need to do it manually
 
         universe.construct_registrations()
 
         model.learn(
-            total_timesteps=rl_config["timesteps_per_env"] * num_envs,
+            total_timesteps=task_config["timesteps_per_env"] * num_envs,
             tb_log_name=current_run_name,
             reset_num_timesteps=False,
             progress_bar=True,

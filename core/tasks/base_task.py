@@ -18,6 +18,7 @@ from ..base import BaseObject
 from ..envs import BaseEnv
 from ..types import Progress, Rewards, Dones, Actions, Infos
 from ..universe import Universe
+from ..archiver.archiver import Config
 
 
 class BaseTaskCallback(BaseCallback):
@@ -77,6 +78,7 @@ class BaseTask(BaseObject, VecEnv):
         observation_space: gymnasium.spaces.Space,
         action_space: gymnasium.spaces.Box,
         reward_space: gymnasium.spaces.Box,
+        dr_configurations: Config,
     ):
         BaseObject.__init__(
             self,
@@ -126,6 +128,9 @@ class BaseTask(BaseObject, VecEnv):
             device=self.device,
         )
         self.infos_buf: Infos = [{} for _ in range(self.num_envs)]
+
+        self.dr_configurations: Config = dr_configurations
+        self.randomize = dr_configurations["randomize"]
 
         self.render_mode: str = "human"
 

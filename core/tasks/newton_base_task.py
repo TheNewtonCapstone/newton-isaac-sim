@@ -13,6 +13,7 @@ from core.types import Actions
 from core.universe import Universe
 from gymnasium import Space
 from gymnasium.spaces import Box
+from ..archiver.archiver import Config
 
 
 class NewtonBaseTaskCallback(BaseTaskCallback):
@@ -102,6 +103,7 @@ class NewtonBaseTask(BaseTask):
         observation_space: Space,
         action_space: Box,
         reward_space: Box,
+        dr_configurations: Config,
     ):
 
         super().__init__(
@@ -116,6 +118,7 @@ class NewtonBaseTask(BaseTask):
             observation_space,
             action_space,
             reward_space,
+            dr_configurations,
         )
 
         self.training_env: NewtonBaseEnv = env
