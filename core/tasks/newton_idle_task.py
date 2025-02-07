@@ -208,7 +208,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         terminated_by_long_airtime = torch.logical_and(
             # less than half a second of overall airtime (all paws)
-            torch.sum(self.air_time, dim=1) > 2.0,
+            torch.sum(self.air_time, dim=1) > 5.0,
             # ensures that the agent has time to stabilize (0.5s)
             (self.progress_buf > 0.5 // self._universe.control_dt).to(self.device),
         )
@@ -256,7 +256,7 @@ class NewtonIdleTask(NewtonBaseTask):
         # when it's either terminated or truncated, the agent is done
         self.dones_buf = (
             torch.zeros_like(self.dones_buf)
-            if self.reset_in_play and self.playing
+            if not self.reset_in_play and self.playing
             else torch.logical_or(terminated, truncated)
         )
 
@@ -328,7 +328,7 @@ class NewtonIdleTask(NewtonBaseTask):
             self.last_actions_buf[1],
             weight=0.45,
         )
-        air_time_penalty = torch.sum(self.air_time - 2.0, dim=1) * 2.0
+        air_time_penalty = -torch.sum(self.air_time - 0.5, dim=1) * 2.0
         survival_reward = torch.where(
             terminated,
             0.0,

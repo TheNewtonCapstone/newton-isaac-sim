@@ -245,9 +245,8 @@ class VecJointsController(BaseObject):
         self._articulation_view.set_joint_efforts(efforts_to_apply)
 
         joints_obs_archive = {
-            "target_joint_positions_median": self.get_target_joint_positions_deg().median(),
-            "joint_positions_norm_median": self.get_normalized_joint_positions().median(),
-            "joint_positions_median": self.get_joint_positions_deg().median(),
+            "joint_positions_norm": self.get_normalized_joint_positions(),
+            "joint_positions": self.get_joint_positions_deg(),
             "joint_velocities_norm_median": self.get_normalized_joint_velocities().median(),
             "joint_velocities_median": self.get_joint_velocities_deg().median(),
             "joint_efforts_median": self.get_applied_joint_efforts().median(),
