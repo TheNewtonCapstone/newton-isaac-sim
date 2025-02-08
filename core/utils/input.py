@@ -2,7 +2,7 @@ from typing import Iterable
 
 from carb.input import KeyboardInput, GamepadEvent, GamepadInput
 
-from pxr import Gf
+import torch as th
 
 
 def is_forward_key(key: KeyboardInput) -> bool:
@@ -21,7 +21,7 @@ def is_right_key(key: KeyboardInput) -> bool:
     return key in (KeyboardInput.D, KeyboardInput.RIGHT)
 
 
-def is_right_gamepad(inpt: GamepadInput, right_stick: bool = False) -> bool:
+def is_right_gamepad(inpt: GamepadInput, right_stick: bool = True) -> bool:
     if inpt == GamepadInput.DPAD_RIGHT:
         return True
 
@@ -31,7 +31,7 @@ def is_right_gamepad(inpt: GamepadInput, right_stick: bool = False) -> bool:
         return inpt == GamepadInput.LEFT_STICK_RIGHT
 
 
-def is_left_gamepad(inpt: GamepadInput, right_stick: bool = False) -> bool:
+def is_left_gamepad(inpt: GamepadInput, right_stick: bool = True) -> bool:
     if inpt == GamepadInput.DPAD_LEFT:
         return True
 
@@ -41,7 +41,7 @@ def is_left_gamepad(inpt: GamepadInput, right_stick: bool = False) -> bool:
         return inpt == GamepadInput.LEFT_STICK_LEFT
 
 
-def is_up_gamepad(inpt: GamepadInput, right_stick: bool = False) -> bool:
+def is_up_gamepad(inpt: GamepadInput, right_stick: bool = True) -> bool:
     if inpt == GamepadInput.DPAD_UP:
         return True
 
@@ -51,7 +51,7 @@ def is_up_gamepad(inpt: GamepadInput, right_stick: bool = False) -> bool:
         return inpt == GamepadInput.LEFT_STICK_UP
 
 
-def is_down_gamepad(inpt: GamepadInput, right_stick: bool = False) -> bool:
+def is_down_gamepad(inpt: GamepadInput, right_stick: bool = True) -> bool:
     if inpt == GamepadInput.DPAD_DOWN:
         return True
 
@@ -63,34 +63,34 @@ def is_down_gamepad(inpt: GamepadInput, right_stick: bool = False) -> bool:
 
 def build_movement_keyboard_action(key: KeyboardInput):
     if is_forward_key(key):
-        return Gf.Vec2f(0, 1)
+        return th.tensor([0, 1], dtype=th.float32)
     elif is_backward_key(key):
-        return Gf.Vec2f(0, -1)
+        return th.tensor([0, -1], dtype=th.float32)
     elif is_left_key(key):
-        return Gf.Vec2f(-1, 0)
+        return th.tensor([-1, 0], dtype=th.float32)
     elif is_right_key(key):
-        return Gf.Vec2f(1, 0)
+        return th.tensor([1, 0], dtype=th.float32)
     else:
-        return Gf.Vec2f(0, 0)
+        return th.tensor([0, 0], dtype=th.float32)
 
 
-def build_movement_gamepad_action(event: GamepadEvent):
+def build_movement_gamepad_action(event: GamepadEvent, right_stick: bool = True):
     abs_val = abs(event.value)
 
-    if is_up_gamepad(event.input):
-        return Gf.Vec2f(0, 1) * abs_val
-    elif is_down_gamepad(event.input):
-        return Gf.Vec2f(0, -1) * abs_val
-    elif is_left_gamepad(event.input):
-        return Gf.Vec2f(-1, 0) * abs_val
-    elif is_right_gamepad(event.input):
-        return Gf.Vec2f(1, 0) * abs_val
+    if is_up_gamepad(event.input, right_stick):
+        return th.tensor([0, 1], dtype=th.float32) * abs_val
+    elif is_down_gamepad(event.input, right_stick):
+        return th.tensor([0, -1], dtype=th.float32) * abs_val
+    elif is_left_gamepad(event.input, right_stick):
+        return th.tensor([-1, 0], dtype=th.float32) * abs_val
+    elif is_right_gamepad(event.input, right_stick):
+        return th.tensor([1, 0], dtype=th.float32) * abs_val
     else:
-        return Gf.Vec2f(0, 0)
+        return th.tensor([0, 0], dtype=th.float32)
 
 
-def combine_movement_inputs(inputs: Iterable[Gf.Vec2f]) -> Gf.Vec2f:
-    sum_inputs = Gf.Vec2f(0, 0)
+def combine_movement_inputs(inputs: Iterable[th.Tensor]) -> th.Tensor:
+    sum_inputs = th.tensor([0, 0], dtype=th.float32)
 
     for inpt in inputs:
         sum_inputs += inpt

@@ -708,9 +708,11 @@ def main():
         fixed_joints=robot_config["joints"]["fixed"],
     )
 
+    command_controller = CommandController(universe=universe)
+
     if enable_ros:
         from core.sensors import ROSVecIMU, ROSVecContact
-        from core.controllers import ROSVecJointsController
+        from core.controllers import ROSVecJointsController, ROSCommandController
         from core.utils.ros import get_qos_profile_from_node_config
 
         namespace: str = ros_config["namespace"]
@@ -760,6 +762,25 @@ def main():
             ),
         )
 
+        command_controller_node_config: Config = ros_config["nodes"][
+            "command_controller"
+        ]
+        command_controller = ROSCommandController(
+            command_controller=command_controller,
+            node_name=command_controller_node_config["name"],
+            namespace=namespace,
+            pub_sim_topic=command_controller_node_config["pub_sim_topic"],
+            pub_real_topic=command_controller_node_config["pub_real_topic"],
+            pub_period=command_controller_node_config["pub_period"],
+            pub_qos_profile=get_qos_profile_from_node_config(
+                command_controller_node_config,
+                "pub_qos",
+                ros_config,
+            ),
+        )
+
+    command_controller.register_self()
+
     newton_agent = NewtonVecAgent(
         universe=universe,
         num_agents=num_envs,
@@ -781,8 +802,6 @@ def main():
     )
 
     terrain = Terrain(universe, terrain_config, num_envs)
-
-    command_controller = CommandController(universe=universe)
 
     # ----------- #
     #    ONNX     #

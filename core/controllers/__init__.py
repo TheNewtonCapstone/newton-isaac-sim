@@ -1,6 +1,7 @@
 # ROS2 imports
 try:
     from .ros_joints_controller import ROSVecJointsController
+    from .ros_command_controller import ROSCommandController
 except ImportError as e:
     from ..logger import Logger
 

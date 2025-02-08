@@ -40,3 +40,10 @@ nodes:
     pub_real_topic: /joints
     pub_period: 5
     pub_qos: None
+
+  command_controller:
+    name: command_controller_node
+    pub_sim_topic: /sim/command
+    pub_real_topic: /command
+    pub_period: 5
+    pub_qos: None
