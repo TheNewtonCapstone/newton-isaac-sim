@@ -5,8 +5,9 @@ seed: 14321
 
 n_envs: 2048
 timesteps_per_env: 100_000
-base_lr: 1e-6
+base_lr: 1e-3
 episode_length: 2000 # 20 seconds of real time (2000 * 0.01 = 20)
+reset_in_play: False
 
 delay:
   enabled: False

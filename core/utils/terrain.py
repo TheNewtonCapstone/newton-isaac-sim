@@ -132,7 +132,7 @@ def add_mesh_to_world(
         create_prim,
         is_prim_path_valid,
     )
-    from pxr import UsdPhysics
+    from pxr import UsdPhysics, PhysxSchema
 
     # generate an informative and unique name from the type of builder
     group_prim_path = base_path
@@ -170,5 +170,9 @@ def add_mesh_to_world(
     # ensure that we have all the necessary APIs
     collision_api = UsdPhysics.CollisionAPI.Apply(mesh_prim)
     collision_api.CreateCollisionEnabledAttr(True)
+
+    physx_collision_api = PhysxSchema.PhysxCollisionAPI.Apply(mesh_prim)
+    physx_collision_api.GetContactOffsetAttr().Set(0.02)
+    physx_collision_api.GetRestOffsetAttr().Set(0.00)
 
     return prim_path

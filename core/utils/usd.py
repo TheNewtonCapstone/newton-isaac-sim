@@ -1,5 +1,5 @@
 import re
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from pxr.UsdShade import Material
 
@@ -197,26 +197,24 @@ def get_parent_expr_path_from_expr_path(prim_path: str) -> str:
     return "/".join(prim_path.split("/")[:-1])
 
 
-def get_prim_bounds_range(
+def get_prim_bounds(
     prim_path: str,
     bbox_cache: Optional[UsdGeom.BBoxCache] = None,
 ) -> Gf.Range3d:
     """Get the extent of the prim.
 
     Args:
-        prim: The prim to get the extent of.
+        prim_path: The prim path.
+        bbox_cache: The bounding box cache to use. Defaults to None.
 
     Returns:
         The extent of the prim.
     """
 
-    import omni.timeline
-
     from pxr import UsdGeom
+    from omni.isaac.core.utils.bounds import compute_aabb
 
-    timeline = omni.timeline.get_timeline_interface()
-    stage = get_current_stage()
-    current_timecode = timeline.get_current_time()
+    current_timecode = Usd.TimeCode.Default()
 
     if bbox_cache is None:
         bbox_cache = UsdGeom.BBoxCache(
@@ -224,10 +222,13 @@ def get_prim_bounds_range(
             includedPurposes=[UsdGeom.Tokens.default_],
         )
 
-    bbox_cache.Clear()
-    bbox_cache.SetTime(current_timecode - stage.GetStartTimeCode())
+    bbox_cache.SetTime(current_timecode)
 
-    agent_prim = get_prim_at_path(prim_path)
-    bounds = bbox_cache.ComputeWorldBound(agent_prim)
+    bounds = compute_aabb(bbox_cache, prim_path, True)
 
-    return bounds.GetRange()
+    range3d = Gf.Range3d(
+        Gf.Vec3d(bounds[0], bounds[1], bounds[2]),
+        Gf.Vec3d(bounds[3], bounds[4], bounds[5]),
+    )
+
+    return range3d

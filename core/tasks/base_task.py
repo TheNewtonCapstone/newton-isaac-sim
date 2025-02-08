@@ -73,6 +73,7 @@ class BaseTask(BaseObject, VecEnv):
         num_envs: int,
         device: str,
         playing: bool,
+        reset_in_play: bool,
         max_episode_length: int,
         observation_space: gymnasium.spaces.Space,
         action_space: gymnasium.spaces.Box,
@@ -91,6 +92,7 @@ class BaseTask(BaseObject, VecEnv):
         self.name: str = name
         self.device: str = device
         self.playing: bool = playing
+        self.reset_in_play: bool = reset_in_play
 
         self.agent: BaseAgent = agent
         self.env: BaseEnv = env
