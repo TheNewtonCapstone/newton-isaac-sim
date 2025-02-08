@@ -667,7 +667,7 @@ def main():
 
     from core.sensors import VecIMU, VecContact
     from core.actuators import LSTMActuator, BaseActuator
-    from core.controllers import VecJointsController
+    from core.controllers import VecJointsController, CommandController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
     from core.terrain.terrain import Terrain, TerrainType, SubTerrainType
@@ -781,6 +781,8 @@ def main():
     )
 
     terrain = Terrain(universe, terrain_config, num_envs)
+
+    command_controller = CommandController(universe=universe)
 
     # ----------- #
     #    ONNX     #
