@@ -773,13 +773,6 @@ def main():
         clips=animation_clips_config,
     )
 
-    domain_randomizer = NewtonBaseDomainRandomizer(
-        universe=universe,
-        seed=task_config["seed"],
-        agent=newton_agent,
-        randomizer_settings=randomization_config,
-    )
-
     terrain = Terrain(universe, terrain_config, num_envs)
 
     # ----------- #
@@ -834,7 +827,6 @@ def main():
             agent=newton_agent,
             num_envs=num_envs,
             terrain=terrain,
-            domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
         )
 
@@ -888,7 +880,6 @@ def main():
             agent=newton_agent,
             num_envs=num_envs,
             terrain=terrain,
-            domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
         )
 
@@ -920,7 +911,6 @@ def main():
         agent=newton_agent,
         num_envs=num_envs,
         terrain=terrain,
-        domain_randomizer=domain_randomizer,
         inverse_control_frequency=inverse_control_frequency,
     )
 
@@ -929,7 +919,6 @@ def main():
         agent=newton_agent,
         num_envs=num_envs,
         terrain=terrain,
-        domain_randomizer=domain_randomizer,
         inverse_control_frequency=inverse_control_frequency,
     )
 
