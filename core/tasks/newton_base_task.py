@@ -14,6 +14,7 @@ from core.universe import Universe
 from gymnasium import Space
 from gymnasium.spaces import Box
 from ..archiver.archiver import Config
+from ..domain_randomizer import NewtonBaseDomainRandomizer
 
 
 class NewtonBaseTaskCallback(BaseTaskCallback):

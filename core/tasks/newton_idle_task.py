@@ -13,6 +13,7 @@ from core.universe import Universe
 from gymnasium.spaces import Box
 from ..archiver.archiver import Config
 from ..domain_randomizer import NewtonBaseDomainRandomizer
+from ..domain_randomizer.domain_randomizer_old import DomainRandomizer
 
 
 class NewtonIdleTaskCallback(NewtonBaseTaskCallback):
@@ -91,15 +92,13 @@ class NewtonIdleTask(NewtonBaseTask):
 
         self.env: NewtonBaseEnv = env
         self.reset_height: float = 0.1
-        self.seed = 14321
-        # To change later on. Either move it to BaseTask or NewtonBaseTask if it's common to all tasks
+
         if self.randomize:
-            self.domain_randomizer = NewtonBaseDomainRandomizer(
-                universe=universe,
-                seed=self.seed,
-                agent=agent,
-                randomizer_settings=self.dr_configurations,
-                terrain=env.terrain,
+            self.domain_randomizer: DomainRandomizer = DomainRandomizer(
+                universe,
+                self.num_envs,
+                self.agent.base_path_expr,
+                dr_configurations,
             )
 
     def construct(self) -> None:
@@ -127,7 +126,7 @@ class NewtonIdleTask(NewtonBaseTask):
         # creates a new np array with only the indices of the environments that are done
         resets: torch.Tensor = self.dones_buf.nonzero().squeeze(1)
         if len(resets) > 0:
-            self.env.reset(resets)
+            self.domain_randomizer.on_reset(resets)
 
         # clears the last 2 observations & the progress if any Newton is reset
         obs_buf[resets, :] = 0.0
