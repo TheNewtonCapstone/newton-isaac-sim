@@ -18,7 +18,6 @@ class NewtonTerrainEnv(NewtonBaseEnv):
         agent: NewtonBaseAgent,
         num_envs: int,
         terrain: Terrain,
-        domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
     ):
         super().__init__(
@@ -26,7 +25,6 @@ class NewtonTerrainEnv(NewtonBaseEnv):
             agent,
             num_envs,
             terrain,
-            domain_randomizer,
             inverse_control_frequency,
         )
 
@@ -49,13 +47,6 @@ class NewtonTerrainEnv(NewtonBaseEnv):
             self._universe.device,
             dtype=th.float32,
         )
-
-        # Convert to the correct device
-        self.reset_newton_positions = self._compute_agent_reset_positions(
-            th.ones((self.num_envs,)) * self.agent.transformed_position[2]
-        )
-
-        self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
 
         Logger.info(
             "NewtonTerrainEnv post-constructed and generated starting positions"

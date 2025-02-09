@@ -30,8 +30,6 @@ class BaseEnv(BaseObject):
 
         self.terrain: Terrain = terrain
 
-        self.domain_randomizer: BaseDomainRandomizer = domain_randomizer
-
     @abstractmethod
     def construct(self) -> None:
         super().construct()

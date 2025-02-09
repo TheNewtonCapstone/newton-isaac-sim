@@ -6,7 +6,6 @@ from pxr import UsdGeom
 
 from ..agents import NewtonBaseAgent
 from ..archiver import Archiver
-from ..domain_randomizer import NewtonBaseDomainRandomizer
 from .base_env import BaseEnv
 from ..terrain.terrain import Terrain
 from ..types import EnvObservations, Actions, Indices
@@ -20,7 +19,6 @@ class NewtonBaseEnv(BaseEnv):
         agent: NewtonBaseAgent,
         num_envs: int,
         terrain: Terrain,
-        domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
     ):
         super().__init__(
@@ -28,11 +26,9 @@ class NewtonBaseEnv(BaseEnv):
             agent,
             num_envs,
             terrain,
-            domain_randomizer,
         )
 
         self.agent: NewtonBaseAgent = agent
-        self.domain_randomizer: NewtonBaseDomainRandomizer = domain_randomizer
         self._bbox_cache: Optional[UsdGeom.BBoxCache] = None
         self._sub_terrain_origins: Optional[th.Tensor] = None
 
@@ -65,10 +61,6 @@ class NewtonBaseEnv(BaseEnv):
 
     @abstractmethod
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
-        self.domain_randomizer.on_reset(
-            indices
-        )  # DR should always happen before any physics reset
-
         super().reset(indices)
 
         return self.get_observations()
