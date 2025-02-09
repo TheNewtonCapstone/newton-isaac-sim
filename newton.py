@@ -380,7 +380,7 @@ def setup() -> Optional[Matter]:
     task_config = load_config(cli_args.task_config)
     logger_config = load_config(cli_args.logger_config)
     world_config = load_config(cli_args.world_config)
-    # randomization_config = load_config(cli_args.randomization_config)
+    randomization_config = load_config(cli_args.randomization_config)
     ros_config = load_config(cli_args.ros_config)
     db_config = load_config(cli_args.db_config)
     secrets = load_config(cli_args.secrets)
@@ -548,6 +548,7 @@ def setup() -> Optional[Matter]:
         robot_config,
         task_config,
         world_config,
+        randomization_config,
         network_config,
         network_name,
         ros_config,
@@ -594,6 +595,7 @@ def main():
         robot_config,
         task_config,
         world_config,
+        randomization_config,
         network_config,
         network_name,
         ros_config,
@@ -1019,9 +1021,9 @@ def main():
         # save_config(randomization_config, randomizer_config_record_path)
 
         if current_checkpoint_path is not None:
-            model = PPO.load(
-                current_checkpoint_path, task, device=task_config["device"]
-            )
+            Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
+
+            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
 
         terrain.register_self()  # we need to do it manually
 
@@ -1046,6 +1048,8 @@ def main():
         )  # done manually, since we're changing some default construction parameters
 
         universe.construct_registrations()
+
+        Logger.info(f"Loading checkpoint from {current_checkpoint_path} for play.")
 
         model = PPO.load(current_checkpoint_path)
 

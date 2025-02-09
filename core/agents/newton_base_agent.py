@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from typing import List
 
 from . import BaseAgent
 from ..archiver import Archiver
@@ -27,6 +28,7 @@ class NewtonBaseAgent(BaseAgent):
         )
 
         self.base_path_expr: str = ""
+        self.transformed_position: List[float] = [0.0, 0.0, 0.0]
 
         self.imu: VecIMU = imu
         self.joints_controller: VecJointsController = joints_controller

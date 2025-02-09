@@ -39,6 +39,7 @@ class NewtonIdleTask(NewtonBaseTask):
         num_envs: int,
         device: str,
         playing: bool,
+        reset_in_play: bool,
         max_episode_length: int,
         dr_configurations: Config,
     ):
@@ -80,6 +81,7 @@ class NewtonIdleTask(NewtonBaseTask):
             num_envs,
             device,
             playing,
+            reset_in_play,
             max_episode_length,
             self.observation_space,
             self.action_space,
@@ -87,6 +89,7 @@ class NewtonIdleTask(NewtonBaseTask):
             dr_configurations,
         )
 
+        self.env: NewtonBaseEnv = env
         self.reset_height: float = 0.1
         self.seed = 14321
         # To change later on. Either move it to BaseTask or NewtonBaseTask if it's common to all tasks
@@ -192,6 +195,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
     def _update_rewards_and_dones(self) -> None:
         obs = self.env.get_observations()
+        positions = obs["positions"]
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]
         world_gravities = obs["world_gravities"]
@@ -219,12 +223,11 @@ class NewtonIdleTask(NewtonBaseTask):
 
         terminated_by_long_airtime = torch.logical_and(
             # less than half a second of overall airtime (all paws)
-            torch.sum(self.air_time, dim=1) > 2.0,
+            torch.sum(self.air_time, dim=1) > 5.0,
             # ensures that the agent has time to stabilize (0.5s)
             (self.progress_buf > 0.5 // self._universe.control_dt).to(self.device),
         )
 
-        # base position
         base_linear_velocity_xy = linear_velocities[:, :2]
         base_linear_velocity_z = linear_velocities[:, 2]
         base_angular_velocity_xy = angular_velocities[:, :2]
@@ -263,13 +266,14 @@ class NewtonIdleTask(NewtonBaseTask):
         terminated = torch.logical_or(has_flipped, terminated_by_long_airtime)
 
         # truncated agents (i.e. they reached the max episode length)
-        truncated = torch.logical_and(
-            (self.progress_buf >= self.max_episode_length).to(self.device),
-            torch.tensor([not self.playing], device=self.device),
-        )
+        truncated = (self.progress_buf >= self.max_episode_length).to(self.device)
 
         # when it's either terminated or truncated, the agent is done
-        self.dones_buf = torch.logical_or(terminated, truncated)
+        self.dones_buf = (
+            torch.zeros_like(self.dones_buf)
+            if not self.reset_in_play and self.playing
+            else torch.logical_or(terminated, truncated)
+        )
 
         # REWARDS
 
@@ -282,17 +286,21 @@ class NewtonIdleTask(NewtonBaseTask):
             fd_second_order_squared_norm,
         )
 
-        # base position reward
+        position_reward = exp_squared_norm(
+            self.env.reset_newton_positions - positions,
+            mult=-0.5,
+            weight=0.5,
+        )
         base_orientation_reward = exp_squared_dot(
             projected_gravities_norm,
             world_gravities_norm,
             mult=-20.0,
-            weight=1.0,
+            weight=1.5,
         )
         base_linear_velocity_xy_reward = exp_squared_norm(
             base_linear_velocity_xy,
             mult=-8.0,
-            weight=1.0,
+            weight=1.5,
         )
         base_linear_velocity_z_reward = exp_squared(
             base_linear_velocity_z,
@@ -312,7 +320,7 @@ class NewtonIdleTask(NewtonBaseTask):
         joint_positions_reward = fd_first_order_squared_norm(
             joint_positions,
             animation_joint_positions,
-            weight=10.0,
+            weight=15.0,
         )
         joint_velocities_reward = fd_first_order_squared_norm(
             joint_velocities,
@@ -335,7 +343,7 @@ class NewtonIdleTask(NewtonBaseTask):
             self.last_actions_buf[1],
             weight=0.45,
         )
-        air_time_penalty = torch.sum(self.air_time - 2.0, dim=1) * 2.0
+        air_time_penalty = -torch.sum(self.air_time - 0.5, dim=1) * 2.0
         survival_reward = torch.where(
             terminated,
             0.0,
@@ -343,7 +351,8 @@ class NewtonIdleTask(NewtonBaseTask):
         )
 
         self.rewards_buf = (
-            base_orientation_reward
+            position_reward
+            + base_orientation_reward
             + base_linear_velocity_xy_reward
             + base_linear_velocity_z_reward
             + base_angular_velocity_xy_reward

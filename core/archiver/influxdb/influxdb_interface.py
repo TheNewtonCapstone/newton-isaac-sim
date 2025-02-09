@@ -23,6 +23,8 @@ class InfluxDBInterface(DBInterface):
         self._idb_client: InfluxDBClient
         self._idb_write_api: WriteApi
 
+        self._existing_buckets: set[str] = set()
+
         self._create_connection()
 
     def close(self):
@@ -70,16 +72,24 @@ class InfluxDBInterface(DBInterface):
             org=self._db_config["org"],
         )
 
-        from influxdb_client.client.write_api import SYNCHRONOUS
+        from influxdb_client.client.write_api import ASYNCHRONOUS
 
         self._idb_write_api = self._idb_client.write_api(
-            write_options=SYNCHRONOUS,
+            write_options=ASYNCHRONOUS,
         )
 
     def _does_bucket_exist(self, name: str) -> bool:
+        if name in self._existing_buckets:
+            return True
+
         buckets_api = self._idb_client.buckets_api()
 
-        return buckets_api.find_bucket_by_name(name) is not None
+        bucket_exists = buckets_api.find_bucket_by_name(name) is not None
+
+        if bucket_exists:
+            self._existing_buckets.add(name)
+
+        return bucket_exists
 
     def _create_bucket(self, name: str) -> None:
         operator_client = InfluxDBClient(
