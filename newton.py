@@ -965,6 +965,7 @@ def main():
         universe=universe,
         env=playing_env if playing else training_env,
         agent=newton_agent,
+        animation_engine=animation_engine,
         command_controller=command_controller,
         device=rl_config["device"],
         num_envs=num_envs,

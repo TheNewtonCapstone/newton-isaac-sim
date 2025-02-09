@@ -171,7 +171,11 @@ class BaseTask(BaseObject, VecEnv):
         pass
 
     def seed(self, seed: Optional[int] = None) -> Sequence[None | int]:
-        pass
+        if seed is None:
+            generator = np.random.Generator(np.random.PCG64())
+            return generator.integers(0, 2 ** 31, self.num_envs)
+
+        return [seed + i for i in range(self.num_envs)]
 
     def step_async(self, actions: Actions) -> None:
         self.actions_buf = torch.from_numpy(actions).to(self.device)

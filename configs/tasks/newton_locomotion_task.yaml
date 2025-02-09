@@ -1,7 +1,7 @@
 task_name: "newton_locomotion"
 device: "cuda"
 policy: "MlpPolicy"
-seed: 14321
+seed: 75129
 
 n_envs: 2048
 timesteps_per_env: 100_000

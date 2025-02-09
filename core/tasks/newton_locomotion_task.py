@@ -39,6 +39,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         universe: Universe,
         env: NewtonBaseEnv,
         agent: NewtonBaseAgent,
+        animation_engine: AnimationEngine,
         command_controller: CommandController,
         num_envs: int,
         device: str,
@@ -82,7 +83,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             "newton_locomotion",
             env,
             agent,
-            None,
+            animation_engine,
             command_controller,
             num_envs,
             device,
@@ -231,12 +232,14 @@ class NewtonLocomotionTask(NewtonBaseTask):
         )
         in_contact_with_ground = obs["in_contacts"]
 
+        # hasn't move much from its original position in the last 0.5s
+        #is_stagnant =
         has_flipped = projected_gravities_norm[:, 2] > 0.0
 
-        self.air_time += th.where(
+        self.air_time = th.where(
             in_contact_with_ground,
             0.0,
-            ~in_contact_with_ground * self._universe.control_dt,
+            self.air_time + ~in_contact_with_ground * self._universe.control_dt,
         )
 
         terminated_by_long_airtime = th.logical_and(
@@ -253,9 +256,20 @@ class NewtonLocomotionTask(NewtonBaseTask):
         base_angular_velocity_xy = angular_velocities[:, :2]
         base_angular_velocity_z = angular_velocities[:, 2]
 
-        # joint_accelerations
-        joint_efforts = (
-            self.agent.joints_controller.get_normalized_joint_efforts()
+        joint_positions = (
+            self.agent.joints_controller.get_normalized_joint_positions()
+        )  # [-1, 1] unitless
+
+        dof_ordered_names = self.agent.joints_controller.art_view.dof_names
+        animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
+            self.progress_buf * self._universe.control_dt,
+            dof_ordered_names,
+        )
+        # we use the joint controller here, because it contains all the required information
+        animation_joint_positions = (
+            self.agent.joints_controller.normalize_joint_positions(
+                animation_joint_data[:, :, 7]
+            ).to(device=self.device)
         )  # [-1, 1] unitless
 
         # DONES
@@ -318,11 +332,11 @@ class NewtonLocomotionTask(NewtonBaseTask):
             mult=-2,
             weight=0.5,
         )
-        joint_efforts_reward = squared_norm(
-            joint_efforts,
-            weight=0.001,
+        joint_positions_reward = fd_first_order_squared_norm(
+            joint_positions,
+            animation_joint_positions,
+            weight=5.0,
         )
-        # joint accelerations reward
         joint_action_rate_reward = fd_first_order_squared_norm(
             self.actions_buf,
             self.last_actions_buf[0],
@@ -348,7 +362,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             + base_linear_velocity_z_reward
             + base_angular_velocity_xy_reward
             + base_angular_velocity_z_reward
-            + joint_efforts_reward
+            + joint_positions_reward
             + joint_action_rate_reward
             + joint_action_acceleration_reward
             + air_time_penalty

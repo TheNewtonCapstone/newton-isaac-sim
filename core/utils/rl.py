@@ -4,34 +4,34 @@ import torch
 
 @torch.jit.script
 def squared_norm(
-    a: torch.Tensor,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     return (torch.linalg.vector_norm(a, dim=1, keepdim=False) ** 2) * weight
 
 
 @torch.jit.script
 def squared_dot(
-    a: torch.Tensor,
-    b: torch.Tensor,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        b: torch.Tensor,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     return (torch.sum(a * b, dim=1) ** 2) * weight
 
 
 @torch.jit.script
 def squared(
-    a: torch.Tensor,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        weight: float = 1.0,
 ) -> torch.Tensor:
-    return (a**2) * weight
+    return (a ** 2) * weight
 
 
 @torch.jit.script
 def fd_first_order_squared_norm(
-    a: torch.Tensor,
-    b: torch.Tensor,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        b: torch.Tensor,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     fd = a - b
     sqn = squared_norm(fd, weight)
@@ -41,10 +41,10 @@ def fd_first_order_squared_norm(
 
 @torch.jit.script
 def fd_second_order_squared_norm(
-    a: torch.Tensor,
-    b: torch.Tensor,
-    c: torch.Tensor,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        b: torch.Tensor,
+        c: torch.Tensor,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     fd = a - 2 * b + c
     sqn = squared_norm(fd, weight)
@@ -54,9 +54,9 @@ def fd_second_order_squared_norm(
 
 @torch.jit.script
 def exp_squared_norm(
-    a: torch.Tensor,
-    mult: float = 1.0,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        mult: float = 1.0,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     sqn = squared_norm(a)
     weighted_exp = torch.exp(mult * sqn) * weight
@@ -66,10 +66,10 @@ def exp_squared_norm(
 
 @torch.jit.script
 def exp_squared_dot(
-    a: torch.Tensor,
-    b: torch.Tensor,
-    mult: float = 1.0,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        b: torch.Tensor,
+        mult: float = 1.0,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     sqd = squared_dot(a, b)
     weighted_exp = torch.exp(mult * sqd) * weight
@@ -79,9 +79,9 @@ def exp_squared_dot(
 
 @torch.jit.script
 def exp_squared(
-    a: torch.Tensor,
-    mult: float = 1.0,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        mult: float = 1.0,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     sq = squared(a)
     weighted_exp = torch.exp(mult * sq) * weight
@@ -91,10 +91,10 @@ def exp_squared(
 
 @torch.jit.script
 def exp_fd_first_order_squared_norm(
-    a: torch.Tensor,
-    b: torch.Tensor,
-    mult: float = 1.0,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        b: torch.Tensor,
+        mult: float = 1.0,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     fd_sqn = fd_first_order_squared_norm(a, b)
     weighted_exp = torch.exp(mult * fd_sqn) * weight
@@ -104,11 +104,11 @@ def exp_fd_first_order_squared_norm(
 
 @torch.jit.script
 def exp_fd_second_order_squared_norm(
-    a: torch.Tensor,
-    b: torch.Tensor,
-    c: torch.Tensor,
-    mult: float = 1.0,
-    weight: float = 1.0,
+        a: torch.Tensor,
+        b: torch.Tensor,
+        c: torch.Tensor,
+        mult: float = 1.0,
+        weight: float = 1.0,
 ) -> torch.Tensor:
     fd_sqn = fd_second_order_squared_norm(a, b, c)
     weighted_exp = torch.exp(mult * fd_sqn) * weight
@@ -121,9 +121,10 @@ def kl_based_adaptive_lr(
     current_lr: float,
     current_kl: float,
     target_kl: float,
+    start_lr: float = 1e-3,
 ) -> float:
     if target_kl is None:
-        return 3e-5
+        return start_lr  # starting lr
 
     if isinstance(target_kl, np.ndarray):
         target_kl = target_kl.item()
