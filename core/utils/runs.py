@@ -104,6 +104,7 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
 
         run_settings[run_name] = {
             "id": run_id,
+            "name": run_name,
             "date": date,
             "path": f"{runs_folder}/{run_folder}",
             "count": count,
@@ -113,8 +114,10 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
     return dict(sorted(run_settings.items()))
 
 
-def get_unused_run_id(runs_library: Config) -> Optional[int]:
-    run_ids = [run["id"] for run in runs_library.values()]
+def get_unused_run_id(runs_library: Config, task_name: str) -> Optional[int]:
+    run_ids = [
+        run["id"] for run in runs_library.values() if run["name"].startswith(task_name)
+    ]
 
     if len(run_ids) == 0:
         return None

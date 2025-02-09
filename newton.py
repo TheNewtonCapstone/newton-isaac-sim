@@ -485,14 +485,17 @@ def setup() -> Optional[Matter]:
             create_runs_library,
         )
 
-        new_run_id = get_unused_run_id(runs_library)
+        new_run_id = get_unused_run_id(runs_library, rl_config["task_name"])
 
         if new_run_id is None:
             runs_library = create_runs_library(runs_dir)
 
-            new_run_id = get_unused_run_id(runs_library)
+            new_run_id = get_unused_run_id(runs_library, rl_config["task_name"])
 
-        current_run_name = f"{rl_config['task_name']}_{new_run_id}"
+            if new_run_id is None:
+                new_run_id = 0
+
+        current_run_name = f"{rl_config['task_name']}_{new_run_id:03}"
 
     log_file_path = f"logs/{mode_name.lower().replace(' ', '_')}.log"
     if current_run_name:
@@ -779,8 +782,6 @@ def main():
             ),
         )
 
-    command_controller.register_self()
-
     newton_agent = NewtonVecAgent(
         universe=universe,
         num_agents=num_envs,
@@ -933,7 +934,12 @@ def main():
     #     RL      #
     # ----------- #
 
-    from core.tasks import NewtonIdleTask, NewtonBaseTaskCallback
+    from core.tasks import (
+        NewtonIdleTask,
+        NewtonLocomotionTask,
+        NewtonBaseTaskCallback,
+        NewtonLocomotionTaskCallback,
+    )
     from core.wrappers import RandomDelayWrapper
 
     training_env = NewtonTerrainEnv(
@@ -955,11 +961,11 @@ def main():
     )
 
     # task used for either training or playing
-    task = NewtonIdleTask(
+    task = NewtonLocomotionTask(
         universe=universe,
         env=playing_env if playing else training_env,
         agent=newton_agent,
-        animation_engine=animation_engine,
+        command_controller=command_controller,
         device=rl_config["device"],
         num_envs=num_envs,
         playing=playing,
@@ -995,13 +1001,15 @@ def main():
             "net_arch": network_config["net_arch"],
         }
 
+        from core.utils.rl import kl_based_adaptive_lr
+
         model = PPO(
             rl_config["policy"],
             task,
             verbose=2,
             device=rl_config["device"],
             seed=rl_config["seed"],
-            learning_rate=float(rl_config["base_lr"]),
+            learning_rate=kl_based_adaptive_lr,
             n_steps=rl_config["ppo"]["n_steps"],
             batch_size=rl_config["ppo"]["batch_size"],
             n_epochs=rl_config["ppo"]["n_epochs"],
@@ -1015,6 +1023,7 @@ def main():
             use_sde=rl_config["ppo"]["use_sde"],
             sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
             target_kl=rl_config["ppo"]["target_kl"],
+            stop_on_excessive_kl=rl_config["ppo"]["stop_on_excessive_kl"],
             tensorboard_log=runs_dir,
             policy_kwargs=policy_kwargs,
         )
@@ -1080,6 +1089,9 @@ def main():
         while universe.is_playing:
             step_return = task.step(actions)
             observations = step_return[0]
+
+            observations[0, 59] = 0.0
+            observations[0, 60] = 1.0
 
             actions = model.predict(observations, deterministic=True)[0]
 

@@ -7,6 +7,7 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepR
 
 from core.agents import NewtonBaseAgent
 from core.animation import AnimationEngine
+from core.controllers import CommandController
 from core.envs.newton_base_env import NewtonBaseEnv
 from core.tasks.base_task import BaseTask, BaseTaskCallback
 from core.types import Actions
@@ -94,7 +95,8 @@ class NewtonBaseTask(BaseTask):
         name: str,
         env: NewtonBaseEnv,
         agent: NewtonBaseAgent,
-        animation_engine: AnimationEngine,
+        animation_engine: Optional[AnimationEngine],
+        command_controller: Optional[CommandController],
         num_envs: int,
         device: str,
         playing: bool,
@@ -123,7 +125,9 @@ class NewtonBaseTask(BaseTask):
         self.training_env: NewtonBaseEnv = env
         self.agent: NewtonBaseAgent = agent
 
-        self.animation_engine: AnimationEngine = animation_engine
+        self.animation_engine: Optional[AnimationEngine] = animation_engine
+        self.command_controller: Optional[CommandController] = command_controller
+
         self.air_time: th.Tensor = th.zeros(
             (self.num_envs, 4),
             device=self.device,
@@ -140,7 +144,11 @@ class NewtonBaseTask(BaseTask):
 
         self.env.register_self()
 
-        self.animation_engine.register_self(self.name)
+        if self.animation_engine:
+            self.animation_engine.register_self(self.name)
+
+        if self.command_controller:
+            self.command_controller.register_self()
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:
