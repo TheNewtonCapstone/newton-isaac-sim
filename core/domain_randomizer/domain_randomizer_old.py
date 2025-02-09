@@ -1,8 +1,15 @@
 import numpy as np
 
+from core.base import BaseObject
 
-class DomainRandomizer:
-    def __init__(self, world, num_envs, twip_art_view, randomization_params):
+
+class DomainRandomizer(BaseObject):
+    def __init__(self, universe, num_envs, art_path, dr_configuration):
+        super().__init__(universe)
+
+        # Pass the universe instead of the universe
+        # Pass the art_path from vec_agent
+        # Creat the articulation view from the art_path
 
         import omni.replicator.isaac as dr
         import omni.replicator.core as rep
@@ -10,12 +17,15 @@ class DomainRandomizer:
         self.dr = dr
         self.rep = rep
 
-        self.world = world
+        self.universe = universe
         self.num_envs = num_envs
-        self.twip_art_view = twip_art_view
-        self.randomization_params = randomization_params
-        self.frequency = randomization_params.get("frequency", 1)
-        self.domain_params = randomization_params.get("twip", {})
+        self.art_path = art_path
+        self.randomize = dr_configuration.get("randomize", False)
+        self.dr_configuration = dr_configuration["randomization_params"]
+        self.frequency = self.dr_configuration.get("frequency", 1)
+        # self.domain_params = self.dr_configuration.get("twip", {})
+
+        self.twip_art_view = self.dr.physics_view.create_articulation_view()
 
         self.num_dof = self.twip_art_view.num_dof
         self.rigid_body_names = self.twip_art_view.body_names
@@ -24,16 +34,22 @@ class DomainRandomizer:
         self.on_interval_properties = {}
         self.on_reset_properties = {}
 
-        self.format_randomization_params()
+        self.format_dr_configuration()
 
         self.frame_idx = 0
 
         # Register the simulation context and articulation view
-        self.dr.physics_view.register_simulation_context(self.world)
+        self.dr.physics_view.register_simulation_context(self.universe)
         self.dr.physics_view.register_articulation_view(self.twip_art_view)
         print("Registered simulation context and articulation view")
 
-    def format_randomization_params(self):
+    def construct(self):
+        self._is_constructed = True
+
+    def post_construct(self):
+        self._is_post_constructed = True
+
+    def format_dr_configuration(self):
         def process_property(distribution, range_values, body_type):
             range_str = self.get_randomization_range(range_values)
 
