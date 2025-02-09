@@ -180,8 +180,8 @@ def task_select():
 
 
 def animation_select(
-    animation_config_dir: str,
-    current_animation_name: Optional[str],
+        animation_config_dir: str,
+        current_animation_name: Optional[str],
 ) -> Optional[Tuple[ConfigCollection, str]]:
     from core.utils.path import get_files_with_extension
     from core.utils.config import animation_configs_to_clips_config
@@ -233,9 +233,9 @@ def animation_select(
 
 
 def checkpoint_select(
-    runs_dir: str,
-    current_run_name: Optional[str],
-    required: bool,
+        runs_dir: str,
+        current_run_name: Optional[str],
+        required: bool,
 ) -> Optional[Tuple[Config, str, str]]:
     from core.utils.runs import (
         save_runs_library,
@@ -294,8 +294,8 @@ def checkpoint_select(
 
 
 def network_arch_select(
-    network_config_file_path: str,
-    network_name: Optional[str],
+        network_config_file_path: str,
+        network_name: Optional[str],
 ) -> Optional[Tuple[Config, str]]:
     from bullet import Bullet
 
@@ -411,7 +411,7 @@ def setup() -> Optional[Matter]:
         )
         return None
     elif (
-        none_selected
+            none_selected
     ):  # we need a mode to start, so we ask the user to select one interactively
         mode_name, mode_idx = mode_select(list(modes.keys()))
 
@@ -460,9 +460,9 @@ def setup() -> Optional[Matter]:
         return None
 
     if (
-        (training or playing or exporting)
-        and current_checkpoint_path is None
-        and not no_checkpoint
+            (training or playing or exporting)
+            and current_checkpoint_path is None
+            and not no_checkpoint
     ):
         checkpoint_select_result = checkpoint_select(
             runs_dir,
@@ -521,10 +521,10 @@ def setup() -> Optional[Matter]:
 
     is_rl = training or playing
     headless = (
-        cli_args.headless or cli_args.export_onnx
+            cli_args.headless or cli_args.export_onnx
     )  # if we're exporting, don't show the GUI
     interactive = not headless and (
-        physics_only or playing or animating
+            physics_only or playing or animating
     )  # interactive means that the user is expected to control the agent in some way
     enable_ros = ros_config["enabled"]
     enable_db = db_config["enabled"]
@@ -827,8 +827,8 @@ def main():
                 self.policy = policy
 
             def forward(
-                self,
-                observation: torch.Tensor,
+                    self,
+                    observation: torch.Tensor,
             ):
                 return self.policy(observation, deterministic=True)
 
@@ -977,8 +977,6 @@ def main():
         save_path=current_run_name,
     )
 
-    from stable_baselines3 import PPO
-
     # we're not exporting nor purely simulating, so we're training
     if training:
         if rl_config["delay"]["enabled"]:
@@ -996,37 +994,43 @@ def main():
                 instant_rewards=instant_rewards,
             )
 
-        policy_kwargs = {
-            "activation_fn": network_config["activation_fn"],
-            "net_arch": network_config["net_arch"],
-        }
+        from tianshou.highlevel.experiment import PPOExperimentBuilder
+        from tianshou.highlevel.config import SamplingConfig
 
-        from core.utils.rl import kl_based_adaptive_lr
-
-        model = PPO(
-            rl_config["policy"],
-            task,
-            verbose=2,
-            device=rl_config["device"],
-            seed=rl_config["seed"],
-            learning_rate=kl_based_adaptive_lr,
-            n_steps=rl_config["ppo"]["n_steps"],
-            batch_size=rl_config["ppo"]["batch_size"],
-            n_epochs=rl_config["ppo"]["n_epochs"],
-            gamma=rl_config["ppo"]["gamma"],
-            gae_lambda=rl_config["ppo"]["gae_lambda"],
-            clip_range=float(rl_config["ppo"]["clip_range"]),
-            clip_range_vf=rl_config["ppo"]["clip_range_vf"],
-            ent_coef=rl_config["ppo"]["ent_coef"],
-            vf_coef=rl_config["ppo"]["vf_coef"],
-            max_grad_norm=rl_config["ppo"]["max_grad_norm"],
-            use_sde=rl_config["ppo"]["use_sde"],
-            sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
-            target_kl=rl_config["ppo"]["target_kl"],
-            stop_on_excessive_kl=rl_config["ppo"]["stop_on_excessive_kl"],
-            tensorboard_log=runs_dir,
-            policy_kwargs=policy_kwargs,
+        sampling_config = SamplingConfig(
+            num_epochs=rl_config["timesteps_per_env"],
+            step_per_epoch=rl_config["ppo"]["n_epochs"],
+            batch_size=rl_config["ppo"]["batch_size"] // 16,
+            num_train_envs=num_envs,
+            num_test_envs=1,
+            buffer_size=rl_config["ppo"]["batch_size"],
+            step_per_collect=rl_config["ppo"]["n_steps"],
+            repeat_per_collect=1,
         )
+
+        from gymnasium import Env
+        from tianshou.highlevel.env import EnvMode, VectorEnvType, EnvFactory
+
+        class TaskFactory(EnvFactory):
+            def create_env(self, mode: EnvMode) -> Env:
+                return task
+
+        from tianshou.highlevel.params.policy_params import PPOParams
+        experiment = (PPOExperimentBuilder(
+            env_factory=TaskFactory(venv_type=VectorEnvType.DUMMY),
+            experiment_config=None,
+            sampling_config=sampling_config,
+        ).with_ppo_params(
+            PPOParams(
+                discount_factor=rl_config["ppo"]["gamma"],
+                gae_lambda=rl_config["ppo"]["gae_lambda"],
+                lr=rl_config["ppo"]["learning_rate"],
+                ent_coef=rl_config["ppo"]["ent_coef"],
+                vf_coef=rl_config["ppo"]["vf_coef"],
+                max_grad_norm=rl_config["ppo"]["max_grad_norm"],
+                advantage_normalization=rl_config["ppo"]["normalize_advantage"],
+            )
+        ).with_actor_factory_default(hidden_sizes=[512, 256, 128], hidden_activation=torch.nn.ReLU, continuous_unbounded=True).with_critic_factory_default(hidden_sizes=[512, 256, 128], hidden_activation=torch.nn.ReLU).build())
 
         from core.utils.config import save_config
 
@@ -1053,22 +1057,16 @@ def main():
         if current_checkpoint_path is not None:
             Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
 
-            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
+            # model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
 
         terrain.register_self()  # we need to do it manually
 
         universe.construct_registrations()
 
-        model.learn(
-            total_timesteps=rl_config["timesteps_per_env"] * num_envs,
-            tb_log_name=current_run_name,
-            reset_num_timesteps=False,
-            progress_bar=True,
-            callback=callback,
-        )
-        model.save(f"{runs_dir}/{current_run_name}_0/model.zip")
+        experiment.run(run_name=current_run_name)
+        experiment.save(directory=record_directory)
 
-        exit(1)
+        return
 
     if playing:
         terrain.register_self(
