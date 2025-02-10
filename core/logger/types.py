@@ -12,7 +12,7 @@ class LogLevel(IntFlag):
 
 class LogOutput(IntFlag):
     None_ = 0
-    OmniConsole = auto()
+    CarbConsole = auto()
     File = auto()
-    FileAndOmni = OmniConsole | File
-    All = OmniConsole | File
+    FileAndOmni = CarbConsole | File
+    All = CarbConsole | File
