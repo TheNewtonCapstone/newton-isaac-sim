@@ -47,15 +47,22 @@ JointEffort = float
 JointSaturation = float
 
 # RL
+Observations = torch.Tensor
 Actions = torch.Tensor
 Rewards = torch.Tensor
 Dones = torch.Tensor
-Progress = torch.Tensor
-
-Infos = List[Dict[str, Any]]
+EpisodeLength = torch.Tensor
 
 EnvObservations = Dict[str, torch.Tensor]
-Observations = torch.Tensor
+
+
+class Extras(TypedDict):
+    observations: EnvObservations
+
+
+StepReturn = Tuple[Observations, Rewards, Dones, Extras]
+ResetReturn = Tuple[Observations, Extras]
+TaskObservations = Tuple[Observations, Extras]
 
 # Math
 NoiseFunction = Callable[[torch.Tensor], torch.Tensor]

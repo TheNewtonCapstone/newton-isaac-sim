@@ -3,15 +3,14 @@ from typing import Optional
 
 import numpy as np
 import torch as th
-from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
 
-from core.agents import NewtonBaseAgent
-from core.animation import AnimationEngine
-from core.controllers import CommandController
-from core.envs.newton_base_env import NewtonBaseEnv
-from core.tasks.base_task import BaseTask, BaseTaskCallback
-from core.types import Actions
-from core.universe import Universe
+from ..agents import NewtonBaseAgent
+from ..animation import AnimationEngine
+from ..controllers import CommandController
+from ..envs import NewtonBaseEnv
+from .base_task import BaseTask, BaseTaskCallback
+from ..types import Actions, StepReturn, ResetReturn
+from ..universe import Universe
 from gymnasium import Space
 from gymnasium.spaces import Box
 
@@ -46,9 +45,9 @@ class NewtonBaseTaskCallback(BaseTaskCallback):
         # Saves best cumulative rewards
         if can_check:
             self.cumulative_rewards = th.where(
-                task.dones_buf,
-                th.zeros_like(task.rewards_buf),
-                self.cumulative_rewards + task.rewards_buf,
+                task.reset_buf,
+                th.zeros_like(task.rew_buf),
+                self.cumulative_rewards + task.rew_buf,
             )
 
         if (
@@ -150,12 +149,15 @@ class NewtonBaseTask(BaseTask):
         if self.command_controller:
             self.command_controller.register_self()
 
-    @abstractmethod
-    def step_wait(self) -> VecEnvStepReturn:
-        self.progress_buf += 1
-
-        return super().step_wait()
+    def post_construct(self):
+        super().post_construct()
 
     @abstractmethod
-    def reset(self) -> VecEnvObs:
+    def step(self, actions: Actions) -> StepReturn:
+        self.episode_length_buf += 1
+
+        return super().step(actions)
+
+    @abstractmethod
+    def reset(self) -> ResetReturn:
         return super().reset()

@@ -3,7 +3,7 @@ from typing import Dict, Optional, List
 import torch
 from core.types import (
     Config,
-    Progress,
+    EpisodeLength,
 )
 from .types import AnimationClip, Keyframe, BoneData, ArmatureData
 from ..base import BaseObject
@@ -104,7 +104,7 @@ class AnimationEngine(BaseObject):
 
     def get_multiple_clip_data_at_seconds(
         self,
-        seconds: Progress,
+        seconds: EpisodeLength,
         joints_order: List[str],
         interpolate: bool = True,
     ) -> torch.Tensor:
@@ -153,7 +153,7 @@ class AnimationEngine(BaseObject):
     def get_clip_data_at_seconds(
         self,
         clip_name: str,
-        second: Progress,
+        second: EpisodeLength,
         interpolate: bool = True,
     ) -> List[ArmatureData]:
         """

@@ -499,7 +499,7 @@ def setup() -> Optional[Matter]:
 
     log_file_path = f"logs/{mode_name.lower().replace(' ', '_')}.log"
     if current_run_name:
-        log_file_path = f"{runs_dir}/{current_run_name}_0/{current_run_name}.log"
+        log_file_path = f"{runs_dir}/{current_run_name}/{current_run_name}.log"
 
     # Network config
 
@@ -1002,6 +1002,60 @@ def main():
             "net_arch": network_config["net_arch"],
         }
 
+        from rsl_rl.runners import OnPolicyRunner
+
+        config = {
+            "algorithm": {
+                "class_name": "PPO",
+                "value_loss_coef": 1.0,
+                "clip_param": 0.2,
+                "use_clipped_value_loss": True,
+                "desired_kl": 0.01,
+                "entropy_coef": 0.01,
+                "gamma": 0.99,
+                "lam": 0.95,
+                "max_grad_norm": 1.0,
+                "learning_rate": 0.001,
+                "num_learning_epochs": 5,
+                "num_mini_batches": 4,
+                "schedule": "adaptive"
+            },
+            "policy": {
+                "class_name": "ActorCritic",
+                "activation": "relu",
+                "actor_hidden_dims": [512, 256, 128],
+                "critic_hidden_dims": [512, 256, 128],
+                "init_noise_std": 1.0
+            },
+            "runner": {
+                "max_iterations": 1500,
+                "experiment_name": task.name,
+                "run_name": current_run_name,
+                "logger": "tensorboard",
+                "neptune_project": "newton",
+                "wandb_project": "newton",
+                "resume": False,
+                "load_run": -1,
+                "resume_path": None,
+                "checkpoint": -1
+            },
+            "empirical_normalization": False,
+            "save_interval": 50,
+            "num_steps_per_env": 24,
+            "runner_class_name": "OnPolicyRunner",
+            "seed": rl_config["seed"],
+        }
+        terrain.register_self()  # we need to do it manually
+
+        universe.construct_registrations()
+
+        runner = OnPolicyRunner(env=task, device=rl_config["device"], log_dir=f"{runs_dir}/{current_run_name}", train_cfg=config,)
+        runner.add_git_repo_to_log(__file__)
+
+        runner.learn(num_learning_iterations=1500, init_at_random_ep_len=True)
+
+        return
+
         from core.utils.rl import kl_based_adaptive_lr
 
         model = PPO(
@@ -1082,21 +1136,69 @@ def main():
 
         Logger.info(f"Loading checkpoint from {current_checkpoint_path} for play.")
 
-        model = PPO.load(current_checkpoint_path)
+        from rsl_rl.runners import OnPolicyRunner
 
-        actions = model.predict(task.reset()[0], deterministic=True)[0]
-        actions = np.array([actions])  # make sure we have a 2D tensor
+        config = {
+            "algorithm": {
+                "class_name": "PPO",
+                "value_loss_coef": 1.0,
+                "clip_param": 0.2,
+                "use_clipped_value_loss": True,
+                "desired_kl": 0.01,
+                "entropy_coef": 0.01,
+                "gamma": 0.99,
+                "lam": 0.95,
+                "max_grad_norm": 1.0,
+                "learning_rate": 0.001,
+                "num_learning_epochs": 5,
+                "num_mini_batches": 4,
+                "schedule": "adaptive"
+            },
+            "policy": {
+                "class_name": "ActorCritic",
+                "activation": "relu",
+                "actor_hidden_dims": [512, 256, 128],
+                "critic_hidden_dims": [512, 256, 128],
+                "init_noise_std": 1.0
+            },
+            "runner": {
+                "max_iterations": 1500,
+                "experiment_name": task.name,
+                "run_name": current_run_name,
+                "logger": "tensorboard",
+                "neptune_project": "newton",
+                "wandb_project": "newton",
+                "resume": False,
+                "load_run": -1,
+                "resume_path": None,
+                "checkpoint": -1
+            },
+            "empirical_normalization": False,
+            "save_interval": 10,
+            "num_steps_per_env": 24,
+            "runner_class_name": "OnPolicyRunner",
+            "seed": rl_config["seed"],
+        }
+        terrain.register_self()  # we need to do it manually
+
+        universe.construct_registrations()
+
+        runner = OnPolicyRunner(env=task, device=rl_config["device"], log_dir=None, train_cfg=config,)
+        runner.load(current_checkpoint_path)
+
+        model = runner.get_inference_policy(device=rl_config["device"])
+
+        obs, _ = task.reset()
 
         while universe.is_playing:
-            step_return = task.step(actions)
-            observations = step_return[0]
+            with torch.inference_mode():
+                actions = model(obs)
+                obs, _, _, _ = task.step(actions)
 
-            observations[0, 59] = 0.0
-            observations[0, 60] = 1.0
+                obs[:, 57] = command_controller.last_action[0]
+                obs[:, 58] = command_controller.last_action[1]
 
-            actions = model.predict(observations, deterministic=True)[0]
-
-        exit(1)
+        return
 
 
 if __name__ == "__main__":

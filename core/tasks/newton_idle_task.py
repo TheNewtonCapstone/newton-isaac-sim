@@ -98,8 +98,8 @@ class NewtonIdleTask(NewtonBaseTask):
 
         self._is_post_constructed = True
 
-    def step_wait(self) -> VecEnvStepReturn:
-        super().step_wait()
+    def step(self) -> VecEnvStepReturn:
+        super().step()
 
         self.env.step(self.actions_buf)
 
@@ -117,19 +117,19 @@ class NewtonIdleTask(NewtonBaseTask):
 
         # clears the last 2 observations & the progress if any Newton is reset
         obs_buf[resets, :] = 0.0
-        self.progress_buf[resets] = 0
+        self.episode_length_buf[resets] = 0
         self.last_actions_buf[:, resets, :] = 0.0
 
         for i in range(self.num_envs):
-            self.infos_buf[i] = {
-                "TimeLimit.truncated": self.progress_buf[i] >= self.max_episode_length
+            self.extras[i] = {
+                "TimeLimit.truncated": self.episode_length_buf[i] >= self.max_episode_length
             }
 
         return (
             obs_buf.cpu().numpy(),
             self.rewards_buf.cpu().numpy(),
             self.dones_buf.cpu().numpy(),
-            self.infos_buf,
+            self.extras,
         )
 
     def reset(self) -> VecEnvObs:
@@ -145,10 +145,10 @@ class NewtonIdleTask(NewtonBaseTask):
     def _get_observations(self) -> Observations:
         obs = self.env.get_observations()
 
-        phase_signal = self.progress_buf / self.max_episode_length
+        phase_signal = self.episode_length_buf / self.max_episode_length
 
         obs_buf: Observations = torch.zeros(
-            (self.num_envs, self.num_observations),
+            (self.num_envs, self.num_obs),
             dtype=torch.float32,
         )
         obs_buf[:, :3] = obs["projected_gravities"]
@@ -211,7 +211,7 @@ class NewtonIdleTask(NewtonBaseTask):
             # less than half a second of overall airtime (all paws)
             torch.sum(self.air_time, dim=1) > 5.0,
             # ensures that the agent has time to stabilize (0.5s)
-            (self.progress_buf > 0.5 // self._universe.control_dt).to(self.device),
+            (self.episode_length_buf > 0.5 // self._universe.control_dt).to(self.device),
         )
 
         base_linear_velocity_xy = linear_velocities[:, :2]
@@ -231,7 +231,7 @@ class NewtonIdleTask(NewtonBaseTask):
         )  # [-1, 1] unitless
 
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
-            self.progress_buf * self._universe.control_dt,
+            self.episode_length_buf * self._universe.control_dt,
             dof_ordered_names,
         )
         # we use the joint controller here, because it contains all the required information
@@ -252,11 +252,11 @@ class NewtonIdleTask(NewtonBaseTask):
         terminated = torch.logical_or(has_flipped, terminated_by_long_airtime)
 
         # truncated agents (i.e. they reached the max episode length)
-        truncated = (self.progress_buf >= self.max_episode_length).to(self.device)
+        truncated = (self.episode_length_buf >= self.max_episode_length).to(self.device)
 
         # when it's either terminated or truncated, the agent is done
         self.dones_buf = (
-            torch.zeros_like(self.dones_buf)
+            torch.zeros_like(self.reset_buf)
             if not self.reset_in_play and self.playing
             else torch.logical_or(terminated, truncated)
         )

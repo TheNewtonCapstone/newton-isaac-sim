@@ -1,7 +1,6 @@
 from typing import Optional
 
 import numpy as np
-from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
 
 import torch as th
 from core.agents import NewtonBaseAgent
@@ -9,7 +8,7 @@ from core.animation import AnimationEngine
 from core.controllers import CommandController
 from core.envs import NewtonBaseEnv
 from core.tasks import NewtonBaseTask, NewtonBaseTaskCallback
-from core.types import Observations
+from core.types import Observations, StepReturn, TaskObservations, ResetReturn
 from core.universe import Universe
 from gymnasium.spaces import Box
 
@@ -56,6 +55,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
                 + [-1.0] * 24  # for the previous 2 actions
                 + [-1.0] * 2  # for the transformed phase signal
                 + [-1.0] * 2,  # for the velocity command
+                dtype=np.float32,
             ),
             high=np.array(
                 [10.0] * 3  # for the projected gravity
@@ -65,17 +65,20 @@ class NewtonLocomotionTask(NewtonBaseTask):
                 + [1.0] * 24  # for the previous 2 actions
                 + [1.0] * 2  # for the transformed phase signal
                 + [1.0] * 2,  # for the velocity command
+                dtype=np.float32,
             ),
         )
 
         self.action_space: Box = Box(
             low=np.array([-1.0] * 12),
             high=np.array([1.0] * 12),
+            dtype=np.float32,
         )
 
         self.reward_space: Box = Box(
             low=np.array([-1.0]),
             high=np.array([1.0]),
+            dtype=np.float32,
         )
 
         super().__init__(
@@ -119,17 +122,17 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         self._is_post_constructed = True
 
-    def step_wait(self) -> VecEnvStepReturn:
-        super().step_wait()
+    def step(self, actions) -> StepReturn:
+        super().step(actions)
 
-        self.env.step(self.actions_buf)
+        self.env.step(actions)
 
-        obs_buf = self._get_observations()
+        self._update_observations_and_extras()
         self._update_rewards_and_dones()
 
         # only now can we save the actions (after gathering observations & rewards)
         self.last_actions_buf[1, :, :] = self.last_actions_buf[0, :, :]
-        self.last_actions_buf[0, :, :] = self.actions_buf.clone()
+        self.last_actions_buf[0, :, :] = actions.clone()
 
         # re-compute where the agents are supposed to be, based on the current command velocities
         self.predicted_base_positions_xy += (
@@ -137,83 +140,70 @@ class NewtonLocomotionTask(NewtonBaseTask):
         )
 
         # creates a new np array with only the indices of the environments that are done
-        resets: th.Tensor = self.dones_buf.nonzero().squeeze(1)
+        resets: th.Tensor = self.reset_buf.nonzero().squeeze(1)
         if len(resets) > 0:
             self.env.reset(resets)
 
         # clears the last 2 observations, the progress & the predicted positions if any Newton is reset
-        obs_buf[resets, :] = 0.0
-        self.progress_buf[resets] = 0
+        self.obs_buf[resets, :] = 0.0
+        self.episode_length_buf[resets] = 0
         self.last_actions_buf[:, resets, :] = 0.0
 
-        self._update_velocity_commands(resets)
+        if self._universe.current_time_step_index % 250 == 0:
+            self._update_velocity_commands()
+        else:
+            self._update_velocity_commands(resets)
+
         self.predicted_base_positions_xy[resets, :] = self.env.reset_newton_positions[
             resets, :2
         ]
 
-        for i in range(self.num_envs):
-            self.infos_buf[i] = {
-                "TimeLimit.truncated": self.progress_buf[i] >= self.max_episode_length
-            }
-
         return (
-            obs_buf.cpu().numpy(),
-            self.rewards_buf.cpu().numpy(),
-            self.dones_buf.cpu().numpy(),
-            self.infos_buf,
+            self.obs_buf,
+            self.rew_buf,
+            self.reset_buf,
+            self.extras,
         )
 
-    def reset(self) -> VecEnvObs:
+    def reset(self) -> ResetReturn:
         super().reset()
-
-        obs_buf = self._get_observations()
 
         self.env.reset()
 
         # we're starting anew, new velocities for all
         self._update_velocity_commands()
+        self._update_observations_and_extras()
 
-        # we want to return the last observation of the previous episode, according to the STB3 documentation
-        return obs_buf.cpu().numpy()
+        return self.get_observations()
 
-    def _get_observations(self) -> Observations:
-        obs = self.env.get_observations()
+    def get_observations(self) -> TaskObservations:
+        return self.obs_buf, self.extras
 
-        phase_signal = self.progress_buf / self.max_episode_length
+    def _update_observations_and_extras(self) -> None:
+        env_obs = self.env.get_observations()
 
-        obs_buf: Observations = th.zeros(
-            (self.num_envs, self.num_observations),
-            dtype=th.float32,
-        )
-        obs_buf[:, :3] = obs["projected_gravities"]
-        obs_buf[:, 3:6] = obs["linear_velocities"]
-        obs_buf[:, 6:9] = obs["angular_velocities"]
-        obs_buf[:, 9:21] = self.agent.joints_controller.get_normalized_joint_positions()
-        obs_buf[:, 21:33] = (
+        self.obs_buf[:, :3] = env_obs["projected_gravities"]
+        self.obs_buf[:, 3:6] = env_obs["linear_velocities"]
+        self.obs_buf[:, 6:9] = env_obs["angular_velocities"]
+        self.obs_buf[:, 9:21] = self.agent.joints_controller.get_normalized_joint_positions()
+        self.obs_buf[:, 21:33] = (
             self.agent.joints_controller.get_normalized_joint_velocities()
         )
 
         # 1st & 2nd set of past actions, we don't care about just-applied actions
-        obs_buf[:, 33:57] = self.last_actions_buf.reshape(
+        self.obs_buf[:, 33:57] = self.last_actions_buf.reshape(
             (self.num_envs, self.num_actions * 2)
         )
 
-        # From what I currently understand, we add two observations to the observation space:
-        #  - The phase signal (0-1) of the phase progress, transformed by cos(2*pi*progress) & sin(2*pi*progress)
-        # This would allow the model to recognize the periodicity of the animation and hopefully learn the intricacies
-        # of each gait.
-        obs_buf[:, 57] = th.cos(2 * th.pi * phase_signal)
-        obs_buf[:, 58] = th.sin(2 * th.pi * phase_signal)
+        self.obs_buf[:, 57:59] = self.current_velocity_commands_xy
 
-        obs_buf[:, 59:61] = self.current_velocity_commands_xy
-
-        obs_buf = th.clip(
-            obs_buf,
-            th.from_numpy(self.observation_space.low).to(obs_buf.device),
-            th.from_numpy(self.observation_space.high).to(obs_buf.device),
+        self.obs_buf = th.clip(
+            self.obs_buf,
+            th.from_numpy(self.observation_space.low).to(self.device),
+            th.from_numpy(self.observation_space.high).to(self.device),
         )
 
-        return obs_buf
+        self.extras = {"observations": {"reward": self.rew_buf, "reset": self.reset_buf}}
 
     def _update_rewards_and_dones(self) -> None:
         obs = self.env.get_observations()
@@ -235,6 +225,18 @@ class NewtonLocomotionTask(NewtonBaseTask):
         # hasn't move much from its original position in the last 0.5s
         #is_stagnant =
         has_flipped = projected_gravities_norm[:, 2] > 0.0
+        # based on the projected gravity, we can determine if Newton
+        # is tilted by more than 10 degrees
+        is_tilted = th.acos(
+            th.clamp(
+                th.sum(
+                    world_gravities_norm * projected_gravities_norm,
+                    dim=1,
+                ),
+                -1.0,
+                1.0,
+            )
+        ) > 0.17453292519943295  # 10 degrees in radians
 
         self.air_time = th.where(
             in_contact_with_ground,
@@ -246,7 +248,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             # less than half a second of overall airtime (all paws)
             th.sum(self.air_time, dim=1) > 5.0,
             # ensures that the agent has time to stabilize (0.5s)
-            (self.progress_buf > 0.5 // self._universe.control_dt).to(self.device),
+            (self.episode_length_buf > 0.5 // self._universe.control_dt).to(self.device),
         )
 
         base_positions_xy = positions[:, :2]
@@ -262,7 +264,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         dof_ordered_names = self.agent.joints_controller.art_view.dof_names
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
-            self.progress_buf * self._universe.control_dt,
+            self.episode_length_buf * self._universe.control_dt,
             dof_ordered_names,
         )
         # we use the joint controller here, because it contains all the required information
@@ -275,14 +277,14 @@ class NewtonLocomotionTask(NewtonBaseTask):
         # DONES
 
         # terminated agents (i.e. they failed)
-        terminated = th.logical_or(has_flipped, terminated_by_long_airtime)
+        terminated = has_flipped | is_tilted | terminated_by_long_airtime
 
         # truncated agents (i.e. they reached the max episode length)
-        truncated = (self.progress_buf >= self.max_episode_length).to(self.device)
+        truncated = (self.episode_length_buf >= self.max_episode_length).to(self.device)
 
         # when it's either terminated or truncated, the agent is done
-        self.dones_buf = (
-            th.zeros_like(self.dones_buf)
+        self.reset_buf = (
+            th.zeros_like(self.reset_buf)
             if not self.reset_in_play and self.playing
             else th.logical_or(terminated, truncated)
         )
@@ -303,7 +305,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             self.predicted_base_positions_xy,
             base_positions_xy,
             mult=-6.0,
-            weight=1.5,
+            weight=4.0,
         )
         base_orientation_reward = exp_squared_dot(
             projected_gravities_norm,
@@ -315,7 +317,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             self.current_velocity_commands_xy,
             base_linear_velocity_xy,
             mult=-8.0,
-            weight=2.0,
+            weight=20.0,
         )
         base_linear_velocity_z_reward = exp_squared(
             base_linear_velocity_z,
@@ -335,7 +337,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         joint_positions_reward = fd_first_order_squared_norm(
             joint_positions,
             animation_joint_positions,
-            weight=5.0,
+            weight=10.0,
         )
         joint_action_rate_reward = fd_first_order_squared_norm(
             self.actions_buf,
@@ -355,7 +357,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             10.0,
         )
 
-        self.rewards_buf = (
+        self.rew_buf = (
             position_reward
             + base_orientation_reward
             + base_linear_velocity_xy_reward
@@ -369,7 +371,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             + survival_reward
         )
 
-        self.rewards_buf *= self._universe.control_dt
+        self.rew_buf *= self._universe.control_dt
 
     def _update_velocity_commands(self, indices: Optional[th.Tensor] = None) -> None:
         if indices is None:

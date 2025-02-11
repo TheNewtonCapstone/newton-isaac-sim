@@ -88,7 +88,7 @@ class RandomDelayWrapper(BaseTaskWrapper):
             self.venv.step_async(
                 self.current_action
             )  # we make sure the wrapped venv knows the action
-            m, *aux = self.venv.step_wait()  # we get the results from the wrapped venv
+            m, *aux = self.venv.step()  # we get the results from the wrapped venv
 
             self._send_observation((m, *aux, action_delay))
 
