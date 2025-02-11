@@ -19,14 +19,12 @@ class BaseAgent(BaseObject):
         # We type hint universe again here to avoid circular imports
         self._universe: Universe = universe
 
-        self.path: str = ""
+        self.path: str = AGENTS_PATH
         self.num_agents: int = num_agents
 
     @abstractmethod
     def construct(self) -> None:
         super().construct()
-
-        self.path = AGENTS_PATH
 
         from omni.isaac.core.utils.prims import create_prim
 
