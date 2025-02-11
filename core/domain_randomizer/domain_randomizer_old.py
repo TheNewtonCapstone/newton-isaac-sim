@@ -1,10 +1,15 @@
+from typing import Optional
+import torch
 import numpy as np
+from core.logger import Logger
 
+from omni.isaac.core.articulations import ArticulationView
 from core.base import BaseObject
+from ..types import Config, Indices
 
 
 class DomainRandomizer(BaseObject):
-    def __init__(self, universe, num_envs, art_path, dr_configuration):
+    def __init__(self, universe, agent, num_envs, dr_configuration):
         super().__init__(universe)
 
         # Pass the universe instead of the universe
@@ -17,37 +22,99 @@ class DomainRandomizer(BaseObject):
         self.dr = dr
         self.rep = rep
 
-        self.universe = universe
+        self._universe = universe
+        self._agent = agent
         self.num_envs = num_envs
-        self.art_path = art_path
         self.randomize = dr_configuration.get("randomize", False)
         self.dr_configuration = dr_configuration["randomization_params"]
-        self.frequency = self.dr_configuration.get("frequency", 1)
-        # self.domain_params = self.dr_configuration.get("twip", {})
+        self.frequency = dr_configuration.get("frequency")
+        self._art_path = self._agent.base_path_expr
 
-        self.twip_art_view = self.dr.physics_view.create_articulation_view()
+        # Construct the domain randomizer
+        self._newton_art_view = None
+        self._num_dof = 0
+        self._rigid_body_names = []
 
-        self.num_dof = self.twip_art_view.num_dof
-        self.rigid_body_names = self.twip_art_view.body_names
-        print("rigid_body_names: ", self.rigid_body_names)
+        # Domain randomization properties
+        self._on_interval_properties = {}
+        self._on_reset_properties = {}
 
-        self.on_interval_properties = {}
-        self.on_reset_properties = {}
+        from core.utils.math import IDENTITY_QUAT
 
-        self.format_dr_configuration()
+        self.reset_newton_positions: torch.Tensor = torch.zeros((self.num_envs, 3))
+        self.reset_newton_orientations: torch.Tensor = IDENTITY_QUAT.repeat(
+            self.num_envs, 1
+        )
+        self.initial_positions: torch.Tensor = torch.zeros(
+            (self.num_envs, 3), device=self._universe.device
+        )
+        self.initial_orientations: torch.Tensor = torch.zeros(
+            (self.num_envs, 4), device=self._universe.device
+        )
 
-        self.frame_idx = 0
-
-        # Register the simulation context and articulation view
-        self.dr.physics_view.register_simulation_context(self.universe)
-        self.dr.physics_view.register_articulation_view(self.twip_art_view)
-        print("Registered simulation context and articulation view")
+        self._frame_idx = 0
 
     def construct(self):
+
+        # Create the articulation view
+        self._newton_art_view = ArticulationView(self._art_path)
+        self._universe.add_prim(self._newton_art_view)
+
         self._is_constructed = True
 
     def post_construct(self):
+
+        self._num_dof = self._newton_art_view.num_dof
+        self._rigid_body_names = self._newton_art_view.body_names
+
+        # Register the simulation context and articulation view
+        self.dr.physics_view.register_simulation_context(self._universe)
+        self.dr.physics_view.register_articulation_view(self._newton_art_view)
+        Logger.info(f"DomainRandomizer constructed with {self.num_envs} environments")
+
+        # Format the domain randomization configuration
+        self.format_dr_configuration()
+        if self.randomize:
+            self.apply_randomization()
+
         self._is_post_constructed = True
+
+    def on_step(self):
+        self.step_randomization()
+
+    def on_reset(self, indices: Indices = None):
+        if indices is None:
+            indices = torch.arange(self.num_envs)
+        else:
+            indices = indices.to(device=self._universe.device)
+
+        num_to_reset = indices.shape[0]
+
+        # set_world_poses is the only method that supports setting both positions and orientations
+        self._newton_art_view.set_world_poses(
+            positions=self.initial_positions[indices],
+            orientations=self.initial_orientations[indices],
+            indices=indices,
+            usd=self._universe.use_usd_physics,
+        )
+
+        # using set_velocities instead of individual methods (lin & ang),
+        # because it's the only method supported in the GPU pipeline (default pipeline)
+        self._newton_art_view.set_velocities(
+            torch.zeros((num_to_reset, 6), dtype=torch.float32),
+            indices,
+        )
+
+        joint_positions = torch.zeros((num_to_reset, 12), dtype=torch.float32)
+        joint_velocities = torch.zeros_like(joint_positions)
+        joint_efforts = torch.zeros_like(joint_positions)
+
+        self._agent.joints_controller.reset(
+            joint_positions,
+            joint_velocities,
+            joint_efforts,
+            indices,
+        )
 
     def format_dr_configuration(self):
         def process_property(distribution, range_values, body_type):
@@ -56,13 +123,13 @@ class DomainRandomizer(BaseObject):
             if body_type == "dof_properties":
                 if distribution == "uniform":
                     return self.rep.distribution.uniform(
-                        tuple(range_str[0] * self.num_dof),
-                        tuple(range_str[1] * self.num_dof),
+                        tuple(range_str[0] * self._num_dof),
+                        tuple(range_str[1] * self._num_dof),
                     )
                 elif distribution == "normal":
                     return self.rep.distribution.normal(
-                        tuple(range_str[0] * self.num_dof),
-                        tuple(range_str[1] * self.num_dof),
+                        tuple(range_str[0] * self._num_dof),
+                        tuple(range_str[1] * self._num_dof),
                     )
                 else:
                     raise ValueError(f"Invalid distribution type: {distribution}")
@@ -91,9 +158,8 @@ class DomainRandomizer(BaseObject):
 
         formatted_params = {}
 
-        # Extract relevant sections from twip_params
-        for gate_type in self.domain_params:
-            gate_type_config = self.domain_params.get(gate_type, {})
+        for gate_type in self.dr_configuration:
+            gate_type_config = self.dr_configuration.get(gate_type, {})
             formatted_params[gate_type] = {}
 
             for property_type in [
@@ -115,8 +181,8 @@ class DomainRandomizer(BaseObject):
                     ),
                 }
 
-        self.on_interval_properties = formatted_params.get("on_interval", {})
-        self.on_reset_properties = formatted_params.get("on_reset", {})
+        self._on_interval_properties = formatted_params.get("on_interval", {})
+        self._on_reset_properties = formatted_params.get("on_reset", {})
 
     def get_randomization_range(self, prop_range):
         from_x = []
@@ -133,56 +199,32 @@ class DomainRandomizer(BaseObject):
 
     def apply_randomization(self):
         with self.dr.trigger.on_rl_frame(num_envs=self.num_envs):
-
             with self.dr.gate.on_interval(interval=self.frequency):
-                for body in self.on_interval_properties:
+                for body in self._on_interval_properties:
                     if "articulation_view_properties" in body:
-                        for prop in self.on_interval_properties[body]:
-                            body_properties = self.on_interval_properties.get(body, {})
+                        for prop in self._on_interval_properties[body]:
+                            body_properties = self._on_interval_properties.get(body, {})
                             args = body_properties.get(prop, {})
 
                             self.dr.physics_view.randomize_articulation_view(
-                                view_name=self.twip_art_view.name,
+                                view_name=self._newton_art_view.name,
                                 operation=str(prop),
                                 **args,
                             )
                     if "dof_properties" in body:
-                        for prop in self.on_interval_properties[body]:
-                            body_properties = self.on_interval_properties.get(body, {})
+                        for prop in self._on_interval_properties[body]:
+                            body_properties = self._on_interval_properties.get(body, {})
                             args = body_properties.get(prop, {})
 
                             self.dr.physics_view.randomize_articulation_view(
-                                view_name=self.twip_art_view.name,
-                                operation=str(prop),
-                                **args,
-                            )
-
-            with self.dr.gate.on_env_reset():
-                for body in self.on_reset_properties:
-                    if "articulation_view_properties" in body:
-                        for prop in self.on_reset_properties[body]:
-                            body_properties = self.on_reset_properties.get(body, {})
-                            args = body_properties.get(prop, {})
-
-                            self.dr.physics_view.randomize_articulation_view(
-                                view_name=self.twip_art_view.name,
-                                operation=str(prop),
-                                **args,
-                            )
-                    elif "dof_properties" in body:
-                        for prop in self.on_reset_properties[body]:
-                            body_properties = self.on_reset_properties.get(body, {})
-                            args = body_properties.get(prop, {})
-
-                            self.dr.physics_view.randomize_articulation_view(
-                                view_name=self.twip_art_view.name,
+                                view_name=self._newton_art_view.name,
                                 operation=str(prop),
                                 **args,
                             )
 
     def step_randomization(self):
-        self.reset_inds = []
-        if self.frame_idx % 200 == 0:
-            self.reset_inds = np.arange(self.num_envs)
+        reset_inds = []
+        if self._frame_idx % 200 == 0:
+            reset_inds = np.arange(self.num_envs)
         self.dr.physics_view.step_randomization()
-        self.frame_idx += 1
+        self._frame_idx += 1
