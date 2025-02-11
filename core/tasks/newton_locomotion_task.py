@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import numpy as np
@@ -160,8 +161,9 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         return (
             self.obs_buf,
-            self.rew_buf,
-            self.reset_buf,
+            self.rew_buf.unsqueeze(-1),
+            self.reset_buf.unsqueeze(-1),
+            self.reset_buf.unsqueeze(-1),
             self.extras,
         )
 
@@ -236,7 +238,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
                 -1.0,
                 1.0,
             )
-        ) > 0.17453292519943295  # 10 degrees in radians
+        ) > math.radians(15)  # 10 degrees in radians
 
         self.air_time = th.where(
             in_contact_with_ground,

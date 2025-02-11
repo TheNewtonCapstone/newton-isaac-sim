@@ -16,7 +16,7 @@ delay:
   instant_rewards: False # should the rewards be calculated on the brain or remote actor?
 
 ppo:
-  n_steps: 24 # 0.64 seconds of real time (64 * 0.01 = 0.64)
+  n_steps: 32 # 0.64 seconds of real time (64 * 0.01 = 0.64)
   batch_size: 131_072
   n_epochs: 5
 

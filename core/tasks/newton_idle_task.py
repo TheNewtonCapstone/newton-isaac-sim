@@ -132,7 +132,7 @@ class NewtonIdleTask(NewtonBaseTask):
             self.extras,
         )
 
-    def reset(self) -> VecEnvObs:
+    def reset(self, **kwargs) -> VecEnvObs:
         super().reset()
 
         obs_buf = self._get_observations()

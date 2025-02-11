@@ -3,7 +3,9 @@ from typing import Any, List, Optional, Sequence, Type
 
 import numpy as np
 import torch
+from gymnasium.core import RenderFrame
 from rsl_rl.env import VecEnv
+from skrl.envs.torch import Wrapper
 from stable_baselines3.common.callbacks import BaseCallback
 
 import gymnasium
@@ -59,7 +61,7 @@ class BaseTaskCallback(BaseCallback):
         return True
 
 
-class BaseTask(BaseObject, VecEnv):
+class BaseTask(BaseObject, gymnasium.vector.VectorEnv):
     def __init__(
             self,
             universe: Universe,
@@ -98,11 +100,14 @@ class BaseTask(BaseObject, VecEnv):
         self.reward_space: gymnasium.spaces.Box = reward_space
 
         self.num_envs: int = num_envs
+        self.num_agents: int = 1
         self.max_episode_length: int = max_episode_length
 
         self.num_privileged_obs: int = 0  # unused
         self.num_obs: int = self.observation_space.shape[0]
         self.num_actions: int = self.action_space.shape[0]
+
+        self.closed: bool = False
 
         self.obs_buf: Observations = torch.zeros(
             (self.num_envs, self.num_obs),
@@ -154,6 +159,7 @@ class BaseTask(BaseObject, VecEnv):
             self.obs_buf,
             self.rew_buf,
             self.reset_buf,
+            self.reset_buf,
             self.extras,
         )
 
@@ -166,3 +172,6 @@ class BaseTask(BaseObject, VecEnv):
     @abstractmethod
     def get_observations(self) -> TaskObservations:
         return self.obs_buf, self.extras
+
+    def render(self) -> tuple[RenderFrame, ...] | None:
+        pass

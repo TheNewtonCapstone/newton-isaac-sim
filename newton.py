@@ -978,7 +978,6 @@ def main():
         save_path=current_run_name,
     )
 
-    from stable_baselines3 import PPO
 
     # we're not exporting nor purely simulating, so we're training
     if training:
@@ -996,6 +995,106 @@ def main():
                 act_delay_range=act_delay_range,
                 instant_rewards=instant_rewards,
             )
+
+        from skrl.models.torch import GaussianMixin, DeterministicMixin, Model
+        from torch import nn
+
+        class Policy(GaussianMixin, Model):
+            def __init__(self, observation_space, action_space, device, clip_actions=False,
+                         clip_log_std=True, min_log_std=-20, max_log_std=2, reduction="sum"):
+                Model.__init__(self, observation_space, action_space, device)
+                GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
+
+                self.net = nn.Sequential(nn.Linear(self.num_observations, 512),
+                                         nn.ReLU(),
+                                         nn.Linear(512, 256),
+                                         nn.ReLU(),
+                                         nn.Linear(256, 128),
+                                         nn.ReLU(),
+                                         nn.Linear(128, self.num_actions))
+                self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
+
+            def compute(self, inputs, role):
+                # Pendulum-v1 action_space is -2 to 2
+                return 2 * torch.tanh(self.net(inputs["states"])), self.log_std_parameter, {}
+
+        class Value(DeterministicMixin, Model):
+            def __init__(self, observation_space, action_space, device, clip_actions=False):
+                Model.__init__(self, observation_space, action_space, device)
+                DeterministicMixin.__init__(self, clip_actions)
+
+                self.net = nn.Sequential(nn.Linear(self.num_observations, 512),
+                                         nn.ReLU(),
+                                         nn.Linear(512, 256),
+                                         nn.ReLU(),
+                                         nn.Linear(256, 128),
+                                         nn.ReLU(),
+                                         nn.Linear(128, 1))
+
+            def compute(self, inputs, role):
+                return self.net(inputs["states"]), {}
+
+        from skrl.envs.wrappers.torch import wrap_env
+
+        # task = wrap_env(task, wrapper="gymnasium")
+
+        from skrl.memories.torch import RandomMemory
+        memory = RandomMemory(memory_size=rl_config["ppo"]["n_steps"], num_envs=num_envs, device=task.device)
+
+        models = {}
+        models["policy"] = Policy(task.observation_space, task.action_space, task.device, clip_actions=True)
+        models["value"] = Value(task.observation_space, task.action_space, task.device)
+
+        from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG, PPO
+        from skrl.resources.schedulers.torch import KLAdaptiveRL
+
+        cfg = PPO_DEFAULT_CONFIG.copy()
+        cfg["rollouts"] = rl_config["ppo"]["n_steps"]
+        cfg["learning_epochs"] = rl_config["ppo"]["n_epochs"]
+        cfg["mini_batches"] = 4
+        cfg["discount_factor"] = 0.9
+        cfg["lambda"] = 0.95
+        cfg["learning_rate"] = 1e-3
+        cfg["learning_rate_scheduler"] = KLAdaptiveRL
+        cfg["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
+        cfg["grad_norm_clip"] = rl_config["ppo"]["max_grad_norm"]
+        cfg["ratio_clip"] = 0.2
+        cfg["value_clip"] = 0.2
+        cfg["clip_predicted_values"] = False
+        cfg["entropy_loss_scale"] = rl_config["ppo"]["ent_coef"]
+        cfg["value_loss_scale"] = rl_config["ppo"]["vf_coef"]
+        cfg["kl_threshold"] = 0
+        cfg["mixed_precision"] = True
+        # logging to TensorBoard and write checkpoints (in timesteps)
+        cfg["experiment"]["write_interval"] = 1
+        cfg["experiment"]["checkpoint_interval"] = rl_config["ppo"]["n_steps"]
+        cfg["experiment"]["directory"] = f"{runs_dir}/{current_run_name}"
+
+        model = PPO(
+            models=models,
+            memory=memory,
+            cfg=cfg,
+            observation_space=task.observation_space,
+            action_space=task.action_space,
+            device=task.device,
+        )
+
+        cfg_trainer = {
+            "timesteps": 1500,
+            "headless": headless,
+        }
+
+        from skrl.trainers.torch import SequentialTrainer
+        trainer = SequentialTrainer(cfg=cfg_trainer, env=task, agents=[model])
+
+        terrain.register_self()  # we need to do it manually
+
+        universe.construct_registrations()
+
+        trainer.train()
+        model.save(f"{runs_dir}/{current_run_name}/model.zip")
+
+        return
 
         policy_kwargs = {
             "activation_fn": network_config["activation_fn"],
