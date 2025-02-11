@@ -3,7 +3,6 @@ from typing import Optional
 
 from ..agents import BaseAgent
 from ..base import BaseObject
-from ..domain_randomizer import BaseDomainRandomizer
 from ..terrain import Terrain
 from ..types import EnvObservations, Actions, Indices
 from ..universe import Universe
@@ -16,7 +15,6 @@ class BaseEnv(BaseObject):
         agent: BaseAgent,
         num_envs: int,
         terrain: Terrain,
-        domain_randomizer: BaseDomainRandomizer,
     ) -> None:
         super().__init__(
             universe=universe,

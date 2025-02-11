@@ -32,12 +32,12 @@ class NewtonBaseEnv(BaseEnv):
         self._bbox_cache: Optional[UsdGeom.BBoxCache] = None
         self._sub_terrain_origins: Optional[th.Tensor] = None
 
-        from core.utils.math import IDENTITY_QUAT
-
-        self.reset_newton_positions: th.Tensor = th.zeros((self.num_envs, 3))
-        self.reset_newton_orientations: th.Tensor = IDENTITY_QUAT.repeat(
-            self.num_envs, 1
-        )
+        # from core.utils.math import IDENTITY_QUAT
+        #
+        # self.reset_newton_positions: th.Tensor = th.zeros((self.num_envs, 3))
+        # self.reset_newton_orientations: th.Tensor = IDENTITY_QUAT.repeat(
+        #     self.num_envs, 1
+        # )
 
         self._inverse_control_frequency = inverse_control_frequency
 
@@ -54,8 +54,6 @@ class NewtonBaseEnv(BaseEnv):
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
         for _ in range(self._inverse_control_frequency):
             self.agent.step(actions)  # agent runs physic-related computations
-
-            self.domain_randomizer.on_step()  # DR should always happen before any physics step
 
             super().step(actions)  # advances the simulation by one step
 
