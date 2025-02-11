@@ -93,14 +93,6 @@ class NewtonIdleTask(NewtonBaseTask):
         self.env: NewtonBaseEnv = env
         self.reset_height: float = 0.1
 
-        if self.randomize:
-            self.domain_randomizer: DomainRandomizer = DomainRandomizer(
-                universe,
-                self.num_envs,
-                self.agent.base_path_expr,
-                dr_configurations,
-            )
-
     def construct(self) -> None:
         super().construct()
 
@@ -138,6 +130,8 @@ class NewtonIdleTask(NewtonBaseTask):
                 "TimeLimit.truncated": self.progress_buf[i] >= self.max_episode_length
             }
 
+        self.domain_randomizer.on_step()
+
         return (
             obs_buf.cpu().numpy(),
             self.rewards_buf.cpu().numpy(),
@@ -151,6 +145,7 @@ class NewtonIdleTask(NewtonBaseTask):
         obs_buf = self._get_observations()
 
         self.env.reset()
+        self.domain_randomizer.on_reset()
 
         # we want to return the last observation of the previous episode, according to the STB3 documentation
         return obs_buf.cpu().numpy()

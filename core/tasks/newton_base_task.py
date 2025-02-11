@@ -15,6 +15,7 @@ from gymnasium import Space
 from gymnasium.spaces import Box
 from ..archiver.archiver import Config
 from ..domain_randomizer import NewtonBaseDomainRandomizer
+from ..domain_randomizer.domain_randomizer_old import DomainRandomizer
 
 
 class NewtonBaseTaskCallback(BaseTaskCallback):
@@ -137,14 +138,21 @@ class NewtonBaseTask(BaseTask):
             dtype=th.float32,
             device=self.device,
         )  # 2 sets of past actions, 0: t - 1, 1: t - 2
+        self.domain_randomizer: DomainRandomizer = DomainRandomizer(
+            universe,
+            self.agent,
+            self.num_envs,
+            dr_configurations,
+        )
 
     @abstractmethod
     def construct(self) -> None:
         super().construct()
 
         self.env.register_self()
-
+        self.agent.register_self()
         self.animation_engine.register_self(self.name)
+        self.domain_randomizer.register_self()
 
     @abstractmethod
     def step_wait(self) -> VecEnvStepReturn:

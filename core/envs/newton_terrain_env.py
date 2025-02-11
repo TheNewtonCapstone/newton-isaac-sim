@@ -31,10 +31,7 @@ class NewtonTerrainEnv(NewtonBaseEnv):
     def construct(self) -> None:
         super().construct()
 
-        self.agent.register_self()
-
-        self.domain_randomizer.register_self()
-        self.domain_randomizer.set_initial_orientations(self.reset_newton_orientations)
+        # self.agent.register_self()
 
         Logger.info(f"NewtonTerrainEnv constructed with {self.num_envs} environments")
 
