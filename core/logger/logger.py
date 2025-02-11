@@ -1,9 +1,9 @@
 import os
 from io import TextIOWrapper
-from typing import Optional, Any, List, Tuple
+from typing import Optional, Any
 
 from .types import LogLevel, LogOutput
-from ..types import Config
+from ..types import Config, CallerInfo
 
 _logger: Optional["Logger"] = None
 
@@ -18,7 +18,6 @@ class Logger:
 
         self._log_file: Optional[TextIOWrapper] = None
         self._log_file_path: Optional[str] = log_file_path
-        self._log_omni_buffer: List[Tuple[str, int]] = []
 
         if self._output & LogOutput.File and log_file_path is not None:
             if os.path.dirname(log_file_path) != "":
@@ -57,8 +56,8 @@ class Logger:
         output = LogOutput.None_
 
         for output_str in outputs:
-            if output_str == "omni":
-                output |= LogOutput.OmniConsole
+            if output_str == "carb":
+                output |= LogOutput.CarbConsole
             elif output_str == "file":
                 output |= LogOutput.File
             else:
@@ -116,18 +115,6 @@ class Logger:
         return _logger._output
 
     @staticmethod
-    def flush():
-        global _logger
-
-        if _logger is None:
-            return
-
-        _logger.debug("Flushing log buffer.")
-
-        if _logger.output() & LogOutput.OmniConsole:
-            _logger._flush_omni_buffer()
-
-    @staticmethod
     def log(
         msg: Any,
         src_depth: int = 1,
@@ -141,7 +128,7 @@ class Logger:
         if level < _logger.log_level():
             return
 
-        _logger._print(msg, level, src_depth + 1)
+        _logger._log(msg, level, src_depth + 1)
 
     @staticmethod
     def info(msg: Any, src_depth: int = 0):
@@ -163,19 +150,16 @@ class Logger:
     def fatal(msg: Any, src_depth: int = 0):
         Logger.log(msg, src_depth + 1, LogLevel.Fatal)
 
-    def _print(self, msg: Any, level: LogLevel, src_depth: int = 1):
-        if _logger.output() & LogOutput.OmniConsole:
-            # If omni is not available, buffer the log message to print it later
-            if "omni" not in globals():
-                self._log_omni_buffer.append((msg, src_depth + 1))
-            else:
-                self._flush_omni_buffer()
-                self._log_to_omni(str(msg), src_depth + 1)
+    def _log(self, msg: Any, level: LogLevel, src_depth: int = 1):
+        from ..utils.python import get_caller_info
+
+        caller_info = get_caller_info(src_depth + 1)
+        file, ln, fnc, mod = caller_info
+
+        if _logger.output() & LogOutput.CarbConsole:
+            self._log_to_carb(str(msg), level, caller_info)
 
         if _logger.output() & LogOutput.File:
-            from core.utils.python import get_caller_info
-
-            file, ln, fnc, mod = get_caller_info(src_depth + 1)
             src = f"{mod}.{fnc}():{ln}"
             msg = self._format(msg, src, level)
 
@@ -218,25 +202,30 @@ class Logger:
         self._log_file.write(msg)
         self._log_file.flush()  # ensure all data is written to the file
 
-    def _log_to_omni(self, msg: str, src_depth: int) -> None:
-        import omni.log as omni_logger
+    def _log_to_carb(
+        self,
+        msg: str,
+        level: LogLevel,
+        caller_info: CallerInfo,
+    ) -> None:
+        import carb
 
-        if self.log_level() == LogLevel.Info:
-            omni_logger.info(msg, origin_stack_depth=src_depth + 1)
-        elif self.log_level() == LogLevel.Debug:
-            omni_logger.verbose(msg, origin_stack_depth=src_depth + 1)
-        elif self.log_level() == LogLevel.Warning:
-            omni_logger.warn(msg, origin_stack_depth=src_depth + 1)
-        elif self.log_level() == LogLevel.Error:
-            omni_logger.error(msg, origin_stack_depth=src_depth + 1)
-        elif self.log_level() == LogLevel.Fatal:
-            omni_logger.fatal(msg, origin_stack_depth=src_depth + 1)
+        carb_log_level: int = carb.logging.LEVEL_INFO
 
-    def _flush_omni_buffer(self) -> None:
-        if len(self._log_omni_buffer) == 0:
-            return
+        if level == LogLevel.Debug:
+            carb_log_level = carb.logging.LEVEL_VERBOSE
+        elif level == LogLevel.Warning:
+            carb_log_level = carb.logging.LEVEL_WARN
+        elif level == LogLevel.Error:
+            carb_log_level = carb.logging.LEVEL_ERROR
+        elif level == LogLevel.Fatal:
+            carb_log_level = carb.logging.LEVEL_FATAL
 
-        for msg, src_depth in self._log_omni_buffer:
-            self._log_to_omni(msg, src_depth)
-
-        self._log_omni_buffer.clear()
+        carb.log(
+            caller_info["modulename"],
+            carb_log_level,
+            caller_info["filename"],
+            caller_info["funcname"],
+            caller_info["lineno"],
+            msg,
+        )
