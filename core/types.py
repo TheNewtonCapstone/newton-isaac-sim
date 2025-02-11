@@ -21,7 +21,6 @@ class ContactData(TypedDict):
 
 
 # Motors
-
 VecJointsPositions = torch.Tensor
 VecJointsVelocities = torch.Tensor
 VecJointsEfforts = torch.Tensor
@@ -102,3 +101,11 @@ Matter = Tuple[
     float,
     int,
 ]
+
+
+# System
+class CallerInfo(TypedDict):
+    filename: str
+    lineno: int
+    funcname: str
+    modulename: str
