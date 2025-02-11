@@ -1,28 +1,40 @@
 from core.agents import NewtonBaseAgent
+from core.controllers import VecJointsController
 from core.globals import TERRAINS_PATH, COLLISION_GROUPS_PATH
 from core.logger import Logger
+from core.sensors import VecIMU, VecContact
 from core.types import EnvObservations, Actions
+from core.universe import Universe
 
 
 class NewtonVecAgent(NewtonBaseAgent):
-    def construct(self) -> None:
-        super().construct()
-
+    def __init__(
+        self,
+        universe: Universe,
+        num_agents: int,
+        imu: VecIMU,
+        joints_controller: VecJointsController,
+        contact_sensor: VecContact,
+    ):
+        super().__init__(universe, num_agents, imu, joints_controller, contact_sensor)
         # path given by the parent class, where we spawn the agents
         agents_path = self.path
 
         # path where we'll load the first agent from file (needs to respect the below structure)
-        load_path = f"{agents_path}/Newton_0"
+        self.load_path = f"{agents_path}/Newton_0"
 
         # real path is after the transform prim (i.e. ensures the agent is spawned at the correct height)
-        self.path = f"{load_path}/trans"
+        self.path = f"{self.load_path}/trans"
 
         # expression path to the base of all agents
         self.base_path_expr = f"{agents_path}/Newton_.*/trans/base"
 
         # expression path to the root of all agents (i.e. right after the transform prim, basically the same as
         # self.path but as an expression)
-        transformed_path_expr = f"{agents_path}/Newton_.*/trans"
+        self.transformed_path_expr = f"{agents_path}/Newton_.*/trans"
+
+    def construct(self) -> None:
+        super().construct()
 
         import omni.isaac.core.utils.stage as stage_utils
         import omni.isaac.core.utils.prims as prim_utils
@@ -30,7 +42,7 @@ class NewtonVecAgent(NewtonBaseAgent):
         usd_path = "assets/newton/newton.usd"
         stage_utils.add_reference_to_stage(
             usd_path,
-            prim_path=load_path,
+            prim_path=self.load_path,
         )
         Logger.info(
             f"Added reference agent from '{usd_path}' to '{self.path}' to the USD stage."
@@ -50,9 +62,9 @@ class NewtonVecAgent(NewtonBaseAgent):
             from omni.isaac.cloner import Cloner
 
             cloner = Cloner()
-            cloner.define_base_env(load_path)
+            cloner.define_base_env(self.load_path)
 
-            agent_paths = cloner.generate_paths(load_path[:-2], self.num_agents)
+            agent_paths = cloner.generate_paths(self.load_path[:-2], self.num_agents)
 
             cloner.filter_collisions(
                 prim_paths=agent_paths,
@@ -61,7 +73,7 @@ class NewtonVecAgent(NewtonBaseAgent):
                 global_paths=[TERRAINS_PATH],
             )
             cloner.clone(
-                source_prim_path=load_path,
+                source_prim_path=self.load_path,
                 prim_paths=agent_paths,
                 copy_from_source=True,
             )
@@ -69,7 +81,7 @@ class NewtonVecAgent(NewtonBaseAgent):
         self.imu.register_self(self.base_path_expr)
         self.joints_controller.register_self(self.base_path_expr)
         self.contact_sensor.register_self(
-            f"{transformed_path_expr}/.*_LOWER_LEG_CONTACT"
+            f"{self.transformed_path_expr}/.*_LOWER_LEG_CONTACT"
         )
 
         self._is_constructed = True
