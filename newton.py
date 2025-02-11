@@ -931,8 +931,9 @@ def main():
         device=task_config["device"],
         num_envs=num_envs,
         playing=playing,
+        reset_in_play=task_config["reset_in_play"],
         max_episode_length=task_config["episode_length"],
-        dr_configurations=task_config["dr_config"],
+        dr_configurations=task_config["dr_configurations"],
     )
     callback = NewtonBaseTaskCallback(
         check_freq=64,
@@ -1012,7 +1013,9 @@ def main():
         if current_checkpoint_path is not None:
             Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
 
-            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
+            model = PPO.load(
+                current_checkpoint_path, task, device=task_config["device"]
+            )
 
         terrain.register_self()  # we need to do it manually
 
