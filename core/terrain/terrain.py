@@ -62,6 +62,8 @@ class Terrain(BaseObject):
         self._terrain_config: Config = terrain_config
         self._num_robots: int = num_robots
         self._root_path: str = root_path
+        self.curriculum = False
+        
 
         self._mesh_type: str = self._terrain_config["mesh_type"]
         if self._mesh_type in ["none", "plane"]:
@@ -85,7 +87,8 @@ class Terrain(BaseObject):
 
         self._num_rows: int = self._terrain_config["generation"]["default_num_rows"]
         self._num_cols: int = self._terrain_config["generation"]["default_num_cols"]
-
+        self.num_sub_terrains = self._num_rows * self._num_cols
+        
         self._vertical_resolution: float = self._terrain_config["generation"][
             "vertical_resolution"
         ]
@@ -136,6 +139,7 @@ class Terrain(BaseObject):
 
         if num_cols or num_rows:
             self._update_rows_cols_dependents()
+            self.num_sub_terrains = self._num_rows * self._num_cols
 
         if terrain_type == TerrainType.Random:
             self._construct_randomized()
@@ -145,6 +149,7 @@ class Terrain(BaseObject):
             self._construct_selected(terrain_type=sub_terrain_type)
         elif terrain_type == TerrainType.Curriculum:
             self._construct_curriculum()
+            self.curriculum = True
 
         if self._mesh_type == "trimesh":
             add_heightmap_to_world(
@@ -188,7 +193,7 @@ class Terrain(BaseObject):
         return self._height_field[i, j] * self._vertical_resolution
 
     def _update_rows_cols_dependents(self) -> None:
-        self._num_sub_terrains = self._num_rows * self._num_cols
+        self.num_sub_terrains = self._num_rows * self._num_cols
         self._sub_terrain_origins = np.zeros((self._num_rows, self._num_cols, 3))
 
         self._total_num_rows = (
@@ -206,7 +211,7 @@ class Terrain(BaseObject):
         )
 
     def _construct_randomized(self):
-        for k in range(self._num_sub_terrains):
+        for k in range(self.num_sub_terrains):
             # Env coordinates in the world
             (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
 
@@ -227,7 +232,7 @@ class Terrain(BaseObject):
                 self._add_sub_terrain(terrain, i, j)
 
     def _construct_selected(self, terrain_type: SubTerrainType, **kwargs):
-        for k in range(self._num_sub_terrains):
+        for k in range(self.num_sub_terrains):
             # Env coordinates in the world
             (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
 
