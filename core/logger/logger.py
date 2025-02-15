@@ -154,13 +154,12 @@ class Logger:
         from ..utils.python import get_caller_info
 
         caller_info = get_caller_info(src_depth + 1)
-        file, ln, fnc, mod = caller_info
 
         if _logger.output() & LogOutput.CarbConsole:
             self._log_to_carb(str(msg), level, caller_info)
 
         if _logger.output() & LogOutput.File:
-            src = f"{mod}.{fnc}():{ln}"
+            src = f"{caller_info['modulename']}.{caller_info['funcname']}():{caller_info['lineno']}"
             msg = self._format(msg, src, level)
 
             _logger._log_to_file(msg)
