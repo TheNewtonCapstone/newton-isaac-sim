@@ -9,7 +9,7 @@ from core.animation import AnimationEngine
 from core.controllers import CommandController
 from core.envs import NewtonBaseEnv
 from core.tasks import NewtonBaseTask, NewtonBaseTaskCallback
-from core.types import Observations
+from core.types import Observations, Indices
 from core.universe import Universe
 from gymnasium.spaces import Box
 
@@ -109,6 +109,11 @@ class NewtonLocomotionTask(NewtonBaseTask):
             device=self.device,
         )
 
+        if self.env.terrain.curriculum:
+            self.robot_levels = th.zeros(num_envs, dtype=th.int16, device=self.device)
+        else:
+            self.robot_levels = th.randint(0, self.env.terrain.num_sub_terrains, (num_envs, ), dtype=th.int16, device=self.device)
+
     def construct(self) -> None:
         super().construct()
 
@@ -163,10 +168,13 @@ class NewtonLocomotionTask(NewtonBaseTask):
             self.infos_buf,
         )
 
-    def reset(self) -> VecEnvObs:
+    def reset(self, indices: Indices = None) -> VecEnvObs:
         super().reset()
 
         obs_buf = self._get_observations()
+
+        if self.env.terrain.curriculum:
+            self._update_terrain_curriculumn(indices)
 
         self.env.reset()
 
@@ -379,3 +387,14 @@ class NewtonLocomotionTask(NewtonBaseTask):
             self.current_velocity_commands_xy[i, 0:2] = (
                 self.command_controller.get_random_action()
             )
+
+    def _update_terrain_curriculumn(self, indices: Optional[th.Tensor] = None) -> None:
+        if indices is None:
+            return
+
+        obs = self._get_observations()
+        distance = obs["Positions"][indices, :2] - self.env.terrain.sub_terrain_origins[indices, :2]
+        move_up = distance >= self.env.terrain._sub_terrain_length / 2
+        move_down = distance < self.env.terrain._sub_terrain_length / 2
+
+        self.newton_levels[indices] += 1 * move_up - 1 * move_down
