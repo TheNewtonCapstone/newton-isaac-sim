@@ -94,3 +94,6 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
     def set_initial_orientations(self, orientations: torch.Tensor) -> None:
         self.initial_orientations = orientations.to(self._universe.device)
+
+    def set_initial_position(self, indices: torch.Tensor, positions: torch.Tensor) -> None:
+        self.initial_positions[indices] = positions.to(self._universe.device)
