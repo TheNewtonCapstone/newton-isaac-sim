@@ -121,7 +121,7 @@ class Terrain(BaseObject):
 
     @property
     def sub_terrain_origins(self) -> np.ndarray[float]:
-        return self._sub_terrain_origins + self._terrain_position
+        return (self._sub_terrain_origins + self._terrain_position).reshape(-1, 3)
 
     def construct(
         self,

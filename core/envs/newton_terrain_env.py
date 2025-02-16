@@ -76,7 +76,7 @@ class NewtonTerrainEnv(NewtonBaseEnv):
 
     def _compute_agent_reset_positions(self, agent_heights: th.Tensor) -> th.Tensor:
         # Flatten terrain origins to a (num_envs, 3) shape
-        flat_origins = self._sub_terrain_origins.reshape(-1, 3)
+        flat_origins = self._sub_terrain_origins
 
         # Randomly sample terrain origins for each agent
         agent_origins_indices = th.randint(0, flat_origins.shape[0], (self.num_envs,))
