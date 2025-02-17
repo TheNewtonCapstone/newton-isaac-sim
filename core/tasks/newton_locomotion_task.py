@@ -393,8 +393,9 @@ class NewtonLocomotionTask(NewtonBaseTask):
             return
 
         obs = self.env.get_observations()
+        agent_heights = self.agent.transformed_position[2]
         flat_origins = th.tensor(self.env.terrain.sub_terrain_origins, dtype=th.float32, device=self.device)
-        flat_origins[:, 2] += 0.3
+        flat_origins[:, 2] += agent_heights
         sub_terrain_length = self.env.terrain._sub_terrain_length
 
         level_indices = self.newton_levels[indices].long()
