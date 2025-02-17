@@ -669,7 +669,7 @@ def main():
     from core.agents import NewtonVecAgent
 
     from core.sensors import VecIMU, VecContact
-    from core.actuators import LSTMActuator, BaseActuator
+    from core.actuators import LSTMActuator, BaseActuator, DCActuator
     from core.controllers import VecJointsController, CommandController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -692,12 +692,12 @@ def main():
     actuators: List[BaseActuator] = []
 
     for i in range(12):
-        actuator = LSTMActuator(
+        actuator = DCActuator(
             universe=universe,
-            motor_model_path=robot_config["actuators"]["lstm"]["model_path"],
-            model_params=robot_config["actuators"]["lstm"]["model_params"],
+            k_p=0.6,
+            k_d=0.0001,
+            effort_saturation=100.0,
         )
-
         actuators.append(actuator)
 
     joints_controller = VecJointsController(
@@ -1010,7 +1010,7 @@ def main():
             verbose=2,
             device=rl_config["device"],
             seed=rl_config["seed"],
-            learning_rate=kl_based_adaptive_lr,
+            # learning_rate=kl_based_adaptive_lr,
             n_steps=rl_config["ppo"]["n_steps"],
             batch_size=rl_config["ppo"]["batch_size"],
             n_epochs=rl_config["ppo"]["n_epochs"],
@@ -1024,7 +1024,7 @@ def main():
             use_sde=rl_config["ppo"]["use_sde"],
             sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
             target_kl=rl_config["ppo"]["target_kl"],
-            stop_on_excessive_kl=rl_config["ppo"]["stop_on_excessive_kl"],
+            # stop_on_excessive_kl=rl_config["ppo"]["stop_on_excessive_kl"],
             tensorboard_log=runs_dir,
             policy_kwargs=policy_kwargs,
         )
