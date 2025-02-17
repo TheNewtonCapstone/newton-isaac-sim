@@ -194,7 +194,7 @@ class Terrain(BaseObject):
 
     def _update_rows_cols_dependents(self) -> None:
         self.num_sub_terrains = self._num_rows * self._num_cols
-        self._sub_terrain_origins = np.zeros((self._num_rows, self._num_cols, 3))
+        self._sub_terrain_origins = np.zeros((self._num_cols, self._num_rows, 3))
 
         self._total_num_rows = (
             int(self._num_rows * self._sub_terrain_num_length_vertex)
@@ -206,7 +206,7 @@ class Terrain(BaseObject):
         )
 
         self._height_field: np.ndarray = np.zeros(
-            (self._total_num_rows, self._total_num_cols),
+            (self._total_num_cols, self._total_num_rows),
             dtype=np.int16,
         )
 
@@ -330,8 +330,8 @@ class Terrain(BaseObject):
         return terrain
 
     def _add_sub_terrain(self, terrain: SubTerrain, row: int, col: int):
-        i = row
-        j = col
+        i = col
+        j = row
 
         # map coordinate system
         start_x = (
