@@ -109,8 +109,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             device=self.device,
         )
 
-
-        self.newton_levels = th.zeros(num_envs, dtype=th.int16, device=self.device)
+        self.curriculum_levels = th.zeros(num_envs, dtype=th.int16, device=self.device)
 
     def construct(self) -> None:
         super().construct()
@@ -144,7 +143,6 @@ class NewtonLocomotionTask(NewtonBaseTask):
         if len(resets) > 0:
             self._update_terrain_curriculumn(resets)
             self.env.reset(resets)
-
 
         # clears the last 2 observations, the progress & the predicted positions if any Newton is reset
         obs_buf[resets, :] = 0.0
@@ -241,7 +239,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         in_contact_with_ground = obs["in_contacts"]
 
         # hasn't move much from its original position in the last 0.5s
-        #is_stagnant =
+        # is_stagnant =
         has_flipped = projected_gravities_norm[:, 2] > 0.0
 
         self.air_time = th.where(
@@ -394,29 +392,38 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         obs = self.env.get_observations()
         agent_heights = self.agent.transformed_position[2]
-        flat_origins = th.tensor(self.env.terrain.sub_terrain_origins, dtype=th.float32, device=self.device)
+        flat_origins = th.tensor(
+            self.env.terrain.sub_terrain_origins,
+            dtype=th.float32,
+            device=self.device,
+        )
         flat_origins[:, 2] += agent_heights
-        sub_terrain_length = self.env.terrain._sub_terrain_length
+        sub_terrain_length = self.env.terrain.sub_terrain_length
 
-        level_indices = self.newton_levels[indices].long()
+        level_indices = self.curriculum_levels[indices].long()
 
+        # The levl is updated based on the distance traversed by the agent
         distance = obs["positions"][indices, :2] - flat_origins[level_indices, :2]
         distance = th.norm(distance, dim=1)
         move_up = distance >= sub_terrain_length / 2
         move_down = distance < sub_terrain_length / 2
 
         # Update the Newton levels
-        self.newton_levels[indices] += 1 * move_up - 1 * move_down
+        self.curriculum_levels[indices] += 1 * move_up - 1 * move_down
 
         # Ensure levels stay within bounds
         max_level = self.env.terrain.num_sub_terrains - 1  # Max valid sub-terrain index
-        self.newton_levels[indices] = th.clamp(self.newton_levels[indices], min=0, max=max_level)
+        self.curriculum_levels[indices] = th.clamp(
+            self.curriculum_levels[indices],
+            min=0,
+            max=max_level,
+        )
 
-        # Ensure newton_levels is a valid index (convert to long type)
-        level_indices = self.newton_levels[indices].long()
+        # Ensure newton_levels is a valid index type
+        level_indices = self.curriculum_levels[indices].long()
 
-        # Get new spawn positions
-        new_spawn_positions = flat_origins[level_indices, :]  # Select positions based on newton_levels
+        # Get new spawn positions based on the levels
+        new_spawn_positions = flat_origins[level_indices, :]
 
         # Update the initial positions in the environment
         self.env.domain_randomizer.set_initial_position(indices, new_spawn_positions)

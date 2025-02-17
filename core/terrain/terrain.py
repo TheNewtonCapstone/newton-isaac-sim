@@ -62,8 +62,7 @@ class Terrain(BaseObject):
         self._terrain_config: Config = terrain_config
         self._num_robots: int = num_robots
         self._root_path: str = root_path
-        self.curriculum = False
-        
+        self.curriculum: bool = False
 
         self._mesh_type: str = self._terrain_config["mesh_type"]
         if self._mesh_type in ["none", "plane"]:
@@ -88,7 +87,7 @@ class Terrain(BaseObject):
         self._num_rows: int = self._terrain_config["generation"]["default_num_rows"]
         self._num_cols: int = self._terrain_config["generation"]["default_num_cols"]
         self.num_sub_terrains = self._num_rows * self._num_cols
-        
+
         self._vertical_resolution: float = self._terrain_config["generation"][
             "vertical_resolution"
         ]
@@ -122,6 +121,10 @@ class Terrain(BaseObject):
     @property
     def sub_terrain_origins(self) -> np.ndarray[float]:
         return (self._sub_terrain_origins + self._terrain_position).reshape(-1, 3)
+
+    @property
+    def sub_terrain_length(self) -> float:
+        return self._sub_terrain_length
 
     def construct(
         self,
