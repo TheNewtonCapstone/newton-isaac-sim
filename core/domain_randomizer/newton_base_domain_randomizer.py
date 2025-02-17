@@ -27,8 +27,8 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         self._agent: NewtonBaseAgent = agent
 
         self._rigid_prim_view: Optional[RigidPrimView] = None
-        self.initial_positions: torch.Tensor = torch.zeros((1, 3))
-        self.initial_orientations: torch.Tensor = torch.zeros((1, 4))
+        self.initial_positions: torch.Tensor = torch.zeros((1, 3), device=self._universe.device)
+        self.initial_orientations: torch.Tensor = torch.zeros((1, 4), device=self._universe.device)
 
     def construct(self) -> None:
         super().construct()
@@ -94,3 +94,6 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
     def set_initial_orientations(self, orientations: torch.Tensor) -> None:
         self.initial_orientations = orientations.to(self._universe.device)
+
+    def set_initial_position(self, indices: torch.Tensor, positions: torch.Tensor) -> None:
+        self.initial_positions[indices] = positions.to(self._universe.device)

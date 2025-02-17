@@ -9,7 +9,7 @@ from core.animation import AnimationEngine
 from core.controllers import CommandController
 from core.envs import NewtonBaseEnv
 from core.tasks import NewtonBaseTask, NewtonBaseTaskCallback
-from core.types import Observations, StepReturn, TaskObservations, ResetReturn
+from core.types import Observations, StepReturn, TaskObservations, ResetReturn, Indices
 from core.universe import Universe
 from gymnasium.spaces import Box
 
@@ -113,6 +113,8 @@ class NewtonLocomotionTask(NewtonBaseTask):
             device=self.device,
         )
 
+        self.curriculum_levels = th.zeros(num_envs, dtype=th.int16, device=self.device)
+
     def construct(self) -> None:
         super().construct()
 
@@ -143,6 +145,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         # creates a new np array with only the indices of the environments that are done
         resets: th.Tensor = self.reset_buf.nonzero().squeeze(1)
         if len(resets) > 0:
+            self._update_terrain_curriculumn(resets)
             self.env.reset(resets)
 
         # clears the last 2 observations, the progress & the predicted positions if any Newton is reset
@@ -167,7 +170,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             self.extras,
         )
 
-    def reset(self) -> ResetReturn:
+    def reset(self, indices: Indices = None) -> ResetReturn:
         super().reset()
 
         self.env.reset()
@@ -225,7 +228,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         in_contact_with_ground = obs["in_contacts"]
 
         # hasn't move much from its original position in the last 0.5s
-        #is_stagnant =
+        # is_stagnant =
         has_flipped = projected_gravities_norm[:, 2] > 0.0
         # based on the projected gravity, we can determine if Newton
         # is tilted by more than 10 degrees
@@ -383,3 +386,45 @@ class NewtonLocomotionTask(NewtonBaseTask):
             self.current_velocity_commands_xy[i, 0:2] = (
                 self.command_controller.get_random_action()
             )
+
+    def _update_terrain_curriculumn(self, indices: Optional[th.Tensor] = None) -> None:
+        if indices is None:
+            return
+
+        obs = self.env.get_observations()
+        agent_heights = self.agent.transformed_position[2]
+        flat_origins = th.tensor(
+            self.env.terrain.sub_terrain_origins,
+            dtype=th.float32,
+            device=self.device,
+        )
+        flat_origins[:, 2] += agent_heights
+        sub_terrain_length = self.env.terrain.sub_terrain_length
+
+        level_indices = self.curriculum_levels[indices].long()
+
+        # The levl is updated based on the distance traversed by the agent
+        distance = obs["positions"][indices, :2] - flat_origins[level_indices, :2]
+        distance = th.norm(distance, dim=1)
+        move_up = distance >= sub_terrain_length / 2
+        move_down = distance < sub_terrain_length / 2
+
+        # Update the Newton levels
+        self.curriculum_levels[indices] += 1 * move_up - 1 * move_down
+
+        # Ensure levels stay within bounds
+        max_level = self.env.terrain.num_sub_terrains - 1  # Max valid sub-terrain index
+        self.curriculum_levels[indices] = th.clamp(
+            self.curriculum_levels[indices],
+            min=0,
+            max=max_level,
+        )
+
+        # Ensure newton_levels is a valid index type
+        level_indices = self.curriculum_levels[indices].long()
+
+        # Get new spawn positions based on the levels
+        new_spawn_positions = flat_origins[level_indices, :]
+
+        # Update the initial positions in the environment
+        self.env.domain_randomizer.set_initial_position(indices, new_spawn_positions)
