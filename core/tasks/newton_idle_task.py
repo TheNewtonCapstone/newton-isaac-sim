@@ -95,7 +95,7 @@ class NewtonIdleTask(NewtonBaseTask):
         self.last_actions_buf = self.actions_buf.clone()
 
         # creates a new np array with only the indices of the environments that are done
-        resets: torch.Tensor = self.dones_buf.nonzero().squeeze(1)
+        resets: torch.Tensor = (self.dones_buf & self.should_reset).nonzero().squeeze(1)
         if len(resets) > 0:
             self.env.reset(resets)
 
@@ -109,8 +109,8 @@ class NewtonIdleTask(NewtonBaseTask):
         return (
             self.obs_buf,
             self.rewards_buf.unsqueeze(-1),
-            self.terminated_buf.unsqueeze(-1) | self.should_reset,
-            self.truncated_buf.unsqueeze(-1) | self.should_reset,
+            self.terminated_buf.unsqueeze(-1) & self.should_reset,
+            self.truncated_buf.unsqueeze(-1) & self.should_reset,
             self.extras,
         )
 

@@ -15,7 +15,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$ProjectFileDir$/newton.py" />
-    <option name="PARAMETERS" value="--checkpoint-path runs/newton_locomotion_052/25-02-12_19-51-13-903869_PPO/checkpoints/best_agent.pt --play --animation-name newton_locomotion --rl-config configs/tasks/newton_locomotion_task.yaml" />
+    <option name="PARAMETERS" value="--checkpoint-path runs/newton_locomotion_102/checkpoints/best_agent.pt --play --animation-name newton_locomotion --rl-config configs/tasks/newton_locomotion_task.yaml" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

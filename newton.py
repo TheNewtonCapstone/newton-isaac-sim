@@ -1120,82 +1120,156 @@ def main():
         return
 
     if playing:
-        terrain.register_self(
-            TerrainType.Random,
-            1,  # num_rows
-            1,  # num_cols
-        )  # done manually, since we're changing some default construction parameters
+        from skrl.models.torch import GaussianMixin, DeterministicMixin, Model
+        from torch import nn
 
-        universe.construct_registrations()
+        class Shared(GaussianMixin, DeterministicMixin, Model):
+            def __init__(
+                self,
+                observation_space,
+                action_space,
+                device,
+                clip_actions=False,
+                clip_log_std=True,
+                min_log_std=-20,
+                max_log_std=2,
+                reduction="sum",
+            ):
+                Model.__init__(self, observation_space, action_space, device)
+                GaussianMixin.__init__(
+                    self,
+                    clip_actions,
+                    clip_log_std,
+                    min_log_std,
+                    max_log_std,
+                    reduction,
+                )
+                DeterministicMixin.__init__(self, clip_actions)
 
-        Logger.info(f"Loading checkpoint from {current_checkpoint_path} for play.")
+                self.net = nn.Sequential(
+                    nn.Linear(self.num_observations, 512),
+                    nn.ReLU(),
+                    nn.Linear(512, 256),
+                    nn.ReLU(),
+                    nn.Linear(256, 128),
+                    nn.ReLU(),
+                )
 
-        from rsl_rl.runners import OnPolicyRunner
+                self.action_layer = nn.Linear(128, self.num_actions)
+                self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
 
-        config = {
-            "algorithm": {
-                "class_name": "PPO",
-                "value_loss_coef": 1.0,
-                "clip_param": 0.2,
-                "use_clipped_value_loss": True,
-                "desired_kl": 0.01,
-                "entropy_coef": 0.01,
-                "gamma": 0.99,
-                "lam": 0.95,
-                "max_grad_norm": 1.0,
-                "learning_rate": 0.001,
-                "num_learning_epochs": 5,
-                "num_mini_batches": 4,
-                "schedule": "adaptive",
-            },
-            "policy": {
-                "class_name": "ActorCritic",
-                "activation": "relu",
-                "actor_hidden_dims": [512, 256, 128],
-                "critic_hidden_dims": [512, 256, 128],
-                "init_noise_std": 1.0,
-            },
-            "runner": {
-                "max_iterations": 1500,
-                "experiment_name": task.name,
-                "run_name": current_run_name,
-                "logger": "tensorboard",
-                "neptune_project": "newton",
-                "wandb_project": "newton",
-                "resume": False,
-                "load_run": -1,
-                "resume_path": None,
-                "checkpoint": -1,
-            },
-            "empirical_normalization": False,
-            "save_interval": 10,
-            "num_steps_per_env": 24,
-            "runner_class_name": "OnPolicyRunner",
-            "seed": rl_config["seed"],
+                self.value_layer = nn.Linear(128, 1)
+
+            def act(
+                self, inputs: Mapping[str, Union[torch.Tensor, Any]], role: str = ""
+            ) -> Tuple[
+                torch.Tensor,
+                Union[torch.Tensor, None],
+                Mapping[str, Union[torch.Tensor, Any]],
+            ]:
+                if role == "policy":
+                    return GaussianMixin.act(self, inputs, role)
+                elif role == "value":
+                    return DeterministicMixin.act(self, inputs, role)
+
+            def compute(self, inputs, role):
+                if role == "policy":
+                    self._shared_output = self.net(inputs["states"])
+                    return (
+                        self.action_layer(self._shared_output),
+                        self.log_std_parameter,
+                        {},
+                    )
+
+                if role == "value":
+                    shared_output = (
+                        self.net(inputs["states"])
+                        if self._shared_output is None
+                        else self._shared_output
+                    )
+                    self._shared_output = None
+                    return self.value_layer(shared_output), {}
+
+        from skrl.memories.torch import RandomMemory
+        from skrl.utils import set_seed
+
+        set_seed()
+
+        memory = RandomMemory(
+            memory_size=rl_config["ppo"]["n_steps"],
+            num_envs=num_envs,
+            device=task.device,
+        )
+
+        models = {
+            "policy": Shared(
+                task.observation_space,
+                task.action_space,
+                task.device,
+            )
         }
+        models["value"] = models["policy"]
+
+        from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG, PPO
+        from skrl.resources.schedulers.torch import KLAdaptiveRL
+        from skrl.resources.preprocessors.torch import RunningStandardScaler
+
+        cfg = PPO_DEFAULT_CONFIG.copy()
+        cfg["rollouts"] = rl_config["ppo"]["n_steps"]
+        cfg["learning_epochs"] = rl_config["ppo"]["n_epochs"]
+        cfg["mini_batches"] = 4
+        cfg["discount_factor"] = 0.99
+        cfg["lambda"] = 0.95
+        cfg["learning_rate"] = 3e-4
+        cfg["learning_rate_scheduler"] = KLAdaptiveRL
+        cfg["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
+        cfg["grad_norm_clip"] = rl_config["ppo"]["max_grad_norm"]
+        cfg["ratio_clip"] = 0.2
+        cfg["value_clip"] = 0.2
+        cfg["clip_predicted_values"] = True
+        cfg["entropy_loss_scale"] = rl_config["ppo"]["ent_coef"]
+        cfg["value_loss_scale"] = rl_config["ppo"]["vf_coef"]
+        cfg["kl_threshold"] = 0
+        cfg["mixed_precision"] = True
+        cfg["state_preprocessor"] = RunningStandardScaler
+        cfg["state_preprocessor_kwargs"] = {
+            "size": task.observation_space,
+            "device": task.device,
+        }
+        cfg["value_preprocessor"] = RunningStandardScaler
+        cfg["value_preprocessor_kwargs"] = {"size": 1, "device": task.device}
+        # logging to TensorBoard and write checkpoints (in timesteps)
+        cfg["experiment"]["write_interval"] = "auto"
+        cfg["experiment"]["checkpoint_interval"] = rl_config["ppo"]["n_steps"]
+        cfg["experiment"]["directory"] = runs_dir
+        cfg["experiment"]["experiment_name"] = f"{current_run_name}/playing"
+
+        model = PPO(
+            models=models,
+            memory=memory,
+            cfg=cfg,
+            observation_space=task.observation_space,
+            action_space=task.action_space,
+            device=task.device,
+        )
+
+        cfg_trainer = {
+            "timesteps": 24000,
+            "headless": headless,
+        }
+
+        from skrl.trainers.torch import SequentialTrainer
+
+        trainer = SequentialTrainer(cfg=cfg_trainer, env=task, agents=[model])
+
         terrain.register_self()  # we need to do it manually
 
         universe.construct_registrations()
 
-        runner = OnPolicyRunner(
-            env=task,
-            device=rl_config["device"],
-            log_dir=None,
-            train_cfg=config,
-        )
-        runner.load(current_checkpoint_path)
+        Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
 
-        model = runner.get_inference_policy(device=rl_config["device"])
-
-        obs, _ = task.reset()
-
-        while universe.is_playing:
-            with torch.inference_mode():
-                actions = model(obs)
-                obs, _, _, _ = task.step(actions)
-
-                obs[:, 57] = command_controller.last_action[0]
-                obs[:, 58] = command_controller.last_action[1]
+        model.load(current_checkpoint_path)
+        trainer.eval()
 
         return
 

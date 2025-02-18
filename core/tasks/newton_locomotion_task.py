@@ -129,7 +129,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         )
 
         # creates a new np array with only the indices of the environments that are done
-        resets: th.Tensor = self.dones_buf.nonzero().squeeze(1)
+        resets: th.Tensor = (self.dones_buf & self.should_reset).nonzero().squeeze(1)
         if len(resets) > 0:
             self._update_terrain_curriculumn(resets)
             self.env.reset(resets)
@@ -150,8 +150,8 @@ class NewtonLocomotionTask(NewtonBaseTask):
         return (
             self.obs_buf,
             self.rew_buf.unsqueeze(-1),
-            self.terminated_buf.unsqueeze(-1) | self.should_reset,
-            self.truncated_buf.unsqueeze(-1) | self.should_reset,
+            self.terminated_buf.unsqueeze(-1) & self.should_reset,
+            self.truncated_buf.unsqueeze(-1) & self.should_reset,
             self.extras,
         )
 
@@ -267,7 +267,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         # terminated agents (i.e. they failed)
         self.terminated_buf = (
-            is_tilted  # has_flipped | is_tilted | terminated_by_long_airtime
+            has_flipped  # has_flipped | is_tilted | terminated_by_long_airtime
         )
 
         # truncated agents (i.e. they reached the max episode length)
