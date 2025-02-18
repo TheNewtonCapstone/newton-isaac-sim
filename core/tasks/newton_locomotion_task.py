@@ -266,12 +266,12 @@ class NewtonLocomotionTask(NewtonBaseTask):
         # DONES
 
         # terminated agents (i.e. they failed)
-        self.terminated = (
+        self.terminated_buf = (
             is_tilted  # has_flipped | is_tilted | terminated_by_long_airtime
         )
 
         # truncated agents (i.e. they reached the max episode length)
-        self.truncated = (self.episode_length_buf >= self.max_episode_length).to(
+        self.truncated_buf = (self.episode_length_buf >= self.max_episode_length).to(
             self.device
         )
 
@@ -334,7 +334,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             weight=-self.reward_scalers["air_time"],
         )
         survival_reward = th.where(
-            self.terminated,
+            self.terminated_buf,
             0.0,
             self.reward_scalers["survival"],
         )
@@ -365,7 +365,8 @@ class NewtonLocomotionTask(NewtonBaseTask):
             "joint_action_rate_reward": joint_action_rate_reward.mean(),
             "air_time_reward": air_time_reward.mean(),
             "survival_reward": survival_reward.mean(),
-            "dones": self.dones_buf.sum(),
+            "terminated": self.terminated_buf.sum(),
+            "truncated": self.truncated_buf.sum(),
         }
 
     def _update_velocity_commands(self, indices: Optional[th.Tensor] = None) -> None:

@@ -231,10 +231,10 @@ class NewtonIdleTask(NewtonBaseTask):
         # DONES
 
         # terminated agents (i.e. they failed)
-        self.terminated = has_flipped | terminated_by_long_airtime
+        self.terminated_buf = has_flipped | terminated_by_long_airtime
 
         # truncated agents (i.e. they reached the max episode length)
-        self.truncated = (self.episode_length_buf >= self.max_episode_length).to(
+        self.truncated_buf = (self.episode_length_buf >= self.max_episode_length).to(
             self.device
         )
 
@@ -338,5 +338,6 @@ class NewtonIdleTask(NewtonBaseTask):
             "joint_action_rate_reward": joint_action_rate_reward.mean(),
             "joint_action_acceleration_reward": joint_action_acceleration_reward.mean(),
             "survival_reward": survival_reward.mean(),
-            "dones": self.dones_buf.sum(),
+            "terminated": self.terminated_buf.sum(),
+            "truncated": self.truncated_buf.sum(),
         }
