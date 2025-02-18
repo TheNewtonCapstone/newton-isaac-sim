@@ -1,8 +1,7 @@
 import os
-
-import yaml
 from typing import Dict, List, Any
 
+import yaml
 from core.types import Config
 
 
@@ -14,8 +13,13 @@ def load_config(config_path: str, convert_str_nones: bool = True) -> Config:
         return none_str_to_none(yaml.safe_load(f))
 
 
-def save_config(config: Config, config_path: str) -> None:
+def save_config(
+    config: Config, config_path: str, convert_objects_to_str: bool = True
+) -> None:
     with open(config_path, "w") as f:
+        if convert_objects_to_str:
+            config = type_to_str(config)
+
         yaml.dump(config, f)
 
 
@@ -28,14 +32,32 @@ def record_configs(record_dir: str, configs: Dict[str, Config]) -> None:
         )
 
 
-def animation_configs_to_clips_config(files: List[str]) -> Dict[str, Config]:
-    clips = {}
+def load_named_configs_in_dir(dir: str) -> Dict[str, Config]:
+    configs = {}
 
-    for file in files:
-        clip = load_config(file)
-        clips[clip["name"]] = clip
+    for file in os.listdir(dir):
+        if file.endswith(".yaml"):
+            config = load_config(f"{dir}/{file}")
+            configs[config["name"]] = config
 
-    return clips
+    return configs
+
+
+def type_to_str(value: Any) -> Any:
+    if isinstance(value, List):
+        return [type_to_str(v) for v in value]
+
+    if isinstance(value, Dict):
+        for key, val in value.items():
+            value[key] = type_to_str(val)
+
+    if value is None:
+        return "None"
+
+    if isinstance(value, type):
+        return value.__name__
+
+    return value
 
 
 def none_str_to_none(value: Config) -> Any:

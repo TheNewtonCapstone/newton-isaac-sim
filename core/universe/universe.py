@@ -104,7 +104,7 @@ class Universe(SimulationContext):
         **kwargs,
     ) -> None:
         """
-        Registers an object in the universe. If the object is already registered, it'll be ignored.
+        Registers an object in the universe. If the object is already registered, it'll supersede the previous registration.
         All registered objects will be constructed and post-constructed in the order they were registered.
         """
         self._registrations[obj] = (args, kwargs)

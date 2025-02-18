@@ -1,4 +1,4 @@
-task_name: "newton_locomotion"
+name: "newton_locomotion"
 device: "cuda"
 policy: "MlpPolicy"
 seed: 75129
@@ -45,7 +45,7 @@ scalers:
 ppo:
   n_steps: 24 # 0.48 seconds of real time (24 * 0.02 = 0.48)
   n_epochs: 5
-  n_minibatches: 8
+  n_minibatches: 4
 
   discount_factor: 0.99
   lambda: 0.95

@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Optional
+from typing import Optional, Union, List
 
 import torch as th
 from gymnasium import Space
@@ -18,6 +18,7 @@ from ..types import (
     ActionScaler,
     RewardScalers,
     TaskObservations,
+    Indices,
 )
 from ..universe import Universe
 
@@ -57,13 +58,10 @@ class NewtonBaseTask(BaseTask):
             observation_space,
             action_space,
             reward_space,
-            observation_scalers,
-            action_scaler,
-            reward_scalers,
+            observation_scalers=observation_scalers,
+            action_scaler=action_scaler,
+            reward_scalers=reward_scalers,
         )
-
-        self.training_env: NewtonBaseEnv = env
-        self.agent: NewtonBaseAgent = agent
 
         self.animation_engine: Optional[AnimationEngine] = animation_engine
         self.command_controller: Optional[CommandController] = command_controller
@@ -73,19 +71,27 @@ class NewtonBaseTask(BaseTask):
             device=self.device,
         )  # air time per paw
         self.last_actions_buf: Actions = th.zeros(
-            (self.num_envs, self.num_actions),
+            (self.num_envs, self._num_actions),
             dtype=th.float32,
             device=self.device,
         )
+
+    @property
+    def env(self) -> NewtonBaseEnv:
+        return self._env  # noqa
+
+    @property
+    def agent(self) -> NewtonBaseAgent:
+        return self._agent  # noqa
 
     @abstractmethod
     def construct(self) -> None:
         super().construct()
 
-        self.env.register_self()
+        self._env.register_self()
 
         if self.animation_engine:
-            self.animation_engine.register_self(self.name)
+            self.animation_engine.register_self()
 
         if self.command_controller:
             self.command_controller.register_self()
@@ -95,13 +101,13 @@ class NewtonBaseTask(BaseTask):
 
     @abstractmethod
     def step(self, actions: Actions) -> StepReturn:
-        self.episode_length_buf += 1
+        self._episode_length_buf += 1
 
         return super().step(actions)
 
     @abstractmethod
-    def reset(self) -> ResetReturn:
+    def reset(self, indices: Optional[Indices] = None) -> ResetReturn:
         return super().reset()
 
     def get_observations(self) -> TaskObservations:
-        return self.obs_buf, self.extras
+        return self._obs_buf, self._extras
