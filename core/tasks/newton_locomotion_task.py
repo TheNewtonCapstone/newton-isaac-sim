@@ -13,6 +13,8 @@ from core.types import Observations, Indices
 from core.universe import Universe
 from gymnasium.spaces import Box
 
+from core.utils.rl import *
+
 
 class NewtonLocomotionTaskCallback(NewtonBaseTaskCallback):
     def __init__(self, check_freq: int, save_path: str):
@@ -262,22 +264,6 @@ class NewtonLocomotionTask(NewtonBaseTask):
         base_angular_velocity_xy = angular_velocities[:, :2]
         base_angular_velocity_z = angular_velocities[:, 2]
 
-        joint_positions = (
-            self.agent.joints_controller.get_normalized_joint_positions()
-        )  # [-1, 1] unitless
-
-        dof_ordered_names = self.agent.joints_controller.art_view.dof_names
-        animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
-            self.progress_buf * self._universe.control_dt,
-            dof_ordered_names,
-        )
-        # we use the joint controller here, because it contains all the required information
-        animation_joint_positions = (
-            self.agent.joints_controller.normalize_joint_positions(
-                animation_joint_data[:, :, 7]
-            ).to(device=self.device)
-        )  # [-1, 1] unitless
-
         # DONES
 
         # terminated agents (i.e. they failed)
@@ -295,34 +281,14 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         # REWARDS
 
-        from core.utils.rl import (
-            squared_norm,
-            exp_squared,
-            exp_squared_norm,
-            exp_squared_dot,
-            exp_fd_first_order_squared_norm,
-            fd_first_order_squared_norm,
-            fd_second_order_squared_norm,
-        )
-
         position_reward = exp_fd_first_order_squared_norm(
             self.predicted_base_positions_xy,
             base_positions_xy,
             mult=-6.0,
             weight=1.5,
         )
-        base_orientation_reward = exp_squared_dot(
-            projected_gravities_norm,
-            world_gravities_norm,
-            mult=-5.0,
-            weight=1.5,
-        )
-        base_linear_velocity_xy_reward = exp_fd_first_order_squared_norm(
-            self.current_velocity_commands_xy,
-            base_linear_velocity_xy,
-            mult=-8.0,
-            weight=2.0,
-        )
+        base_orientation_reward = self._reward_upright_posture()
+        base_linear_velocity_xy_reward = self._reward_forward_motion()
         base_linear_velocity_z_reward = exp_squared(
             base_linear_velocity_z,
             mult=-8.0,
@@ -338,23 +304,17 @@ class NewtonLocomotionTask(NewtonBaseTask):
             mult=-2,
             weight=0.5,
         )
-        joint_positions_reward = fd_first_order_squared_norm(
-            joint_positions,
-            animation_joint_positions,
-            weight=5.0,
-        )
-        joint_action_rate_reward = fd_first_order_squared_norm(
-            self.actions_buf,
-            self.last_actions_buf[0],
-            weight=1.0,
-        )
+
+        joint_action_rate_reward = self._reward_smooth_motion()
         joint_action_acceleration_reward = fd_second_order_squared_norm(
             self.actions_buf,
             self.last_actions_buf[0],
             self.last_actions_buf[1],
             weight=0.45,
         )
-        air_time_penalty = -th.sum(self.air_time, dim=1) * 1.0
+        air_time_penalty = (
+            -th.sum(self.air_time, dim=1) * 0.5 + self._reward_prevent_stagnation()
+        )
         survival_reward = th.where(
             terminated,
             0.0,
@@ -362,17 +322,16 @@ class NewtonLocomotionTask(NewtonBaseTask):
         )
 
         self.rewards_buf = (
-            position_reward
-            + base_orientation_reward
-            + base_linear_velocity_xy_reward
-            + base_linear_velocity_z_reward
-            + base_angular_velocity_xy_reward
-            + base_angular_velocity_z_reward
-            + joint_positions_reward
-            + joint_action_rate_reward
-            + joint_action_acceleration_reward
-            + air_time_penalty
-            + survival_reward
+            # position_reward
+            # + base_orientation_reward
+            +base_linear_velocity_xy_reward
+            # + base_linear_velocity_z_reward
+            # + base_angular_velocity_xy_reward
+            # + base_angular_velocity_z_reward
+            # + joint_action_rate_reward
+            # + joint_action_acceleration_reward
+            # + air_time_penalty
+            # + survival_reward
         )
 
         self.rewards_buf *= self._universe.control_dt
@@ -427,3 +386,41 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         # Update the initial positions in the environment
         self.env.domain_randomizer.set_initial_position(indices, new_spawn_positions)
+
+    def _reward_forward_motion(self):
+        """Encourages the robot to move in the commanded direction."""
+        velocity_commands = self.current_velocity_commands_xy
+        base_linear_velocity = self.env.get_observations()["linear_velocities"][:, :2]
+        return squared_dot(velocity_commands, base_linear_velocity, weight=2.0)
+
+    def _reward_prevent_stagnation(self):
+        """Penalizes the robot for not moving when commanded."""
+        velocity_commands = self.current_velocity_commands_xy
+        base_linear_velocity = self.env.get_observations()["linear_velocities"][:, :2]
+        return -th.exp(-th.norm(base_linear_velocity - velocity_commands, dim=1))
+
+    def _reward_balanced_stepping(self):
+        """Encourages the robot to make controlled foot contacts instead of dragging or hovering."""
+        in_contact_with_ground = self.env.get_observations()["in_contacts"]
+        return th.mean(in_contact_with_ground.float(), dim=1) * 0.5  # Small weight
+
+    def _reward_smooth_motion(self):
+        """Penalizes rapid changes in actions to ensure fluid movement but allows more flexibility early in training."""
+        smoothness_weight = (
+            0.5 if self.progress_buf.mean() < 0.3 * self.max_episode_length else 1.0
+        )
+        return fd_first_order_squared_norm(
+            self.actions_buf, self.last_actions_buf[0], weight=smoothness_weight
+        )
+
+    def _reward_upright_posture(self):
+        """Rewards the robot for maintaining an upright posture but allows some tilt early in training."""
+        posture_weight = (
+            1.0 if self.progress_buf.mean() > 0.3 * self.max_episode_length else 0.5
+        )
+        return exp_squared_dot(
+            self.env.get_observations()["projected_gravities"],
+            self.env.get_observations()["world_gravities"],
+            mult=-3.0,  # Reduced penalty
+            weight=posture_weight,
+        )

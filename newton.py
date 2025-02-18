@@ -694,9 +694,9 @@ def main():
     for i in range(12):
         actuator = DCActuator(
             universe=universe,
-            k_p=0.6,
-            k_d=0.0001,
-            effort_saturation=100.0,
+            k_p=1.0,
+            k_d=0.0,
+            effort_saturation=120.0,
         )
         actuators.append(actuator)
 
