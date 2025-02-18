@@ -1,90 +1,25 @@
 from abc import abstractmethod
 from typing import Optional
 
-import numpy as np
 import torch as th
+from gymnasium import Space
+from gymnasium.spaces import Box
 
+from .base_task import BaseTask
 from ..agents import NewtonBaseAgent
 from ..animation import AnimationEngine
 from ..controllers import CommandController
 from ..envs import NewtonBaseEnv
-from .base_task import BaseTask, BaseTaskCallback
-from ..types import Actions, StepReturn, ResetReturn
+from ..types import (
+    Actions,
+    StepReturn,
+    ResetReturn,
+    ObservationScalers,
+    ActionScaler,
+    RewardScalers,
+    TaskObservations,
+)
 from ..universe import Universe
-from gymnasium import Space
-from gymnasium.spaces import Box
-
-
-class NewtonBaseTaskCallback(BaseTaskCallback):
-    def __init__(self, check_freq: int, save_path: str):
-        super().__init__()
-
-        self.check_freq: int = check_freq
-        self.save_path: str = save_path
-        self.best_median_reward: float = -np.inf
-        self.cumulative_rewards: th.Tensor = th.zeros((0,))
-
-    def _init_callback(self) -> None:
-        super()._init_callback()
-
-        task: NewtonBaseTask = self.training_env
-
-        if self.save_path is not None:
-            self.model.save(f"{self.logger.dir}/{self.save_path}")
-
-        self.cumulative_rewards = th.zeros((task.num_envs,), device=task.device)
-
-    def _on_step(self) -> bool:
-        super()._on_step()
-
-        task: NewtonBaseTask = self.training_env
-
-        can_check = self.n_calls > self.check_freq
-        can_save = self.n_calls % self.check_freq == 0
-
-        # Saves best cumulative rewards
-        if can_check:
-            self.cumulative_rewards = th.where(
-                task.reset_buf,
-                th.zeros_like(task.rew_buf),
-                self.cumulative_rewards + task.rew_buf,
-            )
-
-        if (
-            can_check
-            and can_save
-            and self.cumulative_rewards.median().item() > self.best_median_reward
-        ):
-            self.best_median_reward = self.cumulative_rewards.median().item()
-            self.logger.record("rewards/best_median", self.best_median_reward)
-
-            self.model.save(
-                f"{self.logger.dir}/{self.save_path}_rew_{self.best_median_reward:.2f}"
-            )
-
-        # TODO: better metrics about the agent's state & the animation engine
-        env_observations = task.env.get_observations()
-
-        for k, v in env_observations.items():
-            # we really only care about the z component of gravity
-            if "gravities" in k:
-                self.logger.record(f"observations/{k}", v[:, -1].mean().item())
-                continue
-
-            # if it's a bool (i.e. contact data), we want to know the percentage of contacts
-            if v.dtype == th.bool:
-                self.logger.record(
-                    f"observations/{k}",
-                    v.to(dtype=th.float32).mean(dim=-1).mean().item(),
-                )
-                continue
-
-            self.logger.record(
-                f"observations/{k}",
-                th.linalg.norm(v, dim=-1).mean().item(),
-            )
-
-        return True
 
 
 class NewtonBaseTask(BaseTask):
@@ -104,6 +39,9 @@ class NewtonBaseTask(BaseTask):
         observation_space: Space,
         action_space: Box,
         reward_space: Box,
+        observation_scalers: Optional[ObservationScalers] = None,
+        action_scaler: Optional[ActionScaler] = None,
+        reward_scalers: Optional[RewardScalers] = None,
     ):
 
         super().__init__(
@@ -119,6 +57,9 @@ class NewtonBaseTask(BaseTask):
             observation_space,
             action_space,
             reward_space,
+            observation_scalers,
+            action_scaler,
+            reward_scalers,
         )
 
         self.training_env: NewtonBaseEnv = env
@@ -132,10 +73,10 @@ class NewtonBaseTask(BaseTask):
             device=self.device,
         )  # air time per paw
         self.last_actions_buf: Actions = th.zeros(
-            (2, self.num_envs, self.num_actions),
+            (self.num_envs, self.num_actions),
             dtype=th.float32,
             device=self.device,
-        )  # 2 sets of past actions, 0: t - 1, 1: t - 2
+        )
 
     @abstractmethod
     def construct(self) -> None:
@@ -161,3 +102,6 @@ class NewtonBaseTask(BaseTask):
     @abstractmethod
     def reset(self) -> ResetReturn:
         return super().reset()
+
+    def get_observations(self) -> TaskObservations:
+        return self.obs_buf, self.extras

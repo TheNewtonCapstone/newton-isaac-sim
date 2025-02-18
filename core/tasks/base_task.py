@@ -1,81 +1,51 @@
 from abc import abstractmethod
-from typing import Any, List, Optional, Sequence, Type
+from typing import Optional, Tuple
 
-import numpy as np
+import gymnasium
 import torch
 from gymnasium.core import RenderFrame
 from rsl_rl.env import VecEnv
-from skrl.envs.torch import Wrapper
-from stable_baselines3.common.callbacks import BaseCallback
 
-import gymnasium
 from ..agents import BaseAgent
-from ..archiver import Archiver
 from ..base import BaseObject
 from ..envs import BaseEnv
-from ..types import EpisodeLength, Rewards, Dones, Actions, Extras, Observations, StepReturn, ResetReturn, \
-    TaskObservations
+from ..types import (
+    EpisodeLength,
+    Rewards,
+    Dones,
+    Actions,
+    Extras,
+    Observations,
+    StepReturn,
+    ResetReturn,
+    TaskObservations,
+    ObservationScalers,
+    RewardScalers,
+    ActionScaler,
+    Terminated,
+    Truncated,
+)
 from ..universe import Universe
 
 
-class BaseTaskCallback(BaseCallback):
-    def _init_callback(self) -> None:
-        task: BaseTask = self.training_env
-
-        self.logger.record("meta/name", task.name)
-        self.logger.record("meta/agent/name", task.agent.__class__.__name__)
-
-        self.logger.record("meta/device", task.device)
-
-        self.logger.record("meta/num_envs", task.num_envs)
-        self.logger.record("meta/max_episode_length", task.max_episode_length)
-        self.logger.record("meta/rl_step_dt", task._universe.control_dt)
-
-        self.logger.record("meta/observation_space", task.observation_space)
-        self.logger.record("meta/num_observations", task.num_obs)
-        self.logger.record("meta/action_space", task.action_space)
-        self.logger.record("meta/num_actions", task.num_actions)
-        self.logger.record("meta/reward_space", task.reward_space)
-
-    def _on_step(self) -> bool:
-        task: BaseTask = self.training_env
-
-        median_dones: float = torch.median(task.reset_buf.sum(dim=-1)).item()
-        median_reward: float = torch.median(task.rew_buf).item()
-        mean_progress: float = task.episode_length_buf.mean().item()
-        mean_action: float = task.actions_buf.mean().item()
-
-        self.logger.record("dones/median", median_dones)
-        self.logger.record("rewards/median", median_reward)
-        self.logger.record("progress/mean", mean_progress)
-        self.logger.record("actions/mean", mean_action)
-
-        task_archive_data = {
-            "dones_median": median_dones,
-            "rewards_median": median_reward,
-            "progress_mean": mean_progress,
-            "actions_mean": mean_action,
-        }
-        Archiver.put("rl", task_archive_data)
-
-        return True
-
-
-class BaseTask(BaseObject, gymnasium.vector.VectorEnv):
+class BaseTask(BaseObject, VecEnv):
     def __init__(
-            self,
-            universe: Universe,
-            name: str,
-            env: BaseEnv,
-            agent: BaseAgent,
-            num_envs: int,
-            device: str,
-            playing: bool,
-            reset_in_play: bool,
-            max_episode_length: int,
-            observation_space: gymnasium.spaces.Space,
-            action_space: gymnasium.spaces.Box,
-            reward_space: gymnasium.spaces.Box,
+        self,
+        universe: Universe,
+        name: str,
+        env: BaseEnv,
+        agent: BaseAgent,
+        num_envs: int,
+        device: str,
+        playing: bool,
+        reset_in_play: bool,
+        max_episode_length: int,
+        observation_space: gymnasium.spaces.Space,
+        action_space: gymnasium.spaces.Box,
+        reward_space: gymnasium.spaces.Box,
+        observation_scalers: Optional[ObservationScalers] = None,
+        action_scaler: Optional[ActionScaler] = None,
+        reward_scalers: Optional[RewardScalers] = None,
     ):
         BaseObject.__init__(
             self,
@@ -98,6 +68,10 @@ class BaseTask(BaseObject, gymnasium.vector.VectorEnv):
         self.observation_space: gymnasium.spaces.Space = observation_space
         self.action_space: gymnasium.spaces.Box = action_space
         self.reward_space: gymnasium.spaces.Box = reward_space
+
+        self.observation_scalers: Optional[ObservationScalers] = observation_scalers
+        self.action_scaler: Optional[ActionScaler] = action_scaler
+        self.reward_scalers: Optional[RewardScalers] = reward_scalers
 
         self.num_envs: int = num_envs
         self.num_agents: int = 1
@@ -124,7 +98,12 @@ class BaseTask(BaseObject, gymnasium.vector.VectorEnv):
             dtype=torch.float32,
             device=self.device,
         )
-        self.reset_buf: Dones = torch.zeros(
+        self.terminated_buf: Terminated = torch.zeros(
+            self.num_envs,
+            dtype=torch.bool,
+            device=self.device,
+        )
+        self.truncated_buf: Truncated = torch.zeros(
             self.num_envs,
             dtype=torch.bool,
             device=self.device,
@@ -134,12 +113,20 @@ class BaseTask(BaseObject, gymnasium.vector.VectorEnv):
             dtype=torch.float32,
             device=self.device,
         )
-        self.extras: Extras = {"observations": {}}
+        self.extras: Extras = {"episode": {}, "time_outs": torch.zeros(self.num_envs)}
 
         VecEnv.__init__(self)
 
     def __repr__(self):
         return f"BaseTask: {self.num_envs} environments, {self.num_obs} observations, {self.num_actions} actions"
+
+    @property
+    def dones_buf(self) -> Dones:
+        return self.terminated_buf | self.truncated_buf
+
+    @property
+    def should_reset(self) -> bool:
+        return self.reset_in_play or not self.playing
 
     @abstractmethod
     def construct(self) -> None:
@@ -153,13 +140,13 @@ class BaseTask(BaseObject, gymnasium.vector.VectorEnv):
     def step(self, actions: Actions) -> StepReturn:
         assert self._is_post_constructed, "Task not constructed: tried to step"
 
-        self.actions_buf = actions
+        self.actions_buf = actions.to(self.device)
 
         return (
             self.obs_buf,
             self.rew_buf,
-            self.reset_buf,
-            self.reset_buf,
+            self.terminated_buf,
+            self.truncated_buf,
             self.extras,
         )
 
@@ -173,5 +160,5 @@ class BaseTask(BaseObject, gymnasium.vector.VectorEnv):
     def get_observations(self) -> TaskObservations:
         return self.obs_buf, self.extras
 
-    def render(self) -> tuple[RenderFrame, ...] | None:
+    def render(self) -> Tuple[RenderFrame, ...] | None:
         pass

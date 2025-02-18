@@ -54,7 +54,7 @@ class Universe(SimulationContext):
         super().__init__(
             physics_prim_path=PHYSICS_PATH,
             physics_dt=self._world_settings["physics_dt"],
-            rendering_dt=self._world_settings["rendering_dt"],
+            rendering_dt=self._world_settings["physics_dt"],
             stage_units_in_meters=self._world_settings["stage_units_in_meters"],
             backend=self._world_settings["backend"],
             device=self._world_settings["device"],
@@ -141,7 +141,17 @@ class Universe(SimulationContext):
         super().step(render=self.has_gui)
 
     def render(self) -> None:
-        if self.has_gui:
+        if hasattr(self, "_number_of_steps"):
+            is_render_step = (
+                self._number_of_steps
+                % (self.get_rendering_dt() // self.get_physics_dt())
+                == 0
+            )
+        else:
+            # if this was called from the constructor, we just render the scene
+            is_render_step = True
+
+        if self.has_gui and is_render_step:
             # if we have a viewport, render the scene as it should by default
             super().render()
             return

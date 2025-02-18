@@ -1,6 +1,6 @@
-physics_dt: 0.002500 # 400 Hz
+physics_dt: 0.001000 # 500 Hz
 control_dt: 0.020000 # 50 Hz
-rendering_dt: 0.002500
+rendering_dt: 0.020000 # 100 Hz
 stage_units_in_meters: 1.0
 backend: torch
 device: cuda
@@ -20,7 +20,7 @@ sim_params:
   enable_stabilization: False # true for a 2nd pass to stabilize fast-moving objects
   enable_scene_query_support: False # true to interact with the scene with the mouse (doesn't work with GPU dynamics)
   enable_enhanced_determinism: False # true for deterministic simulation, more computationally expensive
-  disable_contact_processing: False # helpful when creating contact reporting over limited number of objects in the scene
+  disable_contact_processing: True  # helpful when creating contact reporting over limited number of objects in the scene
 
   use_fabric: True # true for fabric, NVIDIA's fast interop layer between Hydra & PhysX; false for USD only
   enable_ccd: False # true for continuous collision detection, needs to be enabled on each rigid body & pair filter
@@ -33,11 +33,11 @@ sim_params:
 
   # GPU buffers
 
-  use_gpu_pipeline: True # true for GPU dynamics (i.e. deformables)
+  use_gpu_pipeline: True # true for GPU dynamics
   gpu_max_rigid_contact_count: 2097152
   gpu_max_rigid_patch_count: 655360
   gpu_found_lost_pairs_capacity: 16776216
-  gpu_found_lost_aggregate_pairs_capacity: 310319304
+  gpu_found_lost_aggregate_pairs_capacity: 478054400
   gpu_total_aggregate_pairs_capacity: 8390656
   gpu_max_soft_body_contacts: 1024 # Soft body contacts are not used for Newton-related sims, so we keep it low
   gpu_max_particle_contacts: 1024 # Particle contacts are not used for Newton-related sims, so we keep it low

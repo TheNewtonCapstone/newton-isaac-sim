@@ -7,7 +7,7 @@ from scipy import interpolate
 def random_uniform_terrain(
     terrain: SubTerrain,
     min_height: float = 0.0,
-    max_height: float = 0.05,
+    max_height: float = 0.02,
     step: float = 0.01,
     downsampled_scale: float = None,
 ) -> SubTerrain:

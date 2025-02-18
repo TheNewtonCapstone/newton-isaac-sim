@@ -265,3 +265,6 @@ class VecIMU(BaseObject):
         self._projected_gravities = quat_rotate_inverse(
             orientations, projected_gravities
         )
+        self._projected_gravities /= torch.norm(
+            self._projected_gravities, dim=-1, keepdim=True
+        )

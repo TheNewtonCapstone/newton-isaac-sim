@@ -15,8 +15,36 @@ delay:
   act_delay_range: [1, 2] # sample range of time steps to delay the actions by
   instant_rewards: False # should the rewards be calculated on the brain or remote actor?
 
+scalers:
+  observations:
+    projected_gravities: 1.0
+    linear_velocities: 2.0
+    angular_velocities: 0.25
+    joint_positions: 1.0
+    joint_velocities: 0.05
+    last_actions: 1.0
+    velocity_commands: 1.0
+
+  rewards:
+    position: 0.5
+    height: 2.0
+    base_stability: 2.0
+    base_linear_velocity_xy: 1.0
+    base_linear_velocity_z: 1.0
+    base_angular_velocity_z: 0.5
+    joint_positions: 2.0
+    joint_action_rate: 0.05
+    air_time: 0.5
+    survival: 5.0
+
+  action: 1.0
+
+  commands:
+    linear_velocity_xy: 1.0
+    angular_velocity_z: 1.0
+
 ppo:
-  n_steps: 32 # 0.64 seconds of real time (64 * 0.01 = 0.64)
+  n_steps: 24 # 0.48 seconds of real time (24 * 0.02 = 0.48)
   batch_size: 131_072
   n_epochs: 5
 
@@ -28,12 +56,10 @@ ppo:
 
   normalize_advantage: True
 
-  ent_coef: 0.01
-  vf_coef: 0.5
+  ent_coef: 0.0
+  vf_coef: 1.0
 
   max_grad_norm: 1.0
-  use_sde: False
-  sde_sample_freq: -1
 
   target_kl: 0.01
   stop_on_excessive_kl: False

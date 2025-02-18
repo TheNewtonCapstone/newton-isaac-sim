@@ -51,18 +51,26 @@ Observations = torch.Tensor
 Actions = torch.Tensor
 Rewards = torch.Tensor
 Dones = torch.Tensor
+Terminated = torch.Tensor
+Truncated = torch.Tensor
 EpisodeLength = torch.Tensor
 
 EnvObservations = Dict[str, torch.Tensor]
 
 
 class Extras(TypedDict):
-    observations: EnvObservations
+    episode: Dict[str, torch.Tensor]
+    time_outs: torch.Tensor
 
 
-StepReturn = Tuple[Observations, Rewards, Dones, Extras]
+StepReturn = Tuple[Observations, Rewards, Terminated, Truncated, Extras]
 ResetReturn = Tuple[Observations, Extras]
 TaskObservations = Tuple[Observations, Extras]
+
+ObservationScalers = Dict[str, float]
+RewardScalers = Dict[str, float]
+ActionScaler = float
+CommandScalers = Dict[str, float]
 
 # Math
 NoiseFunction = Callable[[torch.Tensor], torch.Tensor]

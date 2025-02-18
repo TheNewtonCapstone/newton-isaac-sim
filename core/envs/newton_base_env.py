@@ -86,7 +86,6 @@ class NewtonBaseEnv(BaseEnv):
                 gravity_direction,
                 device=self._universe.device,
             )
-            * gravity_magnitude
         ).repeat(self.num_envs, 1)
 
         Archiver.put(

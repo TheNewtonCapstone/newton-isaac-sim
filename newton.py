@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import List, Optional, Tuple, get_args
+from typing import List, Optional, Tuple, get_args, Mapping, Union, Any
 
 from core.logger import Logger
 from core.types import Matter, Config, ConfigCollection, Mode
@@ -669,7 +669,7 @@ def main():
     from core.agents import NewtonVecAgent
 
     from core.sensors import VecIMU, VecContact
-    from core.actuators import LSTMActuator, BaseActuator
+    from core.actuators import LSTMActuator, BaseActuator, DCActuator
     from core.controllers import VecJointsController, CommandController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -692,10 +692,11 @@ def main():
     actuators: List[BaseActuator] = []
 
     for i in range(12):
-        actuator = LSTMActuator(
+        actuator = DCActuator(
             universe=universe,
-            motor_model_path=robot_config["actuators"]["lstm"]["model_path"],
-            model_params=robot_config["actuators"]["lstm"]["model_params"],
+            k_p=1.0,
+            k_d=0.001,
+            effort_saturation=120.0,
         )
 
         actuators.append(actuator)
@@ -809,42 +810,7 @@ def main():
     # ----------- #
 
     if exporting:
-        from stable_baselines3.ppo.ppo import PPO
-        from stable_baselines3.common.policies import BasePolicy
-
-        # Load model from checkpoint
-        model = PPO.load(current_checkpoint_path, device="cpu")
-
-        # Create dummy observations tensor for tracing torch model
-        obs_shape = model.observation_space.shape
-        dummy_input = torch.rand((1, *obs_shape), device="cpu")
-
-        # Simplified network for actor inference
-        # Tested for continuous_a2c_logstd
-        class OnnxablePolicy(torch.nn.Module):
-            def __init__(self, policy: BasePolicy):
-                super().__init__()
-                self.policy = policy
-
-            def forward(
-                self,
-                observation: torch.Tensor,
-            ):
-                return self.policy(observation, deterministic=True)
-
-        onnxable_model = OnnxablePolicy(model.policy)
-        torch.onnx.export(
-            onnxable_model,
-            dummy_input,
-            f"{current_checkpoint_path}.onnx",
-            verbose=True,
-            input_names=["observations"],
-            output_names=["actions"],
-        )  # outputs are mu (actions), sigma, value
-
-        Logger.info(f"Exported {current_run_name} to {current_checkpoint_path}.onnx!")
-
-        return
+        raise NotImplementedError("ONNX export is not yet implemented.")
 
     # --------------- #
     #    ANIMATING    #
@@ -896,9 +862,9 @@ def main():
             )
 
             # we need to make it 2D, since the controller expects a batch of actions
-            env.step(joint_actions.repeat(1, 1))
+            env.step(joint_actions.unsqueeze(0))
 
-        exit(1)
+        return
 
     # ---------------- #
     #   PHYSICS ONLY   #
@@ -937,10 +903,7 @@ def main():
     from core.tasks import (
         NewtonIdleTask,
         NewtonLocomotionTask,
-        NewtonBaseTaskCallback,
-        NewtonLocomotionTaskCallback,
     )
-    from core.wrappers import RandomDelayWrapper
 
     training_env = NewtonTerrainEnv(
         universe=universe,
@@ -972,103 +935,136 @@ def main():
         playing=playing,
         reset_in_play=rl_config["reset_in_play"],
         max_episode_length=rl_config["episode_length"],
+        observation_scalers=rl_config["scalers"]["observations"],
+        action_scaler=rl_config["scalers"]["action"],
+        reward_scalers=rl_config["scalers"]["rewards"],
+        command_scalers=rl_config["scalers"]["commands"],
     )
-    callback = NewtonBaseTaskCallback(
-        check_freq=64,
-        save_path=current_run_name,
-    )
-
 
     # we're not exporting nor purely simulating, so we're training
     if training:
-        if rl_config["delay"]["enabled"]:
-            list_obs_delay_range = rl_config["delay"]["obs_delay_range"]
-            list_act_delay_range = rl_config["delay"]["act_delay_range"]
-            instant_rewards = rl_config["delay"]["instant_rewards"]
-
-            obs_delay_range = range(list_obs_delay_range[0], list_obs_delay_range[1])
-            act_delay_range = range(list_act_delay_range[0], list_act_delay_range[1])
-
-            task = RandomDelayWrapper(
-                task,
-                obs_delay_range=obs_delay_range,
-                act_delay_range=act_delay_range,
-                instant_rewards=instant_rewards,
-            )
-
         from skrl.models.torch import GaussianMixin, DeterministicMixin, Model
         from torch import nn
 
-        class Policy(GaussianMixin, Model):
-            def __init__(self, observation_space, action_space, device, clip_actions=False,
-                         clip_log_std=True, min_log_std=-20, max_log_std=2, reduction="sum"):
+        class Shared(GaussianMixin, DeterministicMixin, Model):
+            def __init__(
+                self,
+                observation_space,
+                action_space,
+                device,
+                clip_actions=False,
+                clip_log_std=True,
+                min_log_std=-20,
+                max_log_std=2,
+                reduction="sum",
+            ):
                 Model.__init__(self, observation_space, action_space, device)
-                GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std, reduction)
-
-                self.net = nn.Sequential(nn.Linear(self.num_observations, 512),
-                                         nn.ReLU(),
-                                         nn.Linear(512, 256),
-                                         nn.ReLU(),
-                                         nn.Linear(256, 128),
-                                         nn.ReLU(),
-                                         nn.Linear(128, self.num_actions))
-                self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
-
-            def compute(self, inputs, role):
-                # Pendulum-v1 action_space is -2 to 2
-                return 2 * torch.tanh(self.net(inputs["states"])), self.log_std_parameter, {}
-
-        class Value(DeterministicMixin, Model):
-            def __init__(self, observation_space, action_space, device, clip_actions=False):
-                Model.__init__(self, observation_space, action_space, device)
+                GaussianMixin.__init__(
+                    self,
+                    clip_actions,
+                    clip_log_std,
+                    min_log_std,
+                    max_log_std,
+                    reduction,
+                )
                 DeterministicMixin.__init__(self, clip_actions)
 
-                self.net = nn.Sequential(nn.Linear(self.num_observations, 512),
-                                         nn.ReLU(),
-                                         nn.Linear(512, 256),
-                                         nn.ReLU(),
-                                         nn.Linear(256, 128),
-                                         nn.ReLU(),
-                                         nn.Linear(128, 1))
+                self.net = nn.Sequential(
+                    nn.Linear(self.num_observations, 512),
+                    nn.ReLU(),
+                    nn.Linear(512, 256),
+                    nn.ReLU(),
+                    nn.Linear(256, 128),
+                    nn.ReLU(),
+                )
+
+                self.action_layer = nn.Linear(128, self.num_actions)
+                self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
+
+                self.value_layer = nn.Linear(128, 1)
+
+            def act(
+                self, inputs: Mapping[str, Union[torch.Tensor, Any]], role: str = ""
+            ) -> Tuple[
+                torch.Tensor,
+                Union[torch.Tensor, None],
+                Mapping[str, Union[torch.Tensor, Any]],
+            ]:
+                if role == "policy":
+                    return GaussianMixin.act(self, inputs, role)
+                elif role == "value":
+                    return DeterministicMixin.act(self, inputs, role)
 
             def compute(self, inputs, role):
-                return self.net(inputs["states"]), {}
+                if role == "policy":
+                    self._shared_output = self.net(inputs["states"])
+                    return (
+                        self.action_layer(self._shared_output),
+                        self.log_std_parameter,
+                        {},
+                    )
 
-        from skrl.envs.wrappers.torch import wrap_env
-
-        # task = wrap_env(task, wrapper="gymnasium")
+                if role == "value":
+                    shared_output = (
+                        self.net(inputs["states"])
+                        if self._shared_output is None
+                        else self._shared_output
+                    )
+                    self._shared_output = None
+                    return self.value_layer(shared_output), {}
 
         from skrl.memories.torch import RandomMemory
-        memory = RandomMemory(memory_size=rl_config["ppo"]["n_steps"], num_envs=num_envs, device=task.device)
+        from skrl.utils import set_seed
+
+        set_seed()
+
+        memory = RandomMemory(
+            memory_size=rl_config["ppo"]["n_steps"],
+            num_envs=num_envs,
+            device=task.device,
+        )
 
         models = {}
-        models["policy"] = Policy(task.observation_space, task.action_space, task.device, clip_actions=True)
-        models["value"] = Value(task.observation_space, task.action_space, task.device)
+        models["policy"] = Shared(
+            task.observation_space,
+            task.action_space,
+            task.device,
+        )
+        models["value"] = models["policy"]
 
         from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG, PPO
         from skrl.resources.schedulers.torch import KLAdaptiveRL
+        from skrl.resources.preprocessors.torch import RunningStandardScaler
 
         cfg = PPO_DEFAULT_CONFIG.copy()
         cfg["rollouts"] = rl_config["ppo"]["n_steps"]
         cfg["learning_epochs"] = rl_config["ppo"]["n_epochs"]
         cfg["mini_batches"] = 4
-        cfg["discount_factor"] = 0.9
+        cfg["discount_factor"] = 0.99
         cfg["lambda"] = 0.95
-        cfg["learning_rate"] = 1e-3
+        cfg["learning_rate"] = 3e-4
         cfg["learning_rate_scheduler"] = KLAdaptiveRL
         cfg["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
         cfg["grad_norm_clip"] = rl_config["ppo"]["max_grad_norm"]
         cfg["ratio_clip"] = 0.2
         cfg["value_clip"] = 0.2
-        cfg["clip_predicted_values"] = False
+        cfg["clip_predicted_values"] = True
         cfg["entropy_loss_scale"] = rl_config["ppo"]["ent_coef"]
         cfg["value_loss_scale"] = rl_config["ppo"]["vf_coef"]
         cfg["kl_threshold"] = 0
         cfg["mixed_precision"] = True
+        cfg["state_preprocessor"] = RunningStandardScaler
+        cfg["state_preprocessor_kwargs"] = {
+            "size": task.observation_space,
+            "device": task.device,
+        }
+        cfg["value_preprocessor"] = RunningStandardScaler
+        cfg["value_preprocessor_kwargs"] = {"size": 1, "device": task.device}
         # logging to TensorBoard and write checkpoints (in timesteps)
-        cfg["experiment"]["write_interval"] = 1
+        cfg["experiment"]["write_interval"] = 12
         cfg["experiment"]["checkpoint_interval"] = rl_config["ppo"]["n_steps"]
-        cfg["experiment"]["directory"] = f"{runs_dir}/{current_run_name}"
+        cfg["experiment"]["directory"] = runs_dir
+        cfg["experiment"]["experiment_name"] = current_run_name
 
         model = PPO(
             models=models,
@@ -1080,107 +1076,22 @@ def main():
         )
 
         cfg_trainer = {
-            "timesteps": 1500,
+            "timesteps": 24000,
             "headless": headless,
         }
 
         from skrl.trainers.torch import SequentialTrainer
+
         trainer = SequentialTrainer(cfg=cfg_trainer, env=task, agents=[model])
 
         terrain.register_self()  # we need to do it manually
 
         universe.construct_registrations()
 
-        trainer.train()
-        model.save(f"{runs_dir}/{current_run_name}/model.zip")
+        if current_checkpoint_path is not None:
+            Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
 
-        return
-
-        policy_kwargs = {
-            "activation_fn": network_config["activation_fn"],
-            "net_arch": network_config["net_arch"],
-        }
-
-        from rsl_rl.runners import OnPolicyRunner
-
-        config = {
-            "algorithm": {
-                "class_name": "PPO",
-                "value_loss_coef": 1.0,
-                "clip_param": 0.2,
-                "use_clipped_value_loss": True,
-                "desired_kl": 0.01,
-                "entropy_coef": 0.01,
-                "gamma": 0.99,
-                "lam": 0.95,
-                "max_grad_norm": 1.0,
-                "learning_rate": 0.001,
-                "num_learning_epochs": 5,
-                "num_mini_batches": 4,
-                "schedule": "adaptive"
-            },
-            "policy": {
-                "class_name": "ActorCritic",
-                "activation": "relu",
-                "actor_hidden_dims": [512, 256, 128],
-                "critic_hidden_dims": [512, 256, 128],
-                "init_noise_std": 1.0
-            },
-            "runner": {
-                "max_iterations": 1500,
-                "experiment_name": task.name,
-                "run_name": current_run_name,
-                "logger": "tensorboard",
-                "neptune_project": "newton",
-                "wandb_project": "newton",
-                "resume": False,
-                "load_run": -1,
-                "resume_path": None,
-                "checkpoint": -1
-            },
-            "empirical_normalization": False,
-            "save_interval": 50,
-            "num_steps_per_env": 24,
-            "runner_class_name": "OnPolicyRunner",
-            "seed": rl_config["seed"],
-        }
-        terrain.register_self()  # we need to do it manually
-
-        universe.construct_registrations()
-
-        runner = OnPolicyRunner(env=task, device=rl_config["device"], log_dir=f"{runs_dir}/{current_run_name}", train_cfg=config,)
-        runner.add_git_repo_to_log(__file__)
-
-        runner.learn(num_learning_iterations=1500, init_at_random_ep_len=True)
-
-        return
-
-        from core.utils.rl import kl_based_adaptive_lr
-
-        model = PPO(
-            rl_config["policy"],
-            task,
-            verbose=2,
-            device=rl_config["device"],
-            seed=rl_config["seed"],
-            learning_rate=kl_based_adaptive_lr,
-            n_steps=rl_config["ppo"]["n_steps"],
-            batch_size=rl_config["ppo"]["batch_size"],
-            n_epochs=rl_config["ppo"]["n_epochs"],
-            gamma=rl_config["ppo"]["gamma"],
-            gae_lambda=rl_config["ppo"]["gae_lambda"],
-            clip_range=float(rl_config["ppo"]["clip_range"]),
-            clip_range_vf=rl_config["ppo"]["clip_range_vf"],
-            ent_coef=rl_config["ppo"]["ent_coef"],
-            vf_coef=rl_config["ppo"]["vf_coef"],
-            max_grad_norm=rl_config["ppo"]["max_grad_norm"],
-            use_sde=rl_config["ppo"]["use_sde"],
-            sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
-            target_kl=rl_config["ppo"]["target_kl"],
-            stop_on_excessive_kl=rl_config["ppo"]["stop_on_excessive_kl"],
-            tensorboard_log=runs_dir,
-            policy_kwargs=policy_kwargs,
-        )
+            model.load(current_checkpoint_path)
 
         from core.utils.config import save_config
 
@@ -1204,25 +1115,9 @@ def main():
         )
         save_config(randomization_config, randomizer_config_record_path)
 
-        if current_checkpoint_path is not None:
-            Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
+        trainer.train()
 
-            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
-
-        terrain.register_self()  # we need to do it manually
-
-        universe.construct_registrations()
-
-        model.learn(
-            total_timesteps=rl_config["timesteps_per_env"] * num_envs,
-            tb_log_name=current_run_name,
-            reset_num_timesteps=False,
-            progress_bar=True,
-            callback=callback,
-        )
-        model.save(f"{runs_dir}/{current_run_name}_0/model.zip")
-
-        exit(1)
+        return
 
     if playing:
         terrain.register_self(
@@ -1251,14 +1146,14 @@ def main():
                 "learning_rate": 0.001,
                 "num_learning_epochs": 5,
                 "num_mini_batches": 4,
-                "schedule": "adaptive"
+                "schedule": "adaptive",
             },
             "policy": {
                 "class_name": "ActorCritic",
                 "activation": "relu",
                 "actor_hidden_dims": [512, 256, 128],
                 "critic_hidden_dims": [512, 256, 128],
-                "init_noise_std": 1.0
+                "init_noise_std": 1.0,
             },
             "runner": {
                 "max_iterations": 1500,
@@ -1270,7 +1165,7 @@ def main():
                 "resume": False,
                 "load_run": -1,
                 "resume_path": None,
-                "checkpoint": -1
+                "checkpoint": -1,
             },
             "empirical_normalization": False,
             "save_interval": 10,
@@ -1282,7 +1177,12 @@ def main():
 
         universe.construct_registrations()
 
-        runner = OnPolicyRunner(env=task, device=rl_config["device"], log_dir=None, train_cfg=config,)
+        runner = OnPolicyRunner(
+            env=task,
+            device=rl_config["device"],
+            log_dir=None,
+            train_cfg=config,
+        )
         runner.load(current_checkpoint_path)
 
         model = runner.get_inference_policy(device=rl_config["device"])
