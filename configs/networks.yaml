@@ -8,13 +8,13 @@ networks:
   # DO NOT REMOVE 'default' NETWORK. IT IS USED AS A FALLBACK
   default:
     net_arch: [64, 64]
-    activation_fn: torch.nn.ReLU
+    activation_fn: ReLU
   custom_name:
     net_arch: [256, 256]
-    activation_fn: torch.nn.ELU
+    activation_fn: ELU
   descending:
     net_arch: [1024, 512, 256]
-    activation_fn: torch.nn.ReLU
+    activation_fn: ReLU
   descending2:
     net_arch: [512, 256, 128]
-    activation_fn: torch.nn.ReLU
+    activation_fn: ReLU

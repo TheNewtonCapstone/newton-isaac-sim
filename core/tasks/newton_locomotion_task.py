@@ -277,7 +277,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         # REWARDS
 
-        from core.utils.rl import (
+        from core.utils.rl.rewards import (
             squared,
             exp_squared,
             exp_one_minus_squared_dot,

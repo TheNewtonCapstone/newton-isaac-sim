@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import List, Optional, Tuple, get_args, Mapping, Union, Any
+from typing import List, Optional, Tuple, get_args
 
 from core.logger import Logger
 from core.types import Matter, Config, ConfigCollection, Mode
@@ -544,7 +544,7 @@ def setup() -> Optional[Matter]:
         world_config["sim_params"]["enable_scene_query_support"] = True
 
     control_step_dt = world_config["control_dt"]
-    inverse_control_frequency = int(control_step_dt / world_config["physics_dt"])
+    inverse_control_frequency = control_step_dt // world_config["physics_dt"]
 
     return (
         cli_args,
@@ -640,7 +640,6 @@ def main():
     )
 
     import torch
-    import numpy as np
 
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
@@ -669,7 +668,7 @@ def main():
     from core.agents import NewtonVecAgent
 
     from core.sensors import VecIMU, VecContact
-    from core.actuators import LSTMActuator, BaseActuator, DCActuator
+    from core.actuators import BaseActuator, DCActuator
     from core.controllers import VecJointsController, CommandController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -901,7 +900,6 @@ def main():
     # ----------- #
 
     from core.tasks import (
-        NewtonIdleTask,
         NewtonLocomotionTask,
     )
 
@@ -941,334 +939,85 @@ def main():
         command_scalers=rl_config["scalers"]["commands"],
     )
 
-    # we're not exporting nor purely simulating, so we're training
-    if training:
-        from skrl.models.torch import GaussianMixin, DeterministicMixin, Model
-        from torch import nn
-
-        class Shared(GaussianMixin, DeterministicMixin, Model):
-            def __init__(
-                self,
-                observation_space,
-                action_space,
-                device,
-                clip_actions=False,
-                clip_log_std=True,
-                min_log_std=-20,
-                max_log_std=2,
-                reduction="sum",
-            ):
-                Model.__init__(self, observation_space, action_space, device)
-                GaussianMixin.__init__(
-                    self,
-                    clip_actions,
-                    clip_log_std,
-                    min_log_std,
-                    max_log_std,
-                    reduction,
-                )
-                DeterministicMixin.__init__(self, clip_actions)
-
-                self.net = nn.Sequential(
-                    nn.Linear(self.num_observations, 512),
-                    nn.ReLU(),
-                    nn.Linear(512, 256),
-                    nn.ReLU(),
-                    nn.Linear(256, 128),
-                    nn.ReLU(),
-                )
-
-                self.action_layer = nn.Linear(128, self.num_actions)
-                self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
-
-                self.value_layer = nn.Linear(128, 1)
-
-            def act(
-                self, inputs: Mapping[str, Union[torch.Tensor, Any]], role: str = ""
-            ) -> Tuple[
-                torch.Tensor,
-                Union[torch.Tensor, None],
-                Mapping[str, Union[torch.Tensor, Any]],
-            ]:
-                if role == "policy":
-                    return GaussianMixin.act(self, inputs, role)
-                elif role == "value":
-                    return DeterministicMixin.act(self, inputs, role)
-
-            def compute(self, inputs, role):
-                if role == "policy":
-                    self._shared_output = self.net(inputs["states"])
-                    return (
-                        self.action_layer(self._shared_output),
-                        self.log_std_parameter,
-                        {},
-                    )
-
-                if role == "value":
-                    shared_output = (
-                        self.net(inputs["states"])
-                        if self._shared_output is None
-                        else self._shared_output
-                    )
-                    self._shared_output = None
-                    return self.value_layer(shared_output), {}
-
-        from skrl.memories.torch import RandomMemory
+    if training or playing:
         from skrl.utils import set_seed
 
         set_seed()
 
-        memory = RandomMemory(
-            memory_size=rl_config["ppo"]["n_steps"],
-            num_envs=num_envs,
-            device=task.device,
-        )
+        from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG
+        from skrl.trainers.torch.sequential import SEQUENTIAL_TRAINER_DEFAULT_CONFIG
 
-        models = {}
-        models["policy"] = Shared(
-            task.observation_space,
-            task.action_space,
-            task.device,
-        )
-        models["value"] = models["policy"]
+        from core.utils.rl.config import parse_ppo_config
 
-        from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG, PPO
-        from skrl.resources.schedulers.torch import KLAdaptiveRL
-        from skrl.resources.preprocessors.torch import RunningStandardScaler
-
-        cfg = PPO_DEFAULT_CONFIG.copy()
-        cfg["rollouts"] = rl_config["ppo"]["n_steps"]
-        cfg["learning_epochs"] = rl_config["ppo"]["n_epochs"]
-        cfg["mini_batches"] = 4
-        cfg["discount_factor"] = 0.99
-        cfg["lambda"] = 0.95
-        cfg["learning_rate"] = 3e-4
-        cfg["learning_rate_scheduler"] = KLAdaptiveRL
-        cfg["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
-        cfg["grad_norm_clip"] = rl_config["ppo"]["max_grad_norm"]
-        cfg["ratio_clip"] = 0.2
-        cfg["value_clip"] = 0.2
-        cfg["clip_predicted_values"] = True
-        cfg["entropy_loss_scale"] = rl_config["ppo"]["ent_coef"]
-        cfg["value_loss_scale"] = rl_config["ppo"]["vf_coef"]
-        cfg["kl_threshold"] = 0
-        cfg["mixed_precision"] = True
-        cfg["state_preprocessor"] = RunningStandardScaler
-        cfg["state_preprocessor_kwargs"] = {
+        ppo_config = parse_ppo_config(rl_config["ppo"], PPO_DEFAULT_CONFIG)
+        ppo_config["state_preprocessor_kwargs"] = {
             "size": task.observation_space,
             "device": task.device,
         }
-        cfg["value_preprocessor"] = RunningStandardScaler
-        cfg["value_preprocessor_kwargs"] = {"size": 1, "device": task.device}
-        # logging to TensorBoard and write checkpoints (in timesteps)
-        cfg["experiment"]["write_interval"] = 12
-        cfg["experiment"]["checkpoint_interval"] = rl_config["ppo"]["n_steps"]
-        cfg["experiment"]["directory"] = runs_dir
-        cfg["experiment"]["experiment_name"] = current_run_name
+        ppo_config["value_preprocessor_kwargs"] = {
+            "size": 1,
+            "device": task.device,
+        }
+        ppo_config["experiment"]["directory"] = runs_dir
+        ppo_config["experiment"]["experiment_name"] = current_run_name
 
-        model = PPO(
-            models=models,
-            memory=memory,
-            cfg=cfg,
-            observation_space=task.observation_space,
-            action_space=task.action_space,
-            device=task.device,
+        trainer_config = SEQUENTIAL_TRAINER_DEFAULT_CONFIG.copy()
+        trainer_config["timesteps"] = rl_config["timesteps"]
+        trainer_config["headless"] = headless
+        trainer_config["stochastic_evaluation"] = False  # deterministic evaluation
+
+        from core.utils.rl.skrl import (
+            create_shared_model,
+            create_ppo,
+            create_random_memory,
+            create_sequential_trainer,
         )
 
-        cfg_trainer = {
-            "timesteps": 24000,
-            "headless": headless,
-        }
+        model = create_shared_model(
+            task=task,
+            arch=network_config["net_arch"],
+            activation=network_config["activation_fn"],
+        )
 
-        from skrl.trainers.torch import SequentialTrainer
+        random_memory = create_random_memory(
+            task=task,
+            memory_size=rl_config["ppo"]["n_steps"],
+        )
 
-        trainer = SequentialTrainer(cfg=cfg_trainer, env=task, agents=[model])
+        algo = create_ppo(
+            task=task,
+            ppo_config=ppo_config,
+            memory=random_memory,
+            policy_model=model,
+            checkpoint_path=current_checkpoint_path,
+        )
+
+        trainer = create_sequential_trainer(
+            task=task,
+            algorithm=algo,
+            trainer_config=trainer_config,
+        )
 
         terrain.register_self()  # we need to do it manually
 
         universe.construct_registrations()
 
-        if current_checkpoint_path is not None:
-            Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
+        from core.utils.config import record_configs
 
-            model.load(current_checkpoint_path)
-
-        from core.utils.config import save_config
-
-        record_directory = f"{runs_dir}/{current_run_name}_0/records"
-        os.makedirs(record_directory, exist_ok=True)
-
-        rl_config_record_path = f"{record_directory}/rl_config_record.yaml"
-        save_config(rl_config, rl_config_record_path)
-
-        world_config_record_path = f"{record_directory}/world_config_record.yaml"
-        save_config(world_config, world_config_record_path)
-
-        robot_config_record_path = f"{record_directory}/robot_config_record.yaml"
-        save_config(robot_config, robot_config_record_path)
-
-        network_config_record_path = f"{record_directory}/network_config_record.yaml"
-        save_config(network_config, network_config_record_path)
-
-        randomizer_config_record_path = (
-            f"{record_directory}/randomizer_config_record.yaml"
-        )
-        save_config(randomization_config, randomizer_config_record_path)
-
-        trainer.train()
-
-        return
-
-    if playing:
-        from skrl.models.torch import GaussianMixin, DeterministicMixin, Model
-        from torch import nn
-
-        class Shared(GaussianMixin, DeterministicMixin, Model):
-            def __init__(
-                self,
-                observation_space,
-                action_space,
-                device,
-                clip_actions=False,
-                clip_log_std=True,
-                min_log_std=-20,
-                max_log_std=2,
-                reduction="sum",
-            ):
-                Model.__init__(self, observation_space, action_space, device)
-                GaussianMixin.__init__(
-                    self,
-                    clip_actions,
-                    clip_log_std,
-                    min_log_std,
-                    max_log_std,
-                    reduction,
-                )
-                DeterministicMixin.__init__(self, clip_actions)
-
-                self.net = nn.Sequential(
-                    nn.Linear(self.num_observations, 512),
-                    nn.ReLU(),
-                    nn.Linear(512, 256),
-                    nn.ReLU(),
-                    nn.Linear(256, 128),
-                    nn.ReLU(),
-                )
-
-                self.action_layer = nn.Linear(128, self.num_actions)
-                self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
-
-                self.value_layer = nn.Linear(128, 1)
-
-            def act(
-                self, inputs: Mapping[str, Union[torch.Tensor, Any]], role: str = ""
-            ) -> Tuple[
-                torch.Tensor,
-                Union[torch.Tensor, None],
-                Mapping[str, Union[torch.Tensor, Any]],
-            ]:
-                if role == "policy":
-                    return GaussianMixin.act(self, inputs, role)
-                elif role == "value":
-                    return DeterministicMixin.act(self, inputs, role)
-
-            def compute(self, inputs, role):
-                if role == "policy":
-                    self._shared_output = self.net(inputs["states"])
-                    return (
-                        self.action_layer(self._shared_output),
-                        self.log_std_parameter,
-                        {},
-                    )
-
-                if role == "value":
-                    shared_output = (
-                        self.net(inputs["states"])
-                        if self._shared_output is None
-                        else self._shared_output
-                    )
-                    self._shared_output = None
-                    return self.value_layer(shared_output), {}
-
-        from skrl.memories.torch import RandomMemory
-        from skrl.utils import set_seed
-
-        set_seed()
-
-        memory = RandomMemory(
-            memory_size=rl_config["ppo"]["n_steps"],
-            num_envs=num_envs,
-            device=task.device,
-        )
-
-        models = {
-            "policy": Shared(
-                task.observation_space,
-                task.action_space,
-                task.device,
-            )
+        record_directory = os.path.join(runs_dir, current_run_name, "records")
+        configs_to_record = {
+            "rl_config": rl_config,
+            "world_config": world_config,
+            "robot_config": robot_config,
+            "network_config": network_config,
+            "randomization_config": randomization_config,
         }
-        models["value"] = models["policy"]
+        record_configs(record_directory, configs_to_record)
 
-        from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG, PPO
-        from skrl.resources.schedulers.torch import KLAdaptiveRL
-        from skrl.resources.preprocessors.torch import RunningStandardScaler
+        if training:
+            trainer.train()
+            return
 
-        cfg = PPO_DEFAULT_CONFIG.copy()
-        cfg["rollouts"] = rl_config["ppo"]["n_steps"]
-        cfg["learning_epochs"] = rl_config["ppo"]["n_epochs"]
-        cfg["mini_batches"] = 4
-        cfg["discount_factor"] = 0.99
-        cfg["lambda"] = 0.95
-        cfg["learning_rate"] = 3e-4
-        cfg["learning_rate_scheduler"] = KLAdaptiveRL
-        cfg["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
-        cfg["grad_norm_clip"] = rl_config["ppo"]["max_grad_norm"]
-        cfg["ratio_clip"] = 0.2
-        cfg["value_clip"] = 0.2
-        cfg["clip_predicted_values"] = True
-        cfg["entropy_loss_scale"] = rl_config["ppo"]["ent_coef"]
-        cfg["value_loss_scale"] = rl_config["ppo"]["vf_coef"]
-        cfg["kl_threshold"] = 0
-        cfg["mixed_precision"] = True
-        cfg["state_preprocessor"] = RunningStandardScaler
-        cfg["state_preprocessor_kwargs"] = {
-            "size": task.observation_space,
-            "device": task.device,
-        }
-        cfg["value_preprocessor"] = RunningStandardScaler
-        cfg["value_preprocessor_kwargs"] = {"size": 1, "device": task.device}
-        # logging to TensorBoard and write checkpoints (in timesteps)
-        cfg["experiment"]["write_interval"] = "auto"
-        cfg["experiment"]["checkpoint_interval"] = rl_config["ppo"]["n_steps"]
-        cfg["experiment"]["directory"] = runs_dir
-        cfg["experiment"]["experiment_name"] = f"{current_run_name}/playing"
-
-        model = PPO(
-            models=models,
-            memory=memory,
-            cfg=cfg,
-            observation_space=task.observation_space,
-            action_space=task.action_space,
-            device=task.device,
-        )
-
-        cfg_trainer = {
-            "timesteps": 24000,
-            "headless": headless,
-        }
-
-        from skrl.trainers.torch import SequentialTrainer
-
-        trainer = SequentialTrainer(cfg=cfg_trainer, env=task, agents=[model])
-
-        terrain.register_self()  # we need to do it manually
-
-        universe.construct_registrations()
-
-        Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
-
-        model.load(current_checkpoint_path)
         trainer.eval()
 
         return

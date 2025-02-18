@@ -240,7 +240,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         # REWARDS
 
-        from core.utils.rl import (
+        from core.utils.rl.rewards import (
             squared_norm,
             exp_squared,
             exp_squared_norm,

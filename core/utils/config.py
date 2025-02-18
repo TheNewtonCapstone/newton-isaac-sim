@@ -1,3 +1,5 @@
+import os
+
 import yaml
 from typing import Dict, List, Any
 
@@ -17,9 +19,16 @@ def save_config(config: Config, config_path: str) -> None:
         yaml.dump(config, f)
 
 
-def animation_configs_to_clips_config(
-        files: List[str]
-) -> Dict[str, Config]:
+def record_configs(record_dir: str, configs: Dict[str, Config]) -> None:
+    os.makedirs(record_dir, exist_ok=True)
+
+    for name, config in configs.items():
+        save_config(
+            config, f"{record_dir}/{name.lower().replace(' ', '_')}_record.yaml"
+        )
+
+
+def animation_configs_to_clips_config(files: List[str]) -> Dict[str, Config]:
     clips = {}
 
     for file in files:
@@ -30,23 +39,23 @@ def animation_configs_to_clips_config(
 
 
 def none_str_to_none(value: Config) -> Any:
-    if not isinstance(value, dict):
+    if isinstance(value, List):
+        return [none_str_to_none(v) for v in value]
 
+    if isinstance(value, str):
         if value == "None":
             return None
 
-        return value
+        # try to convert to float or int, if we fail, return the string
+        try:
+            floating = float(value)
 
-    for key, val in value.items():
-        if isinstance(val, dict):
+            return int(floating) if floating.is_integer() else floating
+        except ValueError:
+            return value
+
+    if isinstance(value, Dict):
+        for key, val in value.items():
             value[key] = none_str_to_none(val)
-            continue
-
-        if isinstance(val, list):
-            value[key] = [none_str_to_none(v) for v in val]
-            continue
-
-        if val == "None":
-            value[key] = None
 
     return value

@@ -4,8 +4,7 @@ policy: "MlpPolicy"
 seed: 75129
 
 n_envs: 4096
-timesteps_per_env: 100_000
-base_lr: 3e-4
+timesteps: 25_000
 episode_length: 2000 # 20 seconds of real time (2000 * 0.01 = 20)
 reset_in_play: False
 
@@ -45,21 +44,35 @@ scalers:
 
 ppo:
   n_steps: 24 # 0.48 seconds of real time (24 * 0.02 = 0.48)
-  batch_size: 131_072
   n_epochs: 5
+  n_minibatches: 8
 
-  gamma: 0.99
-  gae_lambda: 0.95
+  discount_factor: 0.99
+  lambda: 0.95
 
-  clip_range: 0.2
-  clip_range_vf: None
+  learning_rate: 3e-4
+  learning_rate_scheduler: "KLAdaptiveRL"
+  learning_rate_scheduler_kwargs:
+    kl_threshold: 0.008
 
-  normalize_advantage: True
+  grad_norm_clip: 1.0
+  ratio_clip: 0.2
+  value_clip: 0.2
+  clip_predicted_values: False
 
-  ent_coef: 0.0
-  vf_coef: 1.0
+  entropy_loss_coefficient: 0.0
+  value_loss_coefficient: 1.0
 
-  max_grad_norm: 1.0
+  stopping_kl_threshold: 0.0
 
-  target_kl: 0.01
-  stop_on_excessive_kl: False
+  mixed_precision: True
+
+  state_preprocessor: "RunningStandardScaler"
+  state_preprocessor_kwargs: None
+
+  value_preprocessor: "RunningStandardScaler"
+  value_preprocessor_kwargs: None
+
+  experiment:
+    write_interval: "auto"
+    checkpoint_interval: "auto"
