@@ -66,15 +66,15 @@ class BaseActuator(BaseObject):
     @abstractmethod
     def construct(
         self,
-        input_vec_velocity_limits: VecJointVelocityLimits,
-        input_vec_effort_limits: VecJointEffortLimits,
+        output_vec_velocity_limits: VecJointVelocityLimits,
+        output_vec_effort_limits: VecJointEffortLimits,
         vec_gear_ratios: VecJointVelocityLimits,
     ) -> None:
         super().construct()
 
-        # limits are given of the input
-        self._vec_velocity_limits = input_vec_velocity_limits
-        self._vec_effort_limits = input_vec_effort_limits
+        # limits of the input, in rad/s and Nm
+        self._vec_velocity_limits = output_vec_velocity_limits * vec_gear_ratios
+        self._vec_effort_limits = output_vec_effort_limits / vec_gear_ratios
 
         self._vec_gear_ratios = vec_gear_ratios
 
