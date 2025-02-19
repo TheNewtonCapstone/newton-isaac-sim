@@ -9,6 +9,8 @@ from typing import (
     Type,
 )
 
+from gymnasium.spaces.space import Space
+
 import torch
 from skrl.agents.torch import Agent
 from skrl.agents.torch.ppo import PPO
@@ -37,23 +39,51 @@ def create_random_memory(task: BaseTask, memory_size: int) -> Memory:
 
 
 def create_shared_model(
-    task: BaseTask,
+    observation_space: Optional[Space[int]] = None,
+    action_space: Optional[Space[int]] = None,
+    device: Optional[torch.device] = None,
+    task: Optional[BaseTask] = None,
     arch: Sequence[int] = (512, 256, 128),
     activation: Type = ReLU,
     is_value_deterministic: bool = True,
 ) -> Model:
+    """Create a shared model for policy and value networks.
+
+    Args:
+        observation_space: The observation space of the task, if task is not provided.
+        action_space: The action space of the task, if task is not provided.
+        device: The device to run the model on, if task is not provided.
+        task: The task to create the model for, must be provided if observation_space, action_space and device are not.
+        arch: The architecture of the model (number of parameters per linear layer).
+        activation: The activation function to use (any of torch's).
+        is_value_deterministic: Whether the value network is deterministic or stochastic.
+
+    Returns:
+
+    """
     from skrl.models.torch import GaussianMixin, DeterministicMixin
 
     POLICY_MIXIN = GaussianMixin
     VALUE_MIXIN = DeterministicMixin if is_value_deterministic else GaussianMixin
 
+    assert task is not None or (
+        observation_space is not None
+        and action_space is not None
+        and device is not None
+    ), "Task or observation space, action space and device must be provided"
+
+    if task is not None:
+        observation_space = task.observation_space
+        action_space = task.action_space
+        device = task.device
+
     class Shared(POLICY_MIXIN, VALUE_MIXIN, Model):
         def __init__(self):
             Model.__init__(
                 self,
-                observation_space=task.observation_space,
-                action_space=task.action_space,
-                device=task.device,
+                observation_space=observation_space,
+                action_space=action_space,
+                device=device,
             )
             POLICY_MIXIN.__init__(self, clip_actions=False)
             VALUE_MIXIN.__init__(self, clip_actions=False)
@@ -64,7 +94,7 @@ def create_shared_model(
             layers: OrderedDict[str, nn.Module] = OrderedDict[str, nn.Module]()
 
             # initial layer from the observation space to the first hidden layer
-            layers["linear0"] = nn.Linear(task.observation_space.shape[0], arch[0])
+            layers["linear0"] = nn.Linear(observation_space.shape[0], arch[0])
             layers["act0"] = activation()
 
             for i in range(len(arch) - 1):
@@ -121,6 +151,8 @@ def create_shared_model(
         f"Creating shared model with task: {task}, architecture: {arch} and activation: {activation}"
     )
     Logger.debug(f" Is value deterministic: {is_value_deterministic}")
+    Logger.debug(f" Observation space: {observation_space}")
+    Logger.debug(f" Action space: {action_space}")
     Logger.debug(f" Policy mixin: {POLICY_MIXIN}")
     Logger.debug(f" Value mixin: {VALUE_MIXIN}")
 

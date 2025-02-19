@@ -274,7 +274,6 @@ def checkpoint_select(
 
     runs_settings: Config = build_runs_library_from_runs_folder(runs_dir)
     if not runs_settings:
-        Logger.error(f"No runs found in {runs_dir}.")
         return None
 
     save_runs_library(runs_settings, runs_dir)
@@ -326,30 +325,24 @@ def checkpoint_select(
 def network_arch_select(
     network_config_file_path: str,
     network_name: Optional[str],
-) -> Optional[Tuple[Config, str]]:
+) -> Optional[Tuple[ConfigCollection, Config, str]]:
     from bullet import Bullet
 
     from core.utils.config import load_config
+    from core.utils.torch import get_torch_activation_fn
 
-    network_config = load_config(network_config_file_path)
+    networks_config = load_config(network_config_file_path)["networks"]
 
-    networks: Config = network_config["networks"]
+    for name, config in networks_config.items():
+        config["activation_fn"] = get_torch_activation_fn(config["activation_fn"])
 
-    # gets the direct torch.nn reference from the string
-    def get_torch_activation_fn(activation_fn: str):
-        import torch.nn
-
-        nn_module_name = activation_fn.split(".")[-1]
-
-        return getattr(torch.nn, nn_module_name)
-
-    if network_name in networks:
+    if network_name in networks_config:
         return (
+            networks_config,
             {
-                "net_arch": networks[network_name]["net_arch"],
-                "activation_fn": get_torch_activation_fn(
-                    networks[network_name]["activation_fn"]
-                ),
+                "name": network_name,
+                "net_arch": networks_config[network_name]["net_arch"],
+                "activation_fn": networks_config[network_name]["activation_fn"],
             },
             network_name,
         )
@@ -357,7 +350,7 @@ def network_arch_select(
     # Build choices for CLI
     choices = [
         f"{name}: Network Architecture: {config['net_arch']}, Activation function: {config['activation_fn']}"
-        for name, config in networks.items()
+        for name, config in networks_config.items()
     ]
 
     # CLI for network selection
@@ -372,16 +365,17 @@ def network_arch_select(
     selected_choice, selected_choice_ind = cli.launch()
 
     # Parse selected network
-    selected_config: Config = list(networks.values())[selected_choice_ind]
+    selected_config: Config = list(networks_config.values())[selected_choice_ind]
 
-    selected_config["activation_fn"] = get_torch_activation_fn(
-        selected_config["activation_fn"]
+    return (
+        networks_config,
+        {
+            "name": selected_config["name"],
+            "net_arch": selected_config["net_arch"],
+            "activation_fn": selected_config["activation_fn"],
+        },
+        network_name,
     )
-
-    return {
-        "net_arch": selected_config["net_arch"],
-        "activation_fn": selected_config["activation_fn"],
-    }, network_name
 
 
 def setup_logging() -> None:
@@ -483,6 +477,7 @@ def setup() -> Optional[Matter]:
         )
 
         if checkpoint_select_result is None and not training:
+            Logger.error(f"Could not find a checkpoint for run {current_run_name}.")
             return None
 
         if checkpoint_select_result is not None:
@@ -494,7 +489,7 @@ def setup() -> Optional[Matter]:
 
     task_configs: ConfigCollection = {}
     current_task_config: Config = {}
-    current_task: Optional[str] = None
+    current_task_name: Optional[str] = None
 
     if training and current_run_name is None:
         task_select_result = task_select(
@@ -507,7 +502,7 @@ def setup() -> Optional[Matter]:
             Logger.error("No task found.")
             return None
 
-        task_config, current_task_config, current_task = task_select_result
+        task_config, current_task_config, current_task_name = task_select_result
     elif playing or exporting or (training and current_run_name is not None):
         recorded_task_config_path = os.path.join(
             runs_dir,
@@ -516,7 +511,7 @@ def setup() -> Optional[Matter]:
             "task_config_record.yaml",
         )
         current_task_config = load_config(recorded_task_config_path)
-        current_task = current_task_config["name"]
+        current_task_name = current_task_config["name"]
 
     # Animation
 
@@ -541,9 +536,9 @@ def setup() -> Optional[Matter]:
         from core.utils.config import load_named_configs_in_dir
 
         animation_clips_config = load_named_configs_in_dir(cli_args.animations_dir)
-        current_animation_clip_config = animation_clips_config[current_task]
+        current_animation_clip_config = animation_clips_config[current_task_name]
         current_animation = current_animation_clip_config["name"]
-    elif playing:
+    elif playing or exporting:
         recorded_animation_clip_config_path = os.path.join(
             runs_dir,
             current_run_name,
@@ -554,23 +549,23 @@ def setup() -> Optional[Matter]:
         current_animation = current_animation_clip_config["name"]
 
     # if we're training and the user did specify no-checkpoint, we need to create a new run
-    if no_checkpoint and training and current_run_name is None:
+    if training and current_run_name is None:
         from core.utils.runs import (
             get_unused_run_id,
             create_runs_library,
         )
 
-        new_run_id = get_unused_run_id(runs_library, current_task)
+        new_run_id = get_unused_run_id(runs_library, current_task_name)
 
         if new_run_id is None:
             runs_library = create_runs_library(runs_dir)
 
-            new_run_id = get_unused_run_id(runs_library, current_task)
+            new_run_id = get_unused_run_id(runs_library, current_task_name)
 
             if new_run_id is None:
                 new_run_id = 0
 
-        current_run_name = f"{current_task}_{new_run_id:03}"
+        current_run_name = f"{current_task_name}_{new_run_id:03}"
 
     log_file_path = f"logs/{mode_name.lower().replace(' ', '_')}.log"
     if current_run_name:
@@ -578,29 +573,37 @@ def setup() -> Optional[Matter]:
 
     # Network config
 
-    network_config: Config = {}
-    network_name: Optional[str] = cli_args.network_name
+    network_configs: ConfigCollection = {}
+    current_network_config: Config = {}
+    current_network_name: Optional[str] = cli_args.network_name
 
     if training:
         network_select_result = network_arch_select(
             cli_args.network_config,
-            network_name,
+            current_network_name,
         )
 
         if network_select_result is None:
             Logger.error("No network architecture found.")
             return None
 
-        network_config, network_name = network_select_result
+        network_configs, current_network_config, current_network_name = (
+            network_select_result
+        )
     elif playing or exporting:
+        from core.utils.torch import get_torch_activation_fn
+
         recorded_network_config_path = os.path.join(
             runs_dir,
             current_run_name,
             "records",
             "network_config_record.yaml",
         )
-        network_config = load_config(recorded_network_config_path)
-        network_name = network_config["name"]
+        current_network_config = load_config(recorded_network_config_path)
+        current_network_config["activation_fn"] = get_torch_activation_fn(
+            current_network_config["activation_fn"]
+        )
+        current_network_name = current_network_config["name"]
 
     # Helper flags
 
@@ -633,11 +636,12 @@ def setup() -> Optional[Matter]:
         "robot_config": robot_config,
         "task_configs": task_configs,
         "current_task_config": current_task_config,
-        "current_task_name": current_task,
+        "current_task_name": current_task_name,
         "world_config": world_config,
         "randomization_config": randomization_config,
-        "network_config": network_config,
-        "network_name": network_name,
+        "network_configs": network_configs,
+        "current_network_config": current_network_config,
+        "current_network_name": current_network_name,
         "ros_config": ros_config,
         "db_config": db_config,
         "logger_config": logger_config,
@@ -671,6 +675,67 @@ def setup() -> Optional[Matter]:
     return matter
 
 
+def export_onnx(
+    current_task_config: Config,
+    current_network_config: Config,
+    current_checkpoint_path: str,
+    current_run_name: str,
+) -> None:
+    import torch
+
+    from core.utils.rl.skrl import create_shared_model
+    from core.utils.rl import load_gymnasium_space
+
+    observation_space_path = current_task_config["pickles"]["observation_space_path"]
+    action_space_path = current_task_config["pickles"]["action_space_path"]
+
+    observation_space = load_gymnasium_space(observation_space_path)
+    action_space = load_gymnasium_space(action_space_path)
+    device = torch.device("cpu")
+
+    model = create_shared_model(
+        observation_space=observation_space,
+        action_space=action_space,
+        device=device,
+        arch=current_network_config["net_arch"],
+        activation=current_network_config["activation_fn"],
+    )
+    state_dict = torch.load(
+        current_checkpoint_path,
+        map_location=device,
+        weights_only=False,
+    )
+    model.migrate(state_dict["policy"])
+
+    dummy_input = {
+        "states": torch.rand((1, *observation_space.shape), device=device),
+    }
+
+    torch.onnx.export(
+        model,
+        (dummy_input, "policy"),
+        f"{current_checkpoint_path}.onnx",
+        verbose=False,
+        input_names=["observations"],
+        output_names=["actions", "log_std", "mean_actions"],
+        dynamic_axes={
+            "observations": {0: "batch_size"},
+            "actions": {0: "batch_size"},
+            "log_std": {0: "batch_size"},
+            "mean_actions": {0: "batch_size"},
+        },
+    )
+
+    Logger.info(f"Exported {current_run_name} to {current_checkpoint_path}.onnx!")
+
+    import onnx
+
+    onnx_model = onnx.load(f"{current_checkpoint_path}.onnx")
+    onnx.checker.check_model(onnx_model)
+
+    Logger.info(f"ONNX model is valid!")
+
+
 def main():
     setup_logging()
 
@@ -692,7 +757,9 @@ def main():
     current_task_name = base_matter["current_task_name"]
     world_config = base_matter["world_config"]
     randomization_config = base_matter["randomization_config"]
-    network_config = base_matter["network_config"]
+    network_configs = base_matter["network_configs"]
+    current_network_config = base_matter["current_network_config"]
+    current_network_name = base_matter["current_network_name"]
     ros_config = base_matter["ros_config"]
     db_config = base_matter["db_config"]
     logger_config = base_matter["logger_config"]
@@ -753,6 +820,15 @@ def main():
 
     # only now can we import the rest of the modules
     from core.universe import Universe
+
+    # if we're exporting, we don't need to run the simulation
+    if exporting:
+        return export_onnx(
+            current_task_config,
+            current_network_config,
+            current_checkpoint_path,
+            current_run_name,
+        )
 
     # to circumvent Python typing restrictions, we type the universe object here
     universe: Universe = universe
@@ -903,13 +979,6 @@ def main():
 
     terrain = Terrain(universe, terrain_config, num_envs)
 
-    # ----------- #
-    #    ONNX     #
-    # ----------- #
-
-    if exporting:
-        raise NotImplementedError("ONNX export is not yet implemented.")
-
     # --------------- #
     #    ANIMATING    #
     # --------------- #
@@ -1059,7 +1128,7 @@ def main():
         Logger.error(f"Task {current_task_name} not recognized.")
         return
 
-    if training or playing:
+    if training or playing or exporting:
         from skrl.utils import set_seed
 
         set_seed()
@@ -1095,8 +1164,8 @@ def main():
 
         model = create_shared_model(
             task=task,
-            arch=network_config["net_arch"],
-            activation=network_config["activation_fn"],
+            arch=current_network_config["net_arch"],
+            activation=current_network_config["activation_fn"],
         )
 
         random_memory = create_random_memory(
@@ -1121,13 +1190,36 @@ def main():
         universe.construct_registrations()
 
         from core.utils.config import record_configs
+        from core.utils.rl import save_gymnasium_space
+
+        current_task_config["pickles"] = {
+            "observation_space_path": os.path.join(
+                runs_dir,
+                current_run_name,
+                "records",
+                "pickles",
+                "observation_space.pkl",
+            ),
+            "action_space_path": os.path.join(
+                runs_dir, current_run_name, "records", "pickles", "action_space.pkl"
+            ),
+        }
+
+        save_gymnasium_space(
+            task.observation_space,
+            current_task_config["pickles"]["observation_space_path"],
+        )
+        save_gymnasium_space(
+            task.action_space,
+            current_task_config["pickles"]["action_space_path"],
+        )
 
         record_directory = os.path.join(runs_dir, current_run_name, "records")
         configs_to_record = {
             "task_config": current_task_config,
             "world_config": world_config,
             "robot_config": robot_config,
-            "network_config": network_config,
+            "network_config": current_network_config,
             "randomization_config": randomization_config,
             "animation_clip_config": current_animation_clip_config,
         }

@@ -90,8 +90,9 @@ class Matter(TypedDict):
     current_task_name: Optional[str]
     world_config: Config
     randomization_config: Config
-    network_config: Config
-    network_name: Optional[str]
+    network_configs: ConfigCollection
+    current_network_config: Config
+    current_network_name: Optional[str]
     ros_config: Config
     db_config: Config
     logger_config: Config
