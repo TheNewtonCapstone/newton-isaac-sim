@@ -116,15 +116,6 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
     return dict(sorted(run_settings.items()))
 
 
-def get_best_checkpoint_from_run_id(runs_library: Config, run_id: int) -> Optional[str]:
-    for run in runs_library.values():
-        if run["id"] == run_id:
-
-            return run["checkpoints"][0]["path"]
-
-    return None
-
-
 def get_unused_run_id(runs_library: Config, task_name: str) -> Optional[int]:
     run_ids = [
         run["id"] for run in runs_library.values() if run["name"].startswith(task_name)
