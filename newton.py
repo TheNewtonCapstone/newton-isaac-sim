@@ -179,8 +179,6 @@ def mode_select(modes: List[str]) -> Tuple[str, int]:
     return cli.launch()
 
 
-# TODO: Implement selection of tasks (e.g. NewtonIdleTask, NewtonWalkTask, etc.)
-#   We can read the tasks from a directory and offer that as a selection to the user.
 def task_select(
     task_config_dir: str,
     task_name: Optional[str],
