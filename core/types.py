@@ -47,15 +47,30 @@ JointEffort = float
 JointSaturation = float
 
 # RL
+Observations = torch.Tensor
 Actions = torch.Tensor
 Rewards = torch.Tensor
 Dones = torch.Tensor
-Progress = torch.Tensor
-
-Infos = List[Dict[str, Any]]
+Terminated = torch.Tensor
+Truncated = torch.Tensor
+EpisodeLength = torch.Tensor
 
 EnvObservations = Dict[str, torch.Tensor]
-Observations = torch.Tensor
+
+
+class Extras(TypedDict):
+    episode: Dict[str, torch.Tensor]
+    time_outs: torch.Tensor
+
+
+StepReturn = Tuple[Observations, Rewards, Terminated, Truncated, Extras]
+ResetReturn = Tuple[Observations, Extras]
+TaskObservations = Tuple[Observations, Extras]
+
+ObservationScalers = Dict[str, float]
+RewardScalers = Dict[str, float]
+ActionScaler = float
+CommandScalers = Dict[str, float]
 
 # Math
 NoiseFunction = Callable[[torch.Tensor], torch.Tensor]
@@ -66,45 +81,51 @@ ConfigCollection = Dict[str, Config]
 Indices = torch.Tensor
 Mode = Literal["training", "playing", "animating", "physics-only", "exporting"]
 
-Matter = Tuple[
-    argparse.Namespace,
-    Config,
-    Config,
-    Config,
-    Config,
-    Config,
-    str,
-    Config,
-    Config,
-    Config,
-    str,
-    Config,
-    Config,
-    ConfigCollection,
-    str,
-    str,
-    ConfigCollection,
-    Optional[str],
-    Optional[str],
-    Mode,
-    str,
-    bool,
-    bool,
-    bool,
-    bool,
-    bool,
-    bool,
-    bool,
-    bool,
-    bool,
-    bool,
-    int,
-    float,
-    int,
-]
+
+class Matter(TypedDict):
+    cli_args: argparse.Namespace
+    robot_config: Config
+    task_configs: ConfigCollection
+    current_task_config: Config
+    current_task_name: Optional[str]
+    world_config: Config
+    randomization_config: Config
+    network_configs: ConfigCollection
+    current_network_config: Config
+    current_network_name: Optional[str]
+    ros_config: Config
+    db_config: Config
+    logger_config: Config
+    log_file_path: str
+    terrain_config: Config
+    secrets: Config
+    animation_clips_config: ConfigCollection
+    current_animation_clip_config: Config
+    current_animation: Optional[str]
+    runs_dir: str
+    runs_library: Config
+    current_run_name: Optional[str]
+    current_checkpoint_path: Optional[str]
+    mode: Mode
+    mode_name: str
+    training: bool
+    playing: bool
+    animating: bool
+    physics_only: bool
+    exporting: bool
+    is_rl: bool
+    interactive: bool
+    headless: bool
+    enable_ros: bool
+    enable_db: bool
+    num_envs: int
+    control_step_dt: float
+    inverse_control_frequency: int
 
 
 # System
+
+
 class CallerInfo(TypedDict):
     filename: str
     lineno: int

@@ -70,13 +70,13 @@ class MLPActuator(BaseActuator):
 
     def construct(
         self,
-        input_vec_velocity_limits: VecJointVelocityLimits,
-        input_vec_effort_limits: VecJointEffortLimits,
+        output_vec_velocity_limits: VecJointVelocityLimits,
+        output_vec_effort_limits: VecJointEffortLimits,
         vec_gear_ratios: VecJointGearRatios,
     ) -> None:
         super().construct(
-            input_vec_velocity_limits,
-            input_vec_effort_limits,
+            output_vec_velocity_limits,
+            output_vec_effort_limits,
             vec_gear_ratios,
         )
 

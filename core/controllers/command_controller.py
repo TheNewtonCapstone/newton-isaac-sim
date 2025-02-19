@@ -61,10 +61,13 @@ class CommandController(BaseObject):
 
     @staticmethod
     def get_random_action() -> th.Tensor:
-        random_x = random.random() * 2 - 1
-        random_y = random.random() * 2 - 1
+        # Generate random action, with a random direction and magnitude of 1
+        random_action = th.rand(2) * 2 - 1
 
-        return th.tensor([random_x, random_y], dtype=th.float32)
+        # Normalize the action
+        normalized_action = th.nn.functional.normalize(random_action, p=2, dim=0)
+
+        return normalized_action
 
     def construct(self) -> None:
         super().construct()

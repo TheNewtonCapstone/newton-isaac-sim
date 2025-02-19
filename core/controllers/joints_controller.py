@@ -157,8 +157,8 @@ class VecJointsController(BaseObject):
 
         for i, actuator in enumerate(self._actuators):
             actuator.register_self(
-                self._vec_joint_velocity_limits_rad[i] * self._vec_gear_ratios[i],
-                self._vec_joint_effort_limits[i] / self._vec_gear_ratios[i],
+                self._vec_joint_velocity_limits_rad[i],
+                self._vec_joint_effort_limits[i],
                 self._vec_gear_ratios[i],
             )
 
@@ -250,6 +250,7 @@ class VecJointsController(BaseObject):
             "joint_velocities_norm_median": self.get_normalized_joint_velocities().median(),
             "joint_velocities_median": self.get_joint_velocities_deg().median(),
             "joint_efforts_median": self.get_applied_joint_efforts().median(),
+            "joint_efforts": self.get_applied_joint_efforts(),
         }
         Archiver.put("joints_obs", joints_obs_archive)
 
@@ -400,6 +401,12 @@ class VecJointsController(BaseObject):
     def get_joint_velocities_deg(self) -> Tensor:
         return torch.rad2deg(self._articulation_view.get_joint_velocities())
 
+    def get_joint_positions_rad(self) -> Tensor:
+        return self._articulation_view.get_joint_positions()
+
+    def get_joint_velocities_rad(self) -> Tensor:
+        return self._articulation_view.get_joint_velocities()
+
     def get_applied_joint_efforts(self) -> Tensor:
         applied_joint_efforts: Tensor = torch.zeros_like(self._target_joint_positions)
 
@@ -425,7 +432,9 @@ class VecJointsController(BaseObject):
             The processed joint positions (in degrees).
         """
         joint_positions = torch.clamp(
-            joint_actions.to(vec_joint_position_limits.device),
+            joint_actions.to(
+                vec_joint_position_limits.device, dtype=vec_joint_position_limits.dtype
+            ),
             min=-1.0,
             max=1.0,
         )
