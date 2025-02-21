@@ -27,7 +27,7 @@ def setup_argparser() -> argparse.ArgumentParser:
         "--rl-config",
         type=str,
         help="Path to the configuration file for RL.",
-        default="configs/tasks/newton_idle_task.yaml",
+        default="configs/tasks/newton_locomotion_task.yaml",
     )
     parser.add_argument(
         "--network-config",
