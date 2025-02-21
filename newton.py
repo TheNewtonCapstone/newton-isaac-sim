@@ -888,6 +888,9 @@ def main():
             # index 7 is the joint position (angle in degrees)
             joint_positions = joint_data[0, :, 7]
 
+            joint_positions = torch.tensor(
+                [0, 0, 0, 0, 45, 45, 45, 45, -90, -90, -90, -90]
+            )
             # TODO: Investigate if there's a way to simplify joint_normalization
             #   since the system expects a [-1, 1] range, we normalize the joint positions to their limits; it is
             #   redundant since we'll undo the normalization later in the controller, so it might warrant a change
