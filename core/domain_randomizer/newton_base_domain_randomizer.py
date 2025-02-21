@@ -27,8 +27,15 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         self._agent: NewtonBaseAgent = agent
 
         self._rigid_prim_view: Optional[RigidPrimView] = None
-        self.initial_positions: torch.Tensor = torch.zeros((1, 3), device=self._universe.device)
-        self.initial_orientations: torch.Tensor = torch.zeros((1, 4), device=self._universe.device)
+        self.initial_positions: torch.Tensor = torch.zeros(
+            (1, 3), device=self._universe.device
+        )
+        self.initial_orientations: torch.Tensor = torch.zeros(
+            (1, 4), device=self._universe.device
+        )
+        self.initial_joint_positions: torch.Tensor = torch.zeros(
+            (1, 12), device=self._universe.device
+        )
 
     def construct(self) -> None:
         super().construct()
@@ -75,6 +82,11 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         )
 
         joint_positions = torch.zeros((num_to_reset, 12), dtype=torch.float32)
+
+        # joint_positions = torch.tensor(
+        #     [0.1, 0.1, -0.1, -0.1, 0.8, 1.0, 0.8, 1.0, 1.5, 1.5, 1.5, 1.5],
+        #     device=self._universe.device,
+        # )
         # (
         #    torch.rand((num_to_reset, 12), dtype=torch.float32) * 2.0 - 1.0
         # )  # [-1, 1]
@@ -95,5 +107,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
     def set_initial_orientations(self, orientations: torch.Tensor) -> None:
         self.initial_orientations = orientations.to(self._universe.device)
 
-    def set_initial_position(self, indices: torch.Tensor, positions: torch.Tensor) -> None:
+    def set_initial_position(
+        self, indices: torch.Tensor, positions: torch.Tensor
+    ) -> None:
         self.initial_positions[indices] = positions.to(self._universe.device)

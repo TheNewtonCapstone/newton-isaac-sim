@@ -30,40 +30,40 @@ actuators:
 
     gains:
       FL_HAA:
-        p: 2.0
+        p: 20.0
         d: 0.5
       FR_HAA:
-        p: 2.0
+        p: 20.0
         d: 0.5
       HL_HAA:
-        p: 2.0
+        p: 20.0
         d: 0.5
       HR_HAA:
-        p: 2.0
+        p: 20.0
         d: 0.5
       FL_HFE:
-        p: 2.0
+        p: 20.0
         d: 0.2
       FR_HFE:
-        p: 2.0
+        p: 20.0
         d: 0.2
       HL_HFE:
-        p: 2.0
+        p: 20.0
         d: 0.2
       HR_HFE:
-        p: 2.0
+        p: 20.0
         d: 0.2
       FL_KFE:
-        p: 0.09
+        p: 20.0
         d: 0.05
       FR_KFE:
-        p: 0.09
+        p: 20.0
         d: 0.05
       HL_KFE:
-        p: 0.09
+        p: 20.0
         d: 0.05
       HR_KFE:
-        p: 0.09
+        p: 20.0
         d: 0.05
 
 # Kinematics

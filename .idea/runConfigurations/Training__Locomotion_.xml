@@ -15,7 +15,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$ProjectFileDir$/newton.py" />
-    <option name="PARAMETERS" value="--train --animation-name newton_idle --no-checkpoint --network-name descending2" />
+    <option name="PARAMETERS" value="--train --animation-name newton_locomotion --rl-configs configs/tasks/newton_locomotion_task.yaml --no-checkpoint --network-name descending2" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
