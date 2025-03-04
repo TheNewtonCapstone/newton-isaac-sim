@@ -4,9 +4,8 @@ from typing import Tuple, List, Optional
 
 from core.types import Config
 
-RUN_REGEX_STR = (
-    r"([a-zA-Z_]*)_([0-9]*)(?:_)?(?:rew_([-.0-9]*))?(?:_)?(?:step_([-.0-9]*))?"
-)
+RUN_REGEX_STR = r"([_a-zA-Z]*)_([0-9]{3})"
+CHECKPOINT_REGEX_STR = r"agent_([0-9]*).pt"
 TENSORBOARD_REGEX_STR = r"events\.out\.tfevents\.([0-9]*)"
 TENSORBOARD_FILE_NAME_START = "events.out.tfevents"
 
@@ -47,6 +46,7 @@ def create_runs_library(runs_folder: str) -> Config:
 
 def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
     run_regex = re.compile(RUN_REGEX_STR)
+    checkpoint_regex = re.compile(CHECKPOINT_REGEX_STR)
     tensorboard_regex = re.compile(TENSORBOARD_REGEX_STR)
 
     run_settings: Config = {}
@@ -61,7 +61,7 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
         run_id: int = int(run_matches[1])
         run_name: str = f"{run_matches[0]}_{run_id:03}"
         date: int = -1
-        count: int = -1
+        count: int = 0
         checkpoints: List[Config] = []
 
         for file in run_files:
@@ -70,37 +70,39 @@ def build_runs_library_from_runs_folder(runs_folder: str) -> Config:
                 continue
 
             # it's an exported file, we don't care about it here
-            if file.endswith(".onnx") or file.endswith(".yaml"):
+            if (
+                file.endswith(".onnx")
+                or file.endswith(".yaml")
+                or file.endswith(".log")
+            ):
                 continue
 
-            count += 1
+            for checkpoint in os.listdir(os.path.join(runs_folder, run_folder, file)):
+                if not checkpoint.endswith(".pt"):
+                    continue
 
-            if file.endswith(".zip"):
+                if checkpoint.startswith("best"):
+                    checkpoints.append(
+                        {
+                            "step": -1,
+                            "path": f"{runs_folder}/{run_folder}/{file}/{checkpoint}",
+                        }
+                    )
+                    continue
+
+                save_matches: str = checkpoint_regex.findall(checkpoint)[0]
+                step: int = int(save_matches) if save_matches != "" else -1
+
                 checkpoints.append(
                     {
-                        "reward": -1,
-                        "step": -1,
-                        "path": f"{runs_folder}/{run_folder}/{file}",
+                        "step": step,
+                        "path": f"{runs_folder}/{run_folder}/{file}/{checkpoint}",
                     }
                 )
-                continue
 
-            if run_regex.match(file) is None:
-                continue
+                count += 1
 
-            save_matches: Tuple = run_regex.findall(file)[0]
-            reward: float = float(save_matches[2]) if save_matches[2] != "" else -1
-            step: int = int(save_matches[3]) if save_matches[3] != "" else -1
-
-            checkpoints.append(
-                {
-                    "reward": reward,
-                    "step": step,
-                    "path": f"{runs_folder}/{run_folder}/{file}",
-                }
-            )
-
-        checkpoints.sort(key=lambda x: x["reward"], reverse=False)
+        checkpoints.sort(key=lambda x: x["step"], reverse=False)
 
         run_settings[run_name] = {
             "id": run_id,

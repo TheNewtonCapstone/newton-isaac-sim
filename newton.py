@@ -24,10 +24,16 @@ def setup_argparser() -> argparse.ArgumentParser:
         default="configs/robots/newton.yaml",
     )
     parser.add_argument(
-        "--rl-config",
+        "--tasks-dir",
         type=str,
-        help="Path to the configuration file for RL.",
-        default="configs/tasks/newton_idle_task.yaml",
+        help="Path to the directory containing the tasks.",
+        default="configs/tasks",
+    )
+    parser.add_argument(
+        "--task-name",
+        type=str,
+        help="Name of the task to load (for RL).",
+        default=None,
     )
     parser.add_argument(
         "--network-config",
@@ -80,7 +86,7 @@ def setup_argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--animations-dir",
         type=str,
-        help="Path to the directory containing animations.",
+        help="Path to the directory containing the animations.",
         default="assets/newton/animations",
     )
     parser.add_argument(
@@ -173,45 +179,68 @@ def mode_select(modes: List[str]) -> Tuple[str, int]:
     return cli.launch()
 
 
-# TODO: Implement selection of tasks (e.g. NewtonIdleTask, NewtonWalkTask, etc.)
-#   We can read the tasks from a directory and offer that as a selection to the user.
-def task_select():
-    pass
+def task_select(
+    task_config_dir: str,
+    task_name: Optional[str],
+) -> Optional[Tuple[ConfigCollection, Config, str]]:
+    from core.utils.config import load_named_configs_in_dir
+
+    # discover tasks in directory
+    task_configs = load_named_configs_in_dir(task_config_dir)
+
+    if len(task_configs.items()) == 0:
+        Logger.error(f"No task files found in {task_config_dir}.")
+        return None
+
+    # load animation clips settings from config files
+    task_names: List[str] = list(task_configs.keys())
+
+    # use the specified animation if it exists
+    if task_name and task_name in task_configs:
+        return task_configs, task_configs[task_name], task_name
+
+    from bullet import Bullet
+
+    # otherwise, ask the user to manually select an animation
+    cli = Bullet(
+        prompt="Please select a task:",
+        choices=task_names,
+        align=2,
+        margin=1,
+        return_index=True,
+    )
+
+    selected_task_name, selected_task_idx = cli.launch()
+
+    return (
+        task_configs,
+        list(task_configs.values())[selected_task_idx],
+        list(task_configs.values())[selected_task_idx]["name"],
+    )
 
 
 def animation_select(
     animation_config_dir: str,
     current_animation_name: Optional[str],
-) -> Optional[Tuple[ConfigCollection, str]]:
-    from core.utils.path import get_files_with_extension
-    from core.utils.config import animation_configs_to_clips_config
+) -> Optional[Tuple[ConfigCollection, Config, str]]:
+    from core.utils.config import load_named_configs_in_dir
 
     # discover animations in directory
-    animation_configs_filenames = get_files_with_extension(
-        animation_config_dir, ".yaml"
-    )
-    animation_configs_paths = [
-        f"{animation_config_dir}/{f}" for f in animation_configs_filenames
-    ]
+    animation_clips_configs = load_named_configs_in_dir(animation_config_dir)
 
-    if len(animation_configs_paths) == 0:
+    if len(animation_clips_configs.items()) == 0:
         Logger.info(f"No animation files found in {animation_config_dir}.")
         return None
 
-    # load animation clips settings from config files
-    animation_clips_settings = animation_configs_to_clips_config(
-        animation_configs_paths
-    )
-
-    # discard any duplicate animation clips by name, taking the last one
-    animation_clips_settings = {
-        clip["name"]: clip for clip in animation_clips_settings.values()
-    }
-    animation_clips_names = [clip["name"] for clip in animation_clips_settings.values()]
+    animation_clips_names: List[str] = list(animation_clips_configs.keys())
 
     # use the specified animation if it exists
-    if current_animation_name and current_animation_name in animation_clips_settings:
-        return animation_clips_settings, current_animation_name
+    if current_animation_name and current_animation_name in animation_clips_configs:
+        return (
+            animation_clips_configs,
+            animation_clips_configs[current_animation_name],
+            current_animation_name,
+        )
 
     from bullet import Bullet
 
@@ -227,8 +256,9 @@ def animation_select(
     selected_animation_name, selected_animation_idx = cli.launch()
 
     return (
-        animation_clips_settings,
-        list(animation_clips_settings.values())[selected_animation_idx]["name"],
+        animation_clips_configs,
+        list(animation_clips_configs.values())[selected_animation_idx],
+        list(animation_clips_configs.values())[selected_animation_idx]["name"],
     )
 
 
@@ -244,16 +274,19 @@ def checkpoint_select(
 
     runs_settings: Config = build_runs_library_from_runs_folder(runs_dir)
     if not runs_settings:
-        Logger.info(f"No runs found in {runs_dir}.")
         return None
 
     save_runs_library(runs_settings, runs_dir)
 
     if current_run_name and current_run_name in runs_settings:
+        if runs_settings[current_run_name]["count"] == 0:
+            Logger.error(f"No checkpoints found for run {current_run_name}.")
+            return None
+
         return (
             runs_settings,
             current_run_name,
-            runs_settings[current_run_name]["checkpoints"][-1]["path"],
+            runs_settings[current_run_name]["checkpoints"][0]["path"],
         )
 
     from bullet import Input, YesNo
@@ -267,8 +300,6 @@ def checkpoint_select(
         if not cli.launch():
             return None
 
-    most_recent_checkpoint = str(list(runs_settings.keys())[-1])
-
     cli = Input(
         prompt=f"Please enter a run name (format: <task_name>_001): ",
         default=f"",
@@ -280,46 +311,38 @@ def checkpoint_select(
     while selected_run_name not in runs_settings:
         selected_run_name = cli.launch()
 
-        if len(selected_run_name) == 0:
-            from core.logger import Logger
-
-            Logger.info(f"Selecting latest checkpoint: {most_recent_checkpoint}.")
-            selected_run_name = most_recent_checkpoint
+    if runs_settings[selected_run_name]["count"] == 0:
+        Logger.error(f"No checkpoints found for run {selected_run_name}.")
+        return None
 
     return (
         runs_settings,
         selected_run_name,
-        runs_settings[selected_run_name]["checkpoints"][-1]["path"],
+        runs_settings[selected_run_name]["checkpoints"][0]["path"],
     )
 
 
 def network_arch_select(
     network_config_file_path: str,
     network_name: Optional[str],
-) -> Optional[Tuple[Config, str]]:
+) -> Optional[Tuple[ConfigCollection, Config, str]]:
     from bullet import Bullet
 
     from core.utils.config import load_config
+    from core.utils.torch import get_torch_activation_fn
 
-    network_config = load_config(network_config_file_path)
+    networks_config = load_config(network_config_file_path)["networks"]
 
-    networks: Config = network_config["networks"]
+    for name, config in networks_config.items():
+        config["activation_fn"] = get_torch_activation_fn(config["activation_fn"])
 
-    # gets the direct torch.nn reference from the string
-    def get_torch_activation_fn(activation_fn: str):
-        import torch.nn
-
-        nn_module_name = activation_fn.split(".")[-1]
-
-        return getattr(torch.nn, nn_module_name)
-
-    if network_name in networks:
+    if network_name in networks_config:
         return (
+            networks_config,
             {
-                "net_arch": networks[network_name]["net_arch"],
-                "activation_fn": get_torch_activation_fn(
-                    networks[network_name]["activation_fn"]
-                ),
+                "name": network_name,
+                "net_arch": networks_config[network_name]["net_arch"],
+                "activation_fn": networks_config[network_name]["activation_fn"],
             },
             network_name,
         )
@@ -327,7 +350,7 @@ def network_arch_select(
     # Build choices for CLI
     choices = [
         f"{name}: Network Architecture: {config['net_arch']}, Activation function: {config['activation_fn']}"
-        for name, config in networks.items()
+        for name, config in networks_config.items()
     ]
 
     # CLI for network selection
@@ -342,16 +365,17 @@ def network_arch_select(
     selected_choice, selected_choice_ind = cli.launch()
 
     # Parse selected network
-    selected_config: Config = list(networks.values())[selected_choice_ind]
+    selected_config: Config = list(networks_config.values())[selected_choice_ind]
 
-    selected_config["activation_fn"] = get_torch_activation_fn(
-        selected_config["activation_fn"]
+    return (
+        networks_config,
+        {
+            "name": selected_config["name"],
+            "net_arch": selected_config["net_arch"],
+            "activation_fn": selected_config["activation_fn"],
+        },
+        network_name,
     )
-
-    return {
-        "net_arch": selected_config["net_arch"],
-        "activation_fn": selected_config["activation_fn"],
-    }, network_name
 
 
 def setup_logging() -> None:
@@ -377,7 +401,6 @@ def setup() -> Optional[Matter]:
     cli_args, _ = parser.parse_known_args()
 
     robot_config = load_config(cli_args.robot_config)
-    rl_config = load_config(cli_args.rl_config)
     logger_config = load_config(cli_args.logger_config)
     world_config = load_config(cli_args.world_config)
     randomization_config = load_config(cli_args.randomization_config)
@@ -429,23 +452,6 @@ def setup() -> Optional[Matter]:
         mode = get_args(Mode)[modes_flag_idx]
         mode_name = list(modes.keys())[modes_flag_idx]
 
-    # Animation
-
-    animation_clips_config: Config = {}
-    current_animation: Optional[str] = None
-
-    if animating or training or playing:
-        animation_select_result = animation_select(
-            cli_args.animations_dir,
-            cli_args.animation_name,
-        )
-
-        # We failed to find an animation, exit
-        if animation_select_result is None:
-            return None
-
-        animation_clips_config, current_animation = animation_select_result
-
     # Run & checkpoint config
 
     runs_library: Config = {}
@@ -470,7 +476,8 @@ def setup() -> Optional[Matter]:
             required=not training,
         )
 
-        if checkpoint_select_result is None and (playing or exporting):
+        if checkpoint_select_result is None and not training:
+            Logger.error(f"Could not find a checkpoint for run {current_run_name}.")
             return None
 
         if checkpoint_select_result is not None:
@@ -478,44 +485,125 @@ def setup() -> Optional[Matter]:
                 checkpoint_select_result
             )
 
+    # Task
+
+    task_configs: ConfigCollection = {}
+    current_task_config: Config = {}
+    current_task_name: Optional[str] = None
+
+    if training and current_run_name is None:
+        task_select_result = task_select(
+            cli_args.tasks_dir,
+            cli_args.task_name,
+        )
+
+        # We failed to find an animation, exit
+        if task_select_result is None:
+            Logger.error("No task found.")
+            return None
+
+        task_config, current_task_config, current_task_name = task_select_result
+    elif playing or exporting or (training and current_run_name is not None):
+        recorded_task_config_path = os.path.join(
+            runs_dir,
+            current_run_name,
+            "records",
+            "task_config_record.yaml",
+        )
+        current_task_config = load_config(recorded_task_config_path)
+        current_task_name = current_task_config["name"]
+
+    # Animation
+
+    animation_clips_config: ConfigCollection = {}
+    current_animation_clip_config: Config = {}
+    current_animation: Optional[str] = None
+
+    if animating:
+        animation_select_result = animation_select(
+            cli_args.animations_dir,
+            cli_args.animation_name,
+        )
+
+        # We failed to find an animation, and we can't proceed, exit
+        if animation_select_result is None and animating:
+            return None
+
+        animation_clips_config, current_animation_clip_config, current_animation = (
+            animation_select_result
+        )
+    elif training:
+        from core.utils.config import load_named_configs_in_dir
+
+        animation_clips_config = load_named_configs_in_dir(cli_args.animations_dir)
+        current_animation_clip_config = animation_clips_config[current_task_name]
+        current_animation = current_animation_clip_config["name"]
+    elif playing or exporting:
+        recorded_animation_clip_config_path = os.path.join(
+            runs_dir,
+            current_run_name,
+            "records",
+            "animation_clip_config_record.yaml",
+        )
+        current_animation_clip_config = load_config(recorded_animation_clip_config_path)
+        current_animation = current_animation_clip_config["name"]
+
     # if we're training and the user did specify no-checkpoint, we need to create a new run
-    if no_checkpoint and training and current_run_name is None:
+    if training and current_run_name is None:
         from core.utils.runs import (
             get_unused_run_id,
             create_runs_library,
         )
 
-        new_run_id = get_unused_run_id(runs_library, rl_config["task_name"])
+        new_run_id = get_unused_run_id(runs_library, current_task_name)
 
         if new_run_id is None:
             runs_library = create_runs_library(runs_dir)
 
-            new_run_id = get_unused_run_id(runs_library, rl_config["task_name"])
+            new_run_id = get_unused_run_id(runs_library, current_task_name)
 
             if new_run_id is None:
                 new_run_id = 0
 
-        current_run_name = f"{rl_config['task_name']}_{new_run_id:03}"
+        current_run_name = f"{current_task_name}_{new_run_id:03}"
 
     log_file_path = f"logs/{mode_name.lower().replace(' ', '_')}.log"
     if current_run_name:
-        log_file_path = f"{runs_dir}/{current_run_name}_0/{current_run_name}.log"
+        log_file_path = f"{runs_dir}/{current_run_name}/{current_run_name}.log"
 
     # Network config
 
-    network_config: Config = {}
-    network_name: Optional[str] = cli_args.network_name
+    network_configs: ConfigCollection = {}
+    current_network_config: Config = {}
+    current_network_name: Optional[str] = cli_args.network_name
 
     if training:
         network_select_result = network_arch_select(
-            cli_args.network_config, network_name
+            cli_args.network_config,
+            current_network_name,
         )
 
         if network_select_result is None:
             Logger.error("No network architecture found.")
             return None
 
-        network_config, network_name = network_select_result
+        network_configs, current_network_config, current_network_name = (
+            network_select_result
+        )
+    elif playing or exporting:
+        from core.utils.torch import get_torch_activation_fn
+
+        recorded_network_config_path = os.path.join(
+            runs_dir,
+            current_run_name,
+            "records",
+            "network_config_record.yaml",
+        )
+        current_network_config = load_config(recorded_network_config_path)
+        current_network_config["activation_fn"] = get_torch_activation_fn(
+            current_network_config["activation_fn"]
+        )
+        current_network_name = current_network_config["name"]
 
     # Helper flags
 
@@ -529,13 +617,10 @@ def setup() -> Optional[Matter]:
     enable_ros = ros_config["enabled"]
     enable_db = db_config["enabled"]
 
-    # override some config with CLI num_envs, if specified
-    num_envs = rl_config["n_envs"]
+    # override some config with CLI num_envs, if specified (or when not training/playing, we default to 1)
+    num_envs = current_task_config["n_envs"] if is_rl else 1
     if cli_args.num_envs != -1:
         num_envs = cli_args.num_envs
-
-    if not training:
-        num_envs = 1
 
     if exporting:
         headless = True
@@ -546,101 +631,180 @@ def setup() -> Optional[Matter]:
     control_step_dt = world_config["control_dt"]
     inverse_control_frequency = int(control_step_dt / world_config["physics_dt"])
 
-    return (
-        cli_args,
-        robot_config,
-        rl_config,
-        world_config,
-        randomization_config,
-        network_config,
-        network_name,
-        ros_config,
-        db_config,
-        logger_config,
-        log_file_path,
-        terrain_config,
-        secrets,
-        animation_clips_config,
-        current_animation,
-        runs_dir,
-        runs_library,
-        current_run_name,
-        current_checkpoint_path,
-        mode,
-        mode_name,
-        training,
-        playing,
-        animating,
-        physics_only,
-        exporting,
-        is_rl,
-        interactive,
-        headless,
-        enable_ros,
-        enable_db,
-        num_envs,
-        control_step_dt,
-        inverse_control_frequency,
+    matter = {
+        "cli_args": cli_args,
+        "robot_config": robot_config,
+        "task_configs": task_configs,
+        "current_task_config": current_task_config,
+        "current_task_name": current_task_name,
+        "world_config": world_config,
+        "randomization_config": randomization_config,
+        "network_configs": network_configs,
+        "current_network_config": current_network_config,
+        "current_network_name": current_network_name,
+        "ros_config": ros_config,
+        "db_config": db_config,
+        "logger_config": logger_config,
+        "log_file_path": log_file_path,
+        "terrain_config": terrain_config,
+        "secrets": secrets,
+        "animation_clips_config": animation_clips_config,
+        "current_animation_clip_config": current_animation_clip_config,
+        "current_animation": current_animation,
+        "runs_dir": runs_dir,
+        "runs_library": runs_library,
+        "current_run_name": current_run_name,
+        "current_checkpoint_path": current_checkpoint_path,
+        "mode": mode,
+        "mode_name": mode_name,
+        "training": training,
+        "playing": playing,
+        "animating": animating,
+        "physics_only": physics_only,
+        "exporting": exporting,
+        "is_rl": is_rl,
+        "interactive": interactive,
+        "headless": headless,
+        "enable_ros": enable_ros,
+        "enable_db": enable_db,
+        "num_envs": num_envs,
+        "control_step_dt": control_step_dt,
+        "inverse_control_frequency": inverse_control_frequency,
+    }
+
+    return matter
+
+
+def export_onnx(
+    current_task_config: Config,
+    current_network_config: Config,
+    current_checkpoint_path: str,
+    current_run_name: str,
+) -> None:
+    import torch
+
+    from core.utils.rl.skrl import create_shared_model
+    from core.utils.rl import load_gymnasium_space
+
+    observation_space_path = current_task_config["pickles"]["observation_space_path"]
+    action_space_path = current_task_config["pickles"]["action_space_path"]
+
+    observation_space = load_gymnasium_space(observation_space_path)
+    action_space = load_gymnasium_space(action_space_path)
+    device = torch.device("cpu")
+
+    model = create_shared_model(
+        observation_space=observation_space,
+        action_space=action_space,
+        device=device,
+        arch=current_network_config["net_arch"],
+        activation=current_network_config["activation_fn"],
     )
+    state_dict = torch.load(
+        current_checkpoint_path,
+        map_location=device,
+        weights_only=False,
+    )
+    model.migrate(state_dict["policy"])
+
+    dummy_input = {
+        "states": torch.rand((1, *observation_space.shape), device=device),
+    }
+
+    torch.onnx.export(
+        model,
+        (dummy_input, "policy"),
+        f"{current_checkpoint_path}.onnx",
+        verbose=False,
+        input_names=["observations"],
+        output_names=["actions", "log_std", "mean_actions"],
+        dynamic_axes={
+            "observations": {0: "batch_size"},
+            "actions": {0: "batch_size"},
+            "log_std": {0: "batch_size"},
+            "mean_actions": {0: "batch_size"},
+        },
+    )
+
+    Logger.info(f"Exported {current_run_name} to {current_checkpoint_path}.onnx!")
+
+    import onnx
+
+    onnx_model = onnx.load(f"{current_checkpoint_path}.onnx")
+    onnx.checker.check_model(onnx_model)
+
+    Logger.info(f"ONNX model is valid!")
 
 
 def main():
     setup_logging()
 
-    base_matter = setup()
-
-    if base_matter is None:
-        Logger.fatal("An error occurred during setup.")
+    try:
+        base_matter = setup()
+    except KeyboardInterrupt:
+        Logger.info("Exiting...")
+        return
+    except Exception as e:
+        Logger.fatal(f"An error occurred during setup: {e}")
         return
 
-    (
-        cli_args,
-        robot_config,
-        rl_config,
-        world_config,
-        randomization_config,
-        network_config,
-        network_name,
-        ros_config,
-        db_config,
-        logger_config,
-        log_file_path,
-        terrain_config,
-        secrets,
-        animation_clips_config,
-        current_animation,
-        runs_dir,
-        runs_library,
-        current_run_name,
-        current_checkpoint_path,
-        mode,
-        mode_name,
-        training,
-        playing,
-        animating,
-        physics_only,
-        exporting,
-        is_rl,
-        interactive,
-        headless,
-        enable_ros,
-        enable_db,
-        num_envs,
-        control_step_dt,
-        inverse_control_frequency,
-    ) = base_matter
+    if base_matter is None:
+        return
+
+    robot_config = base_matter["robot_config"]
+    task_configs = base_matter["task_configs"]
+    current_task_config = base_matter["current_task_config"]
+    current_task_name = base_matter["current_task_name"]
+    world_config = base_matter["world_config"]
+    randomization_config = base_matter["randomization_config"]
+    network_configs = base_matter["network_configs"]
+    current_network_config = base_matter["current_network_config"]
+    current_network_name = base_matter["current_network_name"]
+    ros_config = base_matter["ros_config"]
+    db_config = base_matter["db_config"]
+    logger_config = base_matter["logger_config"]
+    log_file_path = base_matter["log_file_path"]
+    terrain_config = base_matter["terrain_config"]
+    secrets = base_matter["secrets"]
+    animation_clips_config = base_matter["animation_clips_config"]
+    current_animation_clip_config = base_matter["current_animation_clip_config"]
+    current_animation = base_matter["current_animation"]
+    runs_dir = base_matter["runs_dir"]
+    current_run_name = base_matter["current_run_name"]
+    current_checkpoint_path = base_matter["current_checkpoint_path"]
+    mode = base_matter["mode"]
+    mode_name = base_matter["mode_name"]
+    training = base_matter["training"]
+    playing = base_matter["playing"]
+    animating = base_matter["animating"]
+    physics_only = base_matter["physics_only"]
+    exporting = base_matter["exporting"]
+    is_rl = base_matter["is_rl"]
+    interactive = base_matter["interactive"]
+    headless = base_matter["headless"]
+    enable_ros = base_matter["enable_ros"]
+    enable_db = base_matter["enable_db"]
+    num_envs = base_matter["num_envs"]
+    control_step_dt = base_matter["control_step_dt"]
+    inverse_control_frequency = base_matter["inverse_control_frequency"]
 
     # set the log file path to the one we've determined the specific one, not the generic one
     Logger.set_log_file_path(log_file_path)
 
-    Logger.info(
-        f"Running with {num_envs} environments, {rl_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
-        f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
-        f"Using {rl_config['device']} as the RL device and {world_config['device']} as the physics device.",
-    )
+    if is_rl:
+        Logger.info(
+            f"Running with {num_envs} environments, {current_task_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
+            f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
+            f"Using {current_task_config['device']} as the RL device and {world_config['device']} as the physics device.",
+        )
+    else:
+        Logger.info(
+            f"Running with {num_envs} environments, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
+            f"{mode_name}.\n"
+            f"Using {world_config['device']} as the physics device.",
+        )
 
     import torch
-    import numpy as np
 
     # big_bang must be imported & invoked first, to load all necessary omniverse extensions
     from core import big_bang
@@ -657,6 +821,15 @@ def main():
     # only now can we import the rest of the modules
     from core.universe import Universe
 
+    # if we're exporting, we don't need to run the simulation
+    if exporting:
+        return export_onnx(
+            current_task_config,
+            current_network_config,
+            current_checkpoint_path,
+            current_run_name,
+        )
+
     # to circumvent Python typing restrictions, we type the universe object here
     universe: Universe = universe
 
@@ -669,7 +842,7 @@ def main():
     from core.agents import NewtonVecAgent
 
     from core.sensors import VecIMU, VecContact
-    from core.actuators import LSTMActuator, BaseActuator
+    from core.actuators import BaseActuator, DCActuator
     from core.controllers import VecJointsController, CommandController
     from core.animation import AnimationEngine
     from core.domain_randomizer import NewtonBaseDomainRandomizer
@@ -692,10 +865,11 @@ def main():
     actuators: List[BaseActuator] = []
 
     for i in range(12):
-        actuator = LSTMActuator(
+        actuator = DCActuator(
             universe=universe,
-            motor_model_path=robot_config["actuators"]["lstm"]["model_path"],
-            model_params=robot_config["actuators"]["lstm"]["model_params"],
+            k_p=1.0,
+            k_d=0.001,
+            effort_saturation=120.0,
         )
 
         actuators.append(actuator)
@@ -792,59 +966,18 @@ def main():
 
     animation_engine = AnimationEngine(
         universe=universe,
-        clips=animation_clips_config,
+        current_clip_config=current_animation_clip_config,
     )
 
+    # TODO: Make the domain randomizer optional
     domain_randomizer = NewtonBaseDomainRandomizer(
         universe=universe,
-        seed=rl_config["seed"],
+        seed=158124,
         agent=newton_agent,
         randomizer_settings=randomization_config,
     )
 
     terrain = Terrain(universe, terrain_config, num_envs)
-
-    # ----------- #
-    #    ONNX     #
-    # ----------- #
-
-    if exporting:
-        from stable_baselines3.ppo.ppo import PPO
-        from stable_baselines3.common.policies import BasePolicy
-
-        # Load model from checkpoint
-        model = PPO.load(current_checkpoint_path, device="cpu")
-
-        # Create dummy observations tensor for tracing torch model
-        obs_shape = model.observation_space.shape
-        dummy_input = torch.rand((1, *obs_shape), device="cpu")
-
-        # Simplified network for actor inference
-        # Tested for continuous_a2c_logstd
-        class OnnxablePolicy(torch.nn.Module):
-            def __init__(self, policy: BasePolicy):
-                super().__init__()
-                self.policy = policy
-
-            def forward(
-                self,
-                observation: torch.Tensor,
-            ):
-                return self.policy(observation, deterministic=True)
-
-        onnxable_model = OnnxablePolicy(model.policy)
-        torch.onnx.export(
-            onnxable_model,
-            dummy_input,
-            f"{current_checkpoint_path}.onnx",
-            verbose=True,
-            input_names=["observations"],
-            output_names=["actions"],
-        )  # outputs are mu (actions), sigma, value
-
-        Logger.info(f"Exported {current_run_name} to {current_checkpoint_path}.onnx!")
-
-        return
 
     # --------------- #
     #    ANIMATING    #
@@ -867,9 +1000,7 @@ def main():
             SubTerrainType.RandomUniform,
         )  # done manually, since we're changing some default construction parameters
         env.register_self()  # done manually, generally the task would do this
-        animation_engine.register_self(
-            current_animation
-        )  # done manually, generally the task would do this
+        animation_engine.register_self()  # done manually, generally the task would do this
 
         universe.construct_registrations()
 
@@ -896,9 +1027,9 @@ def main():
             )
 
             # we need to make it 2D, since the controller expects a batch of actions
-            env.step(joint_actions.repeat(1, 1))
+            env.step(joint_actions.unsqueeze(0))
 
-        exit(1)
+        return
 
     # ---------------- #
     #   PHYSICS ONLY   #
@@ -935,12 +1066,10 @@ def main():
     # ----------- #
 
     from core.tasks import (
+        NewtonBaseTask,
         NewtonIdleTask,
         NewtonLocomotionTask,
-        NewtonBaseTaskCallback,
-        NewtonLocomotionTaskCallback,
     )
-    from core.wrappers import RandomDelayWrapper
 
     training_env = NewtonTerrainEnv(
         universe=universe,
@@ -961,142 +1090,148 @@ def main():
     )
 
     # task used for either training or playing
-    task = NewtonLocomotionTask(
-        universe=universe,
-        env=playing_env if playing else training_env,
-        agent=newton_agent,
-        animation_engine=animation_engine,
-        command_controller=command_controller,
-        device=rl_config["device"],
-        num_envs=num_envs,
-        playing=playing,
-        reset_in_play=rl_config["reset_in_play"],
-        max_episode_length=rl_config["episode_length"],
-    )
-    callback = NewtonBaseTaskCallback(
-        check_freq=64,
-        save_path=current_run_name,
-    )
+    task: NewtonBaseTask
 
-    from stable_baselines3 import PPO
+    if current_task_name == "newton_idle":
+        task = NewtonIdleTask(
+            universe=universe,
+            env=playing_env if playing else training_env,
+            agent=newton_agent,
+            animation_engine=animation_engine,
+            device=current_task_config["device"],
+            num_envs=num_envs,
+            playing=playing,
+            reset_in_play=current_task_config["reset_in_play"],
+            max_episode_length=current_task_config["episode_length"],
+            observation_scalers=current_task_config["scalers"]["observations"],
+            action_scaler=current_task_config["scalers"]["action"],
+            reward_scalers=current_task_config["scalers"]["rewards"],
+        )
+    elif current_task_name == "newton_locomotion":
+        task = NewtonLocomotionTask(
+            universe=universe,
+            env=playing_env if playing else training_env,
+            agent=newton_agent,
+            animation_engine=animation_engine,
+            command_controller=command_controller,
+            device=current_task_config["device"],
+            num_envs=num_envs,
+            playing=playing,
+            reset_in_play=current_task_config["reset_in_play"],
+            max_episode_length=current_task_config["episode_length"],
+            observation_scalers=current_task_config["scalers"]["observations"],
+            action_scaler=current_task_config["scalers"]["action"],
+            reward_scalers=current_task_config["scalers"]["rewards"],
+            command_scalers=current_task_config["scalers"]["commands"],
+        )
+    else:
+        Logger.error(f"Task {current_task_name} not recognized.")
+        return
 
-    # we're not exporting nor purely simulating, so we're training
-    if training:
-        if rl_config["delay"]["enabled"]:
-            list_obs_delay_range = rl_config["delay"]["obs_delay_range"]
-            list_act_delay_range = rl_config["delay"]["act_delay_range"]
-            instant_rewards = rl_config["delay"]["instant_rewards"]
+    if training or playing or exporting:
+        from skrl.utils import set_seed
 
-            obs_delay_range = range(list_obs_delay_range[0], list_obs_delay_range[1])
-            act_delay_range = range(list_act_delay_range[0], list_act_delay_range[1])
+        set_seed()
 
-            task = RandomDelayWrapper(
-                task,
-                obs_delay_range=obs_delay_range,
-                act_delay_range=act_delay_range,
-                instant_rewards=instant_rewards,
-            )
+        from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG
+        from skrl.trainers.torch.sequential import SEQUENTIAL_TRAINER_DEFAULT_CONFIG
 
-        policy_kwargs = {
-            "activation_fn": network_config["activation_fn"],
-            "net_arch": network_config["net_arch"],
+        from core.utils.rl.config import parse_ppo_config
+
+        ppo_config = parse_ppo_config(current_task_config["ppo"], PPO_DEFAULT_CONFIG)
+        ppo_config["state_preprocessor_kwargs"] = {
+            "size": task.observation_space,
+            "device": task.device,
+        }
+        ppo_config["value_preprocessor_kwargs"] = {
+            "size": 1,
+            "device": task.device,
+        }
+        ppo_config["experiment"]["directory"] = runs_dir
+        ppo_config["experiment"]["experiment_name"] = current_run_name
+
+        trainer_config = SEQUENTIAL_TRAINER_DEFAULT_CONFIG.copy()
+        trainer_config["timesteps"] = current_task_config["timesteps"]
+        trainer_config["headless"] = headless
+        trainer_config["stochastic_evaluation"] = False  # deterministic evaluation
+
+        from core.utils.rl.skrl import (
+            create_shared_model,
+            create_ppo,
+            create_random_memory,
+            create_sequential_trainer,
+        )
+
+        model = create_shared_model(
+            task=task,
+            arch=current_network_config["net_arch"],
+            activation=current_network_config["activation_fn"],
+        )
+
+        random_memory = create_random_memory(
+            task=task,
+            memory_size=current_task_config["ppo"]["n_steps"],
+        )
+
+        algo = create_ppo(
+            task=task,
+            ppo_config=ppo_config,
+            memory=random_memory,
+            policy_model=model,
+            checkpoint_path=current_checkpoint_path,
+        )
+
+        trainer = create_sequential_trainer(
+            task=task,
+            algorithm=algo,
+            trainer_config=trainer_config,
+        )
+
+        universe.construct_registrations()
+
+        from core.utils.config import record_configs
+        from core.utils.rl import save_gymnasium_space
+
+        current_task_config["pickles"] = {
+            "observation_space_path": os.path.join(
+                runs_dir,
+                current_run_name,
+                "records",
+                "pickles",
+                "observation_space.pkl",
+            ),
+            "action_space_path": os.path.join(
+                runs_dir, current_run_name, "records", "pickles", "action_space.pkl"
+            ),
         }
 
-        from core.utils.rl import kl_based_adaptive_lr
-
-        model = PPO(
-            rl_config["policy"],
-            task,
-            verbose=2,
-            device=rl_config["device"],
-            seed=rl_config["seed"],
-            learning_rate=kl_based_adaptive_lr,
-            n_steps=rl_config["ppo"]["n_steps"],
-            batch_size=rl_config["ppo"]["batch_size"],
-            n_epochs=rl_config["ppo"]["n_epochs"],
-            gamma=rl_config["ppo"]["gamma"],
-            gae_lambda=rl_config["ppo"]["gae_lambda"],
-            clip_range=float(rl_config["ppo"]["clip_range"]),
-            clip_range_vf=rl_config["ppo"]["clip_range_vf"],
-            ent_coef=rl_config["ppo"]["ent_coef"],
-            vf_coef=rl_config["ppo"]["vf_coef"],
-            max_grad_norm=rl_config["ppo"]["max_grad_norm"],
-            use_sde=rl_config["ppo"]["use_sde"],
-            sde_sample_freq=rl_config["ppo"]["sde_sample_freq"],
-            target_kl=rl_config["ppo"]["target_kl"],
-            stop_on_excessive_kl=rl_config["ppo"]["stop_on_excessive_kl"],
-            tensorboard_log=runs_dir,
-            policy_kwargs=policy_kwargs,
+        save_gymnasium_space(
+            task.observation_space,
+            current_task_config["pickles"]["observation_space_path"],
+        )
+        save_gymnasium_space(
+            task.action_space,
+            current_task_config["pickles"]["action_space_path"],
         )
 
-        from core.utils.config import save_config
+        record_directory = os.path.join(runs_dir, current_run_name, "records")
+        configs_to_record = {
+            "task_config": current_task_config,
+            "world_config": world_config,
+            "robot_config": robot_config,
+            "network_config": current_network_config,
+            "randomization_config": randomization_config,
+            "animation_clip_config": current_animation_clip_config,
+        }
+        record_configs(record_directory, configs_to_record)
 
-        record_directory = f"{runs_dir}/{current_run_name}_0/records"
-        os.makedirs(record_directory, exist_ok=True)
+        if training:
+            trainer.train()
+            return
 
-        rl_config_record_path = f"{record_directory}/rl_config_record.yaml"
-        save_config(rl_config, rl_config_record_path)
+        trainer.eval()
 
-        world_config_record_path = f"{record_directory}/world_config_record.yaml"
-        save_config(world_config, world_config_record_path)
-
-        robot_config_record_path = f"{record_directory}/robot_config_record.yaml"
-        save_config(robot_config, robot_config_record_path)
-
-        network_config_record_path = f"{record_directory}/network_config_record.yaml"
-        save_config(network_config, network_config_record_path)
-
-        randomizer_config_record_path = (
-            f"{record_directory}/randomizer_config_record.yaml"
-        )
-        save_config(randomization_config, randomizer_config_record_path)
-
-        if current_checkpoint_path is not None:
-            Logger.info(f"Loading checkpoint from {current_checkpoint_path}.")
-
-            model = PPO.load(current_checkpoint_path, task, device=rl_config["device"])
-
-        terrain.register_self()  # we need to do it manually
-
-        universe.construct_registrations()
-
-        model.learn(
-            total_timesteps=rl_config["timesteps_per_env"] * num_envs,
-            tb_log_name=current_run_name,
-            reset_num_timesteps=False,
-            progress_bar=True,
-            callback=callback,
-        )
-        model.save(f"{runs_dir}/{current_run_name}_0/model.zip")
-
-        exit(1)
-
-    if playing:
-        terrain.register_self(
-            TerrainType.Random,
-            1,  # num_rows
-            1,  # num_cols
-        )  # done manually, since we're changing some default construction parameters
-
-        universe.construct_registrations()
-
-        Logger.info(f"Loading checkpoint from {current_checkpoint_path} for play.")
-
-        model = PPO.load(current_checkpoint_path)
-
-        actions = model.predict(task.reset()[0], deterministic=True)[0]
-        actions = np.array([actions])  # make sure we have a 2D tensor
-
-        while universe.is_playing:
-            step_return = task.step(actions)
-            observations = step_return[0]
-
-            observations[0, 59] = 0.0
-            observations[0, 60] = 1.0
-
-            actions = model.predict(observations, deterministic=True)[0]
-
-        exit(1)
+        return
 
 
 if __name__ == "__main__":

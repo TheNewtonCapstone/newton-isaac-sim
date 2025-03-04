@@ -1,30 +1,23 @@
 from typing import Optional
 
 import numpy as np
-from stable_baselines3.common.vec_env.base_vec_env import VecEnvObs, VecEnvStepReturn
-
 import torch
-from core.agents import NewtonBaseAgent
-from core.animation import AnimationEngine
-from core.envs import NewtonBaseEnv
-from core.tasks import NewtonBaseTask, NewtonBaseTaskCallback
-from core.types import Observations
-from core.universe import Universe
 from gymnasium.spaces import Box
 
-
-class NewtonIdleTaskCallback(NewtonBaseTaskCallback):
-    def __init__(self, check_freq: int, save_path: str):
-        super().__init__(check_freq, save_path)
-
-        self.training_env: NewtonIdleTask
-
-    def _on_step(self) -> bool:
-        super()._on_step()
-
-        # TODO: metrics about the agent's state & the animation engine
-
-        return True
+from . import NewtonBaseTask
+from ..agents import NewtonBaseAgent
+from ..animation import AnimationEngine
+from ..envs import NewtonBaseEnv
+from ..types import (
+    Actions,
+    StepReturn,
+    ResetReturn,
+    Indices,
+    ObservationScalers,
+    ActionScaler,
+    RewardScalers,
+)
+from ..universe import Universe
 
 
 class NewtonIdleTask(NewtonBaseTask):
@@ -39,8 +32,11 @@ class NewtonIdleTask(NewtonBaseTask):
         playing: bool,
         reset_in_play: bool,
         max_episode_length: int,
+        observation_scalers: Optional[ObservationScalers] = None,
+        action_scaler: Optional[ActionScaler] = None,
+        reward_scalers: Optional[RewardScalers] = None,
     ):
-        self.observation_space: Box = Box(
+        observation_space: Box = Box(
             low=np.array(
                 [-10.0] * 3  # for the projected gravity
                 + [-50.0] * 6  # for linear & angular velocities
@@ -59,12 +55,12 @@ class NewtonIdleTask(NewtonBaseTask):
             ),
         )
 
-        self.action_space: Box = Box(
+        action_space: Box = Box(
             low=np.array([-1.0] * 12),
             high=np.array([1.0] * 12),
         )
 
-        self.reward_space: Box = Box(
+        reward_space: Box = Box(
             low=np.array([-1.0]),
             high=np.array([1.0]),
         )
@@ -81,12 +77,13 @@ class NewtonIdleTask(NewtonBaseTask):
             playing,
             reset_in_play,
             max_episode_length,
-            self.observation_space,
-            self.action_space,
-            self.reward_space,
+            observation_space,
+            action_space,
+            reward_space,
+            observation_scalers=observation_scalers,
+            action_scaler=action_scaler,
+            reward_scalers=reward_scalers,
         )
-
-        self.env: NewtonBaseEnv = env
 
     def construct(self) -> None:
         super().construct()
@@ -98,105 +95,100 @@ class NewtonIdleTask(NewtonBaseTask):
 
         self._is_post_constructed = True
 
-    def step_wait(self) -> VecEnvStepReturn:
-        super().step_wait()
+    def step(self, actions: Actions) -> StepReturn:
+        super().step(actions)
 
-        self.env.step(self.actions_buf)
+        self.env.step(self._actions_buf)
 
-        obs_buf = self._get_observations()
+        self._update_observations_and_extras()
         self._update_rewards_and_dones()
 
         # only now can we save the actions (after gathering observations & rewards)
-        self.last_actions_buf[1, :, :] = self.last_actions_buf[0, :, :]
-        self.last_actions_buf[0, :, :] = self.actions_buf.clone()
+        self.last_actions_buf = self._actions_buf.clone()
 
         # creates a new np array with only the indices of the environments that are done
-        resets: torch.Tensor = self.dones_buf.nonzero().squeeze(1)
+        resets: torch.Tensor = (self.dones_buf & self.should_reset).nonzero().squeeze(1)
         if len(resets) > 0:
             self.env.reset(resets)
 
         # clears the last 2 observations & the progress if any Newton is reset
-        obs_buf[resets, :] = 0.0
-        self.progress_buf[resets] = 0
-        self.last_actions_buf[:, resets, :] = 0.0
+        self.obs_buf[resets, :] = 0.0
+        self._episode_length_buf[resets] = 0
+        self.last_actions_buf[resets, :] = 0.0
 
-        for i in range(self.num_envs):
-            self.infos_buf[i] = {
-                "TimeLimit.truncated": self.progress_buf[i] >= self.max_episode_length
-            }
+        self._extras["time_outs"] = self.dones_buf.clone()
 
         return (
-            obs_buf.cpu().numpy(),
-            self.rewards_buf.cpu().numpy(),
-            self.dones_buf.cpu().numpy(),
-            self.infos_buf,
+            self.obs_buf,
+            self.rew_buf.unsqueeze(-1),
+            self.terminated_buf.unsqueeze(-1) & self.should_reset,
+            self.truncated_buf.unsqueeze(-1) & self.should_reset,
+            self._extras,
         )
 
-    def reset(self) -> VecEnvObs:
+    def reset(self, indices: Optional[Indices] = None) -> ResetReturn:
         super().reset()
-
-        obs_buf = self._get_observations()
 
         self.env.reset()
 
+        self._update_observations_and_extras()
+
         # we want to return the last observation of the previous episode, according to the STB3 documentation
-        return obs_buf.cpu().numpy()
+        return self.get_observations()
 
-    def _get_observations(self) -> Observations:
-        obs = self.env.get_observations()
+    def _update_observations_and_extras(self) -> None:
+        env_obs = self.env.get_observations()
 
-        phase_signal = self.progress_buf / self.max_episode_length
+        phase_signal = self._episode_length_buf / self._max_episode_length
 
-        obs_buf: Observations = torch.zeros(
-            (self.num_envs, self.num_observations),
-            dtype=torch.float32,
+        self._obs_buf[:, :3] = env_obs["projected_gravities"]
+        self._obs_buf[:, 3:6] = env_obs["linear_velocities"]
+        self._obs_buf[:, 6:9] = env_obs["angular_velocities"]
+        self._obs_buf[:, 9:21] = (
+            self.agent.joints_controller.get_normalized_joint_positions()
         )
-        obs_buf[:, :3] = obs["projected_gravities"]
-        obs_buf[:, 3:6] = obs["linear_velocities"]
-        obs_buf[:, 6:9] = obs["angular_velocities"]
-        obs_buf[:, 9:21] = self.agent.joints_controller.get_normalized_joint_positions()
-        obs_buf[:, 21:33] = (
+        self._obs_buf[:, 21:33] = (
             self.agent.joints_controller.get_normalized_joint_velocities()
         )
 
         # 1st & 2nd set of past actions, we don't care about just-applied actions
-        obs_buf[:, 33:57] = self.last_actions_buf.reshape(
-            (self.num_envs, self.num_actions * 2)
+        self._obs_buf[:, 33:57] = self.last_actions_buf.reshape(
+            (self.num_envs, self._num_actions * 2)
         )
 
         # From what I currently understand, we add two observations to the observation space:
         #  - The phase signal (0-1) of the phase progress, transformed by cos(2*pi*progress) & sin(2*pi*progress)
         # This would allow the model to recognize the periodicity of the animation and hopefully learn the intricacies
         # of each gait.
-        obs_buf[:, 57] = torch.cos(2 * torch.pi * phase_signal)
-        obs_buf[:, 58] = torch.sin(2 * torch.pi * phase_signal)
+        self._obs_buf[:, 57] = torch.cos(2 * torch.pi * phase_signal)
+        self._obs_buf[:, 58] = torch.sin(2 * torch.pi * phase_signal)
 
-        obs_buf = torch.clip(
-            obs_buf,
-            torch.from_numpy(self.observation_space.low).to(obs_buf.device),
-            torch.from_numpy(self.observation_space.high).to(obs_buf.device),
+        self._obs_buf = torch.clip(
+            self._obs_buf,
+            torch.from_numpy(self.observation_space.low).to(self._obs_buf.device),
+            torch.from_numpy(self.observation_space.high).to(self._obs_buf.device),
         )
 
-        return obs_buf
-
     def _update_rewards_and_dones(self) -> None:
-        obs = self.env.get_observations()
-        positions = obs["positions"]
-        angular_velocities = obs["angular_velocities"]
-        linear_velocities = obs["linear_velocities"]
-        world_gravities = obs["world_gravities"]
+        env_obs = self.env.get_observations()
+
+        positions = env_obs["positions"]
+        angular_velocities = env_obs["angular_velocities"]
+        linear_velocities = env_obs["linear_velocities"]
+        world_gravities = env_obs["world_gravities"]
+
         world_gravities_norm = world_gravities / torch.linalg.vector_norm(
             world_gravities,
             dim=1,
             keepdim=True,
         )
-        projected_gravities = obs["projected_gravities"]
+        projected_gravities = env_obs["projected_gravities"]
         projected_gravities_norm = projected_gravities / torch.linalg.vector_norm(
             projected_gravities,
             dim=1,
             keepdim=True,
         )
-        in_contact_with_ground = obs["in_contacts"]
+        in_contact_with_ground = env_obs["in_contacts"]
 
         dof_ordered_names = self.agent.joints_controller.art_view.dof_names
         has_flipped = projected_gravities_norm[:, 2] > 0.0
@@ -211,7 +203,9 @@ class NewtonIdleTask(NewtonBaseTask):
             # less than half a second of overall airtime (all paws)
             torch.sum(self.air_time, dim=1) > 5.0,
             # ensures that the agent has time to stabilize (0.5s)
-            (self.progress_buf > 0.5 // self._universe.control_dt).to(self.device),
+            (self._episode_length_buf > 0.5 // self._universe.control_dt).to(
+                self.device
+            ),
         )
 
         base_linear_velocity_xy = linear_velocities[:, :2]
@@ -231,7 +225,7 @@ class NewtonIdleTask(NewtonBaseTask):
         )  # [-1, 1] unitless
 
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
-            self.progress_buf * self._universe.control_dt,
+            self._episode_length_buf * self._universe.control_dt,
             dof_ordered_names,
         )
         # we use the joint controller here, because it contains all the required information
@@ -249,94 +243,86 @@ class NewtonIdleTask(NewtonBaseTask):
         # DONES
 
         # terminated agents (i.e. they failed)
-        terminated = torch.logical_or(has_flipped, terminated_by_long_airtime)
+        self._terminated_buf = has_flipped | terminated_by_long_airtime
 
         # truncated agents (i.e. they reached the max episode length)
-        truncated = (self.progress_buf >= self.max_episode_length).to(self.device)
-
-        # when it's either terminated or truncated, the agent is done
-        self.dones_buf = (
-            torch.zeros_like(self.dones_buf)
-            if not self.reset_in_play and self.playing
-            else torch.logical_or(terminated, truncated)
+        self._truncated_buf = (self._episode_length_buf >= self._max_episode_length).to(
+            self.device
         )
 
         # REWARDS
 
-        from core.utils.rl import (
+        from core.utils.rl.rewards import (
             squared_norm,
             exp_squared,
             exp_squared_norm,
-            exp_squared_dot,
+            exp_one_minus_squared_dot,
             fd_first_order_squared_norm,
-            fd_second_order_squared_norm,
         )
 
         position_reward = exp_squared_norm(
             self.env.reset_newton_positions - positions,
             mult=-0.5,
-            weight=0.5,
+            weight=self._reward_scalers["position"],
         )
-        base_orientation_reward = exp_squared_dot(
+        base_orientation_reward = exp_one_minus_squared_dot(
             projected_gravities_norm,
             world_gravities_norm,
             mult=-20.0,
-            weight=1.5,
+            weight=self._reward_scalers["base_orientation"],
         )
         base_linear_velocity_xy_reward = exp_squared_norm(
             base_linear_velocity_xy,
             mult=-8.0,
-            weight=1.5,
+            weight=self._reward_scalers["base_linear_velocity_xy"],
         )
         base_linear_velocity_z_reward = exp_squared(
             base_linear_velocity_z,
             mult=-8.0,
-            weight=1.0,
+            weight=self._reward_scalers["base_linear_velocity_z"],
         )
         base_angular_velocity_xy_reward = exp_squared_norm(
             base_angular_velocity_xy,
             mult=-2,
-            weight=0.5,
+            weight=self._reward_scalers["base_angular_velocity_xy"],
         )
         base_angular_velocity_z_reward = exp_squared(
             base_angular_velocity_z,
             mult=-2,
-            weight=0.5,
+            weight=self._reward_scalers["base_angular_velocity_z"],
         )
         joint_positions_reward = fd_first_order_squared_norm(
             joint_positions,
             animation_joint_positions,
-            weight=15.0,
+            weight=-self._reward_scalers["joint_positions"],
         )
         joint_velocities_reward = fd_first_order_squared_norm(
             joint_velocities,
             animation_joint_velocities,
-            weight=0.01,
+            weight=-self._reward_scalers["joint_velocities"],
         )
         joint_efforts_reward = squared_norm(
             joint_efforts,
-            weight=0.001,
+            weight=-self._reward_scalers["joint_efforts"],
         )
-        # joint accelerations reward
         joint_action_rate_reward = fd_first_order_squared_norm(
-            self.actions_buf,
-            self.last_actions_buf[0],
-            weight=1.0,
+            self._actions_buf,
+            self.last_actions_buf,
+            weight=-self._reward_scalers["joint_action_rate"],
         )
-        joint_action_acceleration_reward = fd_second_order_squared_norm(
-            self.actions_buf,
-            self.last_actions_buf[0],
-            self.last_actions_buf[1],
-            weight=0.45,
+        joint_action_acceleration_reward = fd_first_order_squared_norm(
+            self._actions_buf,
+            self.last_actions_buf,
+            weight=-self._reward_scalers["joint_action_acceleration"],
         )
         air_time_penalty = -torch.sum(self.air_time - 0.5, dim=1) * 2.0
         survival_reward = torch.where(
-            terminated,
+            self.dones_buf,
             0.0,
-            2.0,
+            self._reward_scalers["survival"],
         )
 
-        self.rewards_buf = (
+        self._rew_buf = (
             position_reward
             + base_orientation_reward
             + base_linear_velocity_xy_reward
@@ -352,4 +338,18 @@ class NewtonIdleTask(NewtonBaseTask):
             + survival_reward
         )
 
-        self.rewards_buf *= self._universe.control_dt
+        self._rew_buf *= self._universe.control_dt
+
+        self._extras["episode"] = {
+            "position_reward": position_reward.mean(),
+            "base_orientation_reward": base_orientation_reward.mean(),
+            "base_linear_velocity_xy_reward": base_linear_velocity_xy_reward.mean(),
+            "base_linear_velocity_z_reward": base_linear_velocity_z_reward.mean(),
+            "base_angular_velocity_z_reward": base_angular_velocity_z_reward.mean(),
+            "joint_positions_reward": joint_positions_reward.mean(),
+            "joint_action_rate_reward": joint_action_rate_reward.mean(),
+            "joint_action_acceleration_reward": joint_action_acceleration_reward.mean(),
+            "survival_reward": survival_reward.mean(),
+            "terminated": self.terminated_buf.sum(),
+            "truncated": self.truncated_buf.sum(),
+        }

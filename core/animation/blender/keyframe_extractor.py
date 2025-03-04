@@ -24,6 +24,20 @@ def extract_keyframes_from_scene(
         "HR_KFE",
         "HL_KFE",
     ]
+    bone_important_axis = {
+        "FR_HAA": 0,  # 0: X, 1: Y, 2: Z
+        "FL_HAA": 0,
+        "HR_HAA": 0,
+        "HL_HAA": 0,
+        "FR_HFE": 0,
+        "HR_HFE": 0,
+        "FL_HFE": 0,
+        "HL_HFE": 0,
+        "FR_KFE": 0,
+        "FL_KFE": 0,
+        "HR_KFE": 0,
+        "HL_KFE": 0,
+    }
     num_bones = len(bone_names)
 
     # Get global animation start and end frames
@@ -65,21 +79,34 @@ def extract_keyframes_from_scene(
 
                 # Compute relative orientation
                 if parent:
-                    parent_world_matrix = armature.matrix_world @ parent.matrix
-                    relative_matrix = parent_world_matrix.inverted() @ world_matrix
-                    relative_quaternion = relative_matrix.to_quaternion()
+                    bone_matrix = bone.matrix
+                    parent_bone_matrix = parent.matrix
+
+                    relative_matrix = parent_bone_matrix.inverted() @ bone_matrix
                 else:
                     # No parent, so the matrix is already in world space
-                    relative_quaternion = world_matrix.to_quaternion()
+                    relative_matrix = bone.matrix
 
-                relative_euler = relative_quaternion.to_euler()
+                relative_euler = relative_matrix.to_euler()
                 relative_euler[:] = [math.degrees(e) for e in relative_euler]
+
+                adjustment = 0
+                if "R_HAA" in bone_name:
+                    adjustment = -90
+                elif "L_HAA" in bone_name:
+                    adjustment = 90
+                elif "_HFE" in bone_name:
+                    adjustment = 90
+                elif "_KFE" in bone_name:
+                    adjustment = 25
+
+                important_angle = relative_euler[bone_important_axis[bone_name]]
 
                 raw_transform_keyframe = {
                     "bone": bone_name,
                     "position": list(world_matrix.to_translation()),
                     "orientation": list(world_matrix.to_quaternion()),
-                    "relative_angles": list(relative_euler),
+                    "relative_angle": important_angle + adjustment,
                 }
 
                 raw_keyframe_data.append(raw_transform_keyframe)
@@ -91,74 +118,9 @@ def extract_keyframes_from_scene(
             }
         )
 
-    # List to store transformed keyframe data
-    animation = []
-
-    angle_ranges = [[[0] * 2] * 3] * num_bones
-
-    # Iterate through every frame in the global animation range and finds the relative angles that changed the most,
-    # that's the axis of rotation for the bone
-    for keyframe in raw_animation:
-        frame = keyframe["frame"]
-        raw_keyframe_data = keyframe["data"]
-
-        bpy.context.scene.frame_set(frame)
-
-        for i, bone_data in enumerate(raw_keyframe_data):
-            for j, angle in enumerate(bone_data["relative_angles"]):
-                angle_ranges[i][j][0] = min(angle_ranges[i][j][0], angle)
-                angle_ranges[i][j][1] = max(angle_ranges[i][j][1], angle)
-
-    # Builds the final animation data using the axis of rotation for each bone (chosen by the relative angle that
-    # changed the most)
-    for keyframe in raw_animation:
-        frame = keyframe["frame"]
-        raw_keyframe_data = keyframe["data"]
-
-        bpy.context.scene.frame_set(frame)
-
-        keyframe_data = []
-
-        for i, bone_data in enumerate(raw_keyframe_data):
-            transform_keyframe = {
-                "bone": bone_data["bone"],
-                "position": bone_data["position"],
-                "orientation": bone_data["orientation"],
-            }
-
-            chosen_relative_angle = 0
-            largest_angle_range_size = -360
-            for j, angle in enumerate(bone_data["relative_angles"]):
-                angle_range = angle_ranges[i][j]
-                angle_range_size = angle_range[1] - angle_range[0]
-
-                if angle_range_size > largest_angle_range_size:
-                    largest_angle_range_size = angle_range_size
-                    chosen_relative_angle = angle
-
-            adjustment = 0
-
-            if "R_HAA" in bone_data["bone"]:
-                adjustment = -90
-            elif "L_HAA" in bone_data["bone"]:
-                adjustment = 90
-            elif "_HFE" in bone_data["bone"]:
-                adjustment = 90
-
-            transform_keyframe["relative_angle"] = chosen_relative_angle + adjustment
-
-            keyframe_data.append(transform_keyframe)
-
-        animation.append(
-            {
-                "frame": frame,
-                "data": keyframe_data,
-            }
-        )
-
     return (
         framerate,
-        animation,
+        raw_animation,
         end_frame - start_frame,
         len(bone_names),
     )

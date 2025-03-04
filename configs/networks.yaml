@@ -1,20 +1,25 @@
 # This file contains the configuration for the neural networks used in the RL algorithms.
 # The networks are defined in the following format:
 #   network_name:
+#     name: str  # The name of the network (should be the same as the key)
 #     net_arch: List[int]  # The specification of the hidden layers
 #     activation_fn: torch.nn.Module  # The activation function to use
 
 networks:
   # DO NOT REMOVE 'default' NETWORK. IT IS USED AS A FALLBACK
   default:
+    name: default
     net_arch: [64, 64]
-    activation_fn: torch.nn.ReLU
-  custom_name:
+    activation_fn: ReLU
+  dense2_elu:
+    name: Dense2ElU
     net_arch: [256, 256]
-    activation_fn: torch.nn.ELU
-  descending:
+    activation_fn: ELU
+  autoencoder_big:
+    name: AutoEncoderBig
     net_arch: [1024, 512, 256]
-    activation_fn: torch.nn.ReLU
-  descending2:
+    activation_fn: ReLU
+  autoencoder_medium:
+    name: AutoEncoderMedium
     net_arch: [512, 256, 128]
-    activation_fn: torch.nn.ReLU
+    activation_fn: ReLU

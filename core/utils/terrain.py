@@ -163,7 +163,6 @@ def add_mesh_to_world(
             "points": vertices,
             "faceVertexIndices": triangles.flatten(),
             "faceVertexCounts": np.asarray([3] * num_faces),
-            "subdivisionScheme": "bilinear",
         },
     )
 
@@ -173,6 +172,6 @@ def add_mesh_to_world(
 
     physx_collision_api = PhysxSchema.PhysxCollisionAPI.Apply(mesh_prim)
     physx_collision_api.GetContactOffsetAttr().Set(0.02)
-    physx_collision_api.GetRestOffsetAttr().Set(0.00)
+    physx_collision_api.GetRestOffsetAttr().Set(0.001)
 
     return prim_path

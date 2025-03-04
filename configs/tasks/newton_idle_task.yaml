@@ -1,11 +1,10 @@
-task_name: "newton_idle"
+name: "newton_idle"
 device: "cuda"
 policy: "MlpPolicy"
 seed: 14321
 
 n_envs: 2048
-timesteps_per_env: 100_000
-base_lr: 1e-3
+timesteps: 100_000
 episode_length: 2000 # 20 seconds of real time (2000 * 0.01 = 20)
 reset_in_play: False
 
@@ -15,24 +14,61 @@ delay:
   act_delay_range: [1, 2] # sample range of time steps to delay the actions by
   instant_rewards: False # should the rewards be calculated on the brain or remote actor?
 
+scalers:
+  observations:
+    projected_gravities: 1.0
+    linear_velocities: 2.0
+    angular_velocities: 0.25
+    joint_positions: 1.0
+    joint_velocities: 0.05
+    last_actions: 1.0
+    velocity_commands: 1.0
+
+  rewards:
+    position: 0.5
+    height: 2.0
+    base_stability: 2.0
+    base_linear_velocity_xy: 1.0
+    base_linear_velocity_z: 1.0
+    base_angular_velocity_z: 0.5
+    joint_positions: 2.0
+    joint_action_rate: 0.05
+    air_time: 0.5
+    survival: 5.0
+
+  action: 1.0
+
 ppo:
-  n_steps: 64 # 0.64 seconds of real time (64 * 0.01 = 0.64)
-  batch_size: 131_072
+  n_steps: 24 # 0.48 seconds of real time (24 * 0.02 = 0.48)
   n_epochs: 5
+  n_minibatches: 4
 
-  gamma: 0.99
-  gae_lambda: 0.95
+  discount_factor: 0.99
+  lambda: 0.95
 
-  clip_range: 0.2
-  clip_range_vf: None
+  learning_rate: 3e-4
+  learning_rate_scheduler: "KLAdaptiveRL"
+  learning_rate_scheduler_kwargs:
+    kl_threshold: 0.008
 
-  normalize_advantage: True
+  grad_norm_clip: 1.0
+  ratio_clip: 0.2
+  value_clip: 0.2
+  clip_predicted_values: False
 
-  ent_coef: 0.01
-  vf_coef: 0.5
+  entropy_loss_coefficient: 0.0
+  value_loss_coefficient: 1.0
 
-  max_grad_norm: 1.0
-  use_sde: False
-  sde_sample_freq: -1
+  stopping_kl_threshold: 0.0
 
-  target_kl: 0.01
+  mixed_precision: True
+
+  state_preprocessor: "RunningStandardScaler"
+  state_preprocessor_kwargs: None
+
+  value_preprocessor: "RunningStandardScaler"
+  value_preprocessor_kwargs: None
+
+  experiment:
+    write_interval: "auto"
+    checkpoint_interval: "auto"

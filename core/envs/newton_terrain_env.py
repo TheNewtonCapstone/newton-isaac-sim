@@ -33,6 +33,7 @@ class NewtonTerrainEnv(NewtonBaseEnv):
     def construct(self) -> None:
         super().construct()
 
+        self.terrain.register_self()
         self.agent.register_self()
 
         self.domain_randomizer.register_self()
@@ -83,7 +84,9 @@ class NewtonTerrainEnv(NewtonBaseEnv):
             agent_origins_indices = th.zeros_like(agent_heights, dtype=th.int32)
         else:
             # Randomly sample terrain origins for each agent
-            agent_origins_indices = th.randint(0, flat_origins.shape[0], (self.num_envs,))
+            agent_origins_indices = th.randint(
+                0, flat_origins.shape[0], (self.num_envs,)
+            )
         agent_origins = flat_origins[agent_origins_indices]
 
         # Add agent heights to account for the varying agent sizes
