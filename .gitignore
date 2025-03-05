@@ -1,5 +1,6 @@
 # Python files
 **/__pycache__/
+.venv/
 
 # Isaac Sim files
 _isaac_sim
