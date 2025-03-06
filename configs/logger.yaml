@@ -1,5 +1,7 @@
-level: "debug" # "debug", "info", "warning", "error", "fatal"
-outputs: ["file", "carb"] # "carb", "file"
+outputs: ["console", "file"] # "console", "file"
+levels: # "debug", "info", "warning", "error", "critical"
+  file: "debug"
+  console: "warning"
 
 format:
   date: False

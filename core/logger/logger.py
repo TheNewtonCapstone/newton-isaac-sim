@@ -3,6 +3,7 @@ from io import TextIOWrapper
 from typing import Optional, Any
 
 from .types import LogLevel, LogOutput
+from .utils import log_level_from_config, should_log
 from ..types import Config, CallerInfo
 
 _logger: Optional["Logger"] = None
@@ -25,26 +26,13 @@ class Logger:
 
             self._log_file = open(log_file_path, "w")
 
+        self._file_log_level: LogLevel = log_level_from_config(logger_config["levels"], "file")
+        self._console_log_level: LogLevel = log_level_from_config(logger_config["levels"], "console")
+
+
     def __del__(self):
         if self._log_file is not None:
             self._log_file.close()
-
-    @property
-    def _log_level(self) -> LogLevel:
-        level_str = self._logger_config["level"]
-
-        if level_str == "info":
-            return LogLevel.Info
-        elif level_str == "debug":
-            return LogLevel.Debug
-        elif level_str == "warning":
-            return LogLevel.Warning
-        elif level_str == "error":
-            return LogLevel.Error
-        elif level_str == "fatal":
-            return LogLevel.Fatal
-        else:
-            raise ValueError(f"Unknown log level: {level_str}")
 
     @property
     def _output(self) -> LogOutput:
@@ -56,8 +44,8 @@ class Logger:
         output = LogOutput.None_
 
         for output_str in outputs:
-            if output_str == "carb":
-                output |= LogOutput.CarbConsole
+            if output_str == "console":
+                output |= LogOutput.Console
             elif output_str == "file":
                 output |= LogOutput.File
             else:
@@ -97,15 +85,6 @@ class Logger:
         _logger._log_file = open(log_file_path, "w")
 
     @staticmethod
-    def log_level() -> LogLevel:
-        global _logger
-
-        if _logger is None:
-            return LogLevel.None_
-
-        return _logger._log_level
-
-    @staticmethod
     def output() -> LogOutput:
         global _logger
 
@@ -123,9 +102,6 @@ class Logger:
         global _logger
 
         if _logger is None:
-            return
-
-        if level < _logger.log_level():
             return
 
         _logger._log(msg, level, src_depth + 1)
@@ -148,20 +124,19 @@ class Logger:
 
     @staticmethod
     def fatal(msg: Any, src_depth: int = 0):
-        Logger.log(msg, src_depth + 1, LogLevel.Fatal)
+        Logger.log(msg, src_depth + 1, LogLevel.Critical)
 
     def _log(self, msg: Any, level: LogLevel, src_depth: int = 1):
         from ..utils.python import get_caller_info
 
         caller_info = get_caller_info(src_depth + 1)
+        src = f"{caller_info['modulename']}.{caller_info['funcname']}():{caller_info['lineno']}"
+        msg = self._format(msg, src, level)
 
-        if _logger.output() & LogOutput.CarbConsole:
-            self._log_to_carb(str(msg), level, caller_info)
+        if _logger.output() & LogOutput.Console and should_log(level, self._console_log_level):
+            self._log_to_console(msg)
 
-        if _logger.output() & LogOutput.File:
-            src = f"{caller_info['modulename']}.{caller_info['funcname']}():{caller_info['lineno']}"
-            msg = self._format(msg, src, level)
-
+        if _logger.output() & LogOutput.File and should_log(level, self._file_log_level):
             _logger._log_to_file(msg)
 
     def _format(self, msg: Any, src: str, level: LogLevel) -> str:
@@ -201,30 +176,5 @@ class Logger:
         self._log_file.write(msg)
         self._log_file.flush()  # ensure all data is written to the file
 
-    def _log_to_carb(
-        self,
-        msg: str,
-        level: LogLevel,
-        caller_info: CallerInfo,
-    ) -> None:
-        import carb
-
-        carb_log_level: int = carb.logging.LEVEL_INFO
-
-        if level == LogLevel.Debug:
-            carb_log_level = carb.logging.LEVEL_VERBOSE
-        elif level == LogLevel.Warning:
-            carb_log_level = carb.logging.LEVEL_WARN
-        elif level == LogLevel.Error:
-            carb_log_level = carb.logging.LEVEL_ERROR
-        elif level == LogLevel.Fatal:
-            carb_log_level = carb.logging.LEVEL_FATAL
-
-        carb.log(
-            caller_info["modulename"],
-            carb_log_level,
-            caller_info["filename"],
-            caller_info["funcname"],
-            caller_info["lineno"],
-            msg,
-        )
+    def _log_to_console(self, msg: str) -> None: # noqa
+        print(msg)

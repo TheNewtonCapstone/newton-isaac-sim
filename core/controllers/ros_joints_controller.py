@@ -1,3 +1,4 @@
+from genesis.engine.entities import RigidEntity
 from rclpy.qos import QoSProfile
 from torch import Tensor
 
@@ -42,11 +43,8 @@ class ROSVecJointsController(BaseVecJointsController, BaseSimRealNode):
             pub_qos_profile,
         )
 
-    def construct(
-        self,
-        path_expr: str,
-    ) -> None:
-        BaseVecJointsController.construct(self, path_expr)
+    def build(self, robot: RigidEntity) -> None:
+        BaseVecJointsController.build(self, robot)
         BaseSimRealNode.construct(self)
 
     def step(self, joint_actions: Tensor) -> None:

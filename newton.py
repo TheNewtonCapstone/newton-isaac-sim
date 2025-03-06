@@ -48,10 +48,10 @@ def setup_argparser() -> argparse.ArgumentParser:
         default=None,
     )
     parser.add_argument(
-        "--world-config",
+        "--universe-config",
         type=str,
         help="Path to the configuration file for the world.",
-        default="configs/world.yaml",
+        default="configs/universe.yaml",
     )
     parser.add_argument(
         "--randomization-config",
@@ -402,7 +402,7 @@ def setup() -> Optional[Matter]:
 
     robot_config = load_config(cli_args.robot_config)
     logger_config = load_config(cli_args.logger_config)
-    world_config = load_config(cli_args.world_config)
+    universe_config = load_config(cli_args.universe_config)
     randomization_config = load_config(cli_args.randomization_config)
     ros_config = load_config(cli_args.ros_config)
     db_config = load_config(cli_args.db_config)
@@ -626,10 +626,12 @@ def setup() -> Optional[Matter]:
         headless = True
 
     if interactive:
-        world_config["sim_params"]["enable_scene_query_support"] = True
+        universe_config["sim_params"]["enable_scene_query_support"] = True
 
-    control_step_dt = world_config["control_dt"]
-    inverse_control_frequency = int(control_step_dt / world_config["physics_dt"])
+    control_step_dt = universe_config["sim_options"]["control_dt"]
+    inverse_control_frequency = int(
+        control_step_dt / universe_config["sim_options"]["physics_dt"]
+    )
 
     matter = {
         "cli_args": cli_args,
@@ -637,7 +639,7 @@ def setup() -> Optional[Matter]:
         "task_configs": task_configs,
         "current_task_config": current_task_config,
         "current_task_name": current_task_name,
-        "world_config": world_config,
+        "universe_config": universe_config,
         "randomization_config": randomization_config,
         "network_configs": network_configs,
         "current_network_config": current_network_config,
@@ -755,7 +757,7 @@ def main():
     task_configs = base_matter["task_configs"]
     current_task_config = base_matter["current_task_config"]
     current_task_name = base_matter["current_task_name"]
-    world_config = base_matter["world_config"]
+    universe_config = base_matter["universe_config"]
     randomization_config = base_matter["randomization_config"]
     network_configs = base_matter["network_configs"]
     current_network_config = base_matter["current_network_config"]
@@ -795,31 +797,27 @@ def main():
         Logger.info(
             f"Running with {num_envs} environments, {current_task_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
             f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
-            f"Using {current_task_config['device']} as the RL device and {world_config['device']} as the physics device.",
+            f"Using {current_task_config['device']} as the RL device and {universe_config['sim_options']['device']} as the physics device.",
         )
     else:
         Logger.info(
             f"Running with {num_envs} environments, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
             f"{mode_name}.\n"
-            f"Using {world_config['device']} as the physics device.",
+            f"Using {universe_config['sim_options']['device']} as the physics device.",
         )
 
     import torch
 
-    # big_bang must be imported & invoked first, to load all necessary omniverse extensions
-    from core import big_bang
+    from core.universe import Universe
 
-    universe = big_bang(
-        {"headless": headless},
-        world_config,
+    universe = Universe(
+        universe_config=universe_config,
+        headless=headless,
         num_envs=num_envs,
         mode=mode,
         run_name=current_run_name,
         ros_enabled=enable_ros,
     )
-
-    # only now can we import the rest of the modules
-    from core.universe import Universe
 
     # if we're exporting, we don't need to run the simulation
     if exporting:
@@ -839,7 +837,7 @@ def main():
     Archiver.create(universe, db_config, secrets["db"])
 
     from core.envs import NewtonTerrainEnv
-    from core.agents import NewtonVecAgent
+    from core.agents import NewtonBaseAgent
 
     from core.sensors import VecIMU, VecContact
     from core.actuators import BaseActuator, DCActuator
@@ -956,7 +954,7 @@ def main():
             ),
         )
 
-    newton_agent = NewtonVecAgent(
+    newton_agent = NewtonBaseAgent(
         universe=universe,
         num_agents=num_envs,
         imu=imu,
@@ -1217,7 +1215,7 @@ def main():
         record_directory = os.path.join(runs_dir, current_run_name, "records")
         configs_to_record = {
             "task_config": current_task_config,
-            "world_config": world_config,
+            "world_config": universe_config,
             "robot_config": robot_config,
             "network_config": current_network_config,
             "randomization_config": randomization_config,

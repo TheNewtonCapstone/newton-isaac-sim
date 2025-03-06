@@ -8,14 +8,14 @@
       <env name="PYTHONUNBUFFERED" value="1" />
     </envs>
     <option name="SDK_HOME" value="" />
-    <option name="SDK_NAME" value="isaac-sim" />
+    <option name="SDK_NAME" value="Python 3.10 virtualenv at ~/.pyenv/versions/newton-sim" />
     <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
     <option name="IS_MODULE_SDK" value="false" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$ProjectFileDir$/newton.py" />
-    <option name="PARAMETERS" value="--train --animation-name newton_idle --no-checkpoint --network-name descending2" />
+    <option name="PARAMETERS" value="--train --task-name newton_idle --no-checkpoint --network-name autoencoder_medium" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

@@ -1,0 +1,6 @@
+sim_options:
+  physics_dt: 0.005 # 200 Hz
+  control_dt: 0.02 # 50 Hz
+  substeps: 1
+  gravity: -9.81 # magnitude only
+  device: "cuda"

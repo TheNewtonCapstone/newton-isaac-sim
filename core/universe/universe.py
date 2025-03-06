@@ -1,9 +1,7 @@
-from typing import Any, Dict, Tuple, Optional
+from typing import Optional
 
 import genesis as gs
 
-from ..base import BaseObject
-from ..globals import LIGHTS_PATH, PHYSICS_PATH
 from ..logger import Logger
 from ..types import Config, Mode
 
@@ -32,12 +30,14 @@ class Universe:
         self._ros_enabled: bool = ros_enabled
 
         # Device
-        selected_backend = gs.backend.cpu
+        selected_backend = gs.gs_backend.cpu
         if self.device.startswith("cuda") or self.device.startswith("gpu"):
-            selected_backend = gs.backend.gpu
+            selected_backend = gs.gs_backend.gpu
+
+        gs.init(backend=selected_backend)
 
         # Scene
-        self._scene: gs.Scene 
+        self._scene: gs.Scene
 
         self._create_scene()
 
@@ -67,23 +67,50 @@ class Universe:
 
     @property
     def physics_dt(self) -> float:
-        return self._universe_config["sim_options"]["dt"]
+        return self._universe_config["sim_options"]["physics_dt"]
+
+    @property
+    def control_dt(self) -> float:
+        return self._universe_config["sim_options"]["control_dt"]
 
     @property
     def gravity(self) -> float:
         return self._universe_config["sim_options"]["gravity"]
 
+    @property
+    def current_time(self) -> float:
+        return self.current_timestep * self.physics_dt
+
+    @property
+    def current_timestep(self) -> int:
+        return self._scene.t
+
+    @property
+    def scene(self) -> gs.Scene:
+        return self._scene
+
     def step(self, render: bool = False) -> None:
-        pass
+        self._scene.step(render and not self.headless)
 
     def reset(self) -> None:
-        pass
+        Logger.info("Resetting universe")
+
+        self._scene.reset()
+
+    def build(self) -> None:
+        Logger.info(f"Building universe with {self.num_envs} environments")
+
+        self._scene.build(
+            num_envs=self._num_envs,
+            center_envs_at_origin=True,
+            env_spacing=(1.0, 1.0),
+        )
 
     def _create_scene(self) -> None:
         sim_options = gs.options.SimOptions(
-            dt=self._physics_dt,
+            dt=self.physics_dt,
             substeps=self._universe_config["sim_options"]["substeps"],
-            gravity=(0, 0, -self.gravity),
+            gravity=(0, 0, self.gravity),
         )
         viewer_options = gs.options.ViewerOptions()
         vis_options = gs.options.VisOptions()

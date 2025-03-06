@@ -48,39 +48,25 @@ class BaseActuator(BaseObject):
     @property
     def computed_output_efforts(self) -> VecJointsEfforts:
         """Returns computed efforts, after any clamping, saturation, etc. and, most importantly, after the gear ratio."""
-        assert (
-            self.is_fully_constructed
-        ), "Actuator not fully constructed: tried to access computed efforts!"
-
         return self._computed_output_efforts
 
     @property
     def applied_output_efforts(self) -> VecJointsEfforts:
         """Returns applied efforts, after any clamping, saturation, etc. and, most importantly, after the gear ratio."""
-        assert (
-            self.is_fully_constructed
-        ), "Actuator not fully constructed: tried to access applied efforts!"
-
         return self._applied_output_efforts
 
     @abstractmethod
-    def construct(
+    def build(
         self,
         output_vec_velocity_limits: VecJointVelocityLimits,
         output_vec_effort_limits: VecJointEffortLimits,
         vec_gear_ratios: VecJointVelocityLimits,
     ) -> None:
-        super().construct()
-
         # limits of the input, in rad/s and Nm
         self._vec_velocity_limits = output_vec_velocity_limits * vec_gear_ratios
         self._vec_effort_limits = output_vec_effort_limits / vec_gear_ratios
 
         self._vec_gear_ratios = vec_gear_ratios
-
-    @abstractmethod
-    def post_construct(self) -> None:
-        super().post_construct()
 
     @abstractmethod
     def step(
@@ -100,17 +86,9 @@ class BaseActuator(BaseObject):
             VecJointsEfforts: Efforts to apply to the output joints (in Nm).
 
         """
-        assert (
-            self.is_fully_constructed
-        ), "Actuator not fully constructed: tried to step!"
-
         return self._applied_output_efforts
 
     @abstractmethod
     def reset(self) -> None:
-        assert (
-            self.is_fully_constructed
-        ), "Actuator not fully constructed: tried to reset!"
-
         self._computed_output_efforts = torch.zeros_like(self._computed_output_efforts)
         self._applied_output_efforts = torch.zeros_like(self._applied_output_efforts)

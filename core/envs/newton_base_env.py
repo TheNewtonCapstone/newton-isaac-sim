@@ -2,7 +2,6 @@ from abc import abstractmethod
 from typing import Optional
 
 import torch as th
-from pxr import UsdGeom
 
 from ..agents import NewtonBaseAgent
 from ..archiver import Archiver
@@ -33,7 +32,6 @@ class NewtonBaseEnv(BaseEnv):
 
         self.agent: NewtonBaseAgent = agent
         self.domain_randomizer: NewtonBaseDomainRandomizer = domain_randomizer
-        self._bbox_cache: Optional[UsdGeom.BBoxCache] = None
         self._sub_terrain_origins: Optional[th.Tensor] = None
 
         from core.utils.math import IDENTITY_QUAT

@@ -68,6 +68,20 @@ actuators:
 
 # Kinematics
 joints:
+  names:
+   - FL_HAA
+   - FR_HAA
+   - HL_HAA
+   - HR_HAA
+   - FL_HFE
+   - FR_HFE
+   - HL_HFE
+   - HR_HFE
+   - FL_KFE
+   - FR_KFE
+   - HL_KFE
+   - HR_KFE
+
   fixed:
     FL_HAA: False
     FR_HAA: False

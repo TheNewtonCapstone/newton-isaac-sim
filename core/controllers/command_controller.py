@@ -1,34 +1,23 @@
 import random
 from typing import Optional, List, Dict
 
-from carb.input import (
-    Keyboard,
-    Gamepad,
-    acquire_input_interface,
-    GamepadEvent,
-    KeyboardEvent,
-    KeyboardInput,
-    KeyboardEventType,
-    GamepadInput,
-)
+from inputs import GamePad, Keyboard
 
-import omni.appwindow
 from ..base import BaseObject
 from ..logger import Logger
 import core.universe
-from omni.appwindow import IAppWindow
 import torch as th
+
+from ..universe import Universe
 
 
 class CommandController(BaseObject):
-    def __init__(self, universe: core.universe.Universe):
+    def __init__(self, universe: Universe):
         super().__init__(universe)
 
-        self._universe: core.universe.Universe = universe
+        self._universe: Universe = universe
 
-        self._app_window: Optional[IAppWindow] = None
-
-        self._gamepad: Optional[Gamepad] = None
+        self._gamepad: Optional[GamePad] = None
         self._keyboard: Optional[Keyboard] = None
 
         self._keyboard_event_sub: Optional[int] = None
@@ -69,11 +58,7 @@ class CommandController(BaseObject):
 
         return normalized_action
 
-    def construct(self) -> None:
-        super().construct()
-
-        self._app_window = omni.appwindow.get_default_app_window()
-
+    def build(self) -> None:
         # first connected gamepad and keyboard
         self._gamepad = self._app_window.get_gamepad(0)
         self._keyboard = self._app_window.get_keyboard()
@@ -89,11 +74,6 @@ class CommandController(BaseObject):
         )
 
         self._is_constructed = True
-
-    def post_construct(self) -> None:
-        super().post_construct()
-
-        self._is_post_constructed = True
 
     def _keyboard_event_cb(self, event: KeyboardEvent) -> bool:
         if event.type == KeyboardEventType.CHAR:

@@ -2,7 +2,6 @@ from typing import Optional
 
 import torch
 
-from omni.isaac.core.prims import RigidPrimView
 from .base_domain_randomizer import BaseDomainRandomizer
 from ..agents import NewtonBaseAgent
 from ..types import Config, Indices
@@ -26,26 +25,16 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         self._agent: NewtonBaseAgent = agent
 
-        self._rigid_prim_view: Optional[RigidPrimView] = None
-        self.initial_positions: torch.Tensor = torch.zeros((1, 3), device=self._universe.device)
-        self.initial_orientations: torch.Tensor = torch.zeros((1, 4), device=self._universe.device)
-
-    def construct(self) -> None:
-        super().construct()
-
-        self._rigid_prim_view = RigidPrimView(
-            prim_paths_expr=self._agent.base_path_expr,
-            name="newton_dr_art_view",
-            reset_xform_properties=False,
+        self._robot: Optional = None
+        self.initial_positions: torch.Tensor = torch.zeros(
+            (1, 3), device=self._universe.device
         )
-        self._universe.add_prim(self._rigid_prim_view)
+        self.initial_orientations: torch.Tensor = torch.zeros(
+            (1, 4), device=self._universe.device
+        )
 
-        self._is_constructed = True
-
-    def post_construct(self) -> None:
-        super().post_construct()
-
-        self._is_post_constructed = True
+    def build(self, robot) -> None:
+        pass
 
     def on_step(self) -> None:
         super().on_step()
@@ -95,5 +84,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
     def set_initial_orientations(self, orientations: torch.Tensor) -> None:
         self.initial_orientations = orientations.to(self._universe.device)
 
-    def set_initial_position(self, indices: torch.Tensor, positions: torch.Tensor) -> None:
+    def set_initial_position(
+        self, indices: torch.Tensor, positions: torch.Tensor
+    ) -> None:
         self.initial_positions[indices] = positions.to(self._universe.device)

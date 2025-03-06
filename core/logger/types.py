@@ -7,12 +7,11 @@ class LogLevel(IntFlag):
     Info = auto()
     Warning = auto()
     Error = auto()
-    Fatal = auto()
+    Critical = auto()
 
 
 class LogOutput(IntFlag):
     None_ = 0
-    CarbConsole = auto()
     File = auto()
-    FileAndOmni = CarbConsole | File
-    All = CarbConsole | File
+    Console = auto()
+    All = auto()

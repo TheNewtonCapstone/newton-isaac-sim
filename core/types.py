@@ -45,6 +45,7 @@ JointPosition = float
 JointVelocity = float
 JointEffort = float
 JointSaturation = float
+JointNames = List[str]
 
 # RL
 Observations = torch.Tensor
@@ -88,7 +89,7 @@ class Matter(TypedDict):
     task_configs: ConfigCollection
     current_task_config: Config
     current_task_name: Optional[str]
-    world_config: Config
+    universe_config: Config
     randomization_config: Config
     network_configs: ConfigCollection
     current_network_config: Config
