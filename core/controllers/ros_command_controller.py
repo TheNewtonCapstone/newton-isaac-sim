@@ -35,11 +35,11 @@ class ROSCommandController(BaseCommandController, BaseSimRealNode):
             pub_qos_profile,
         )
 
-    def construct(
+    def post_build(
         self,
     ) -> None:
-        BaseCommandController.construct(self)
-        BaseSimRealNode.construct(self)
+        BaseCommandController.post_build(self)
+        BaseSimRealNode.post_build(self)
 
     def step(self) -> None:
         # No step function in BaseCommandController

@@ -33,12 +33,12 @@ class BaseEnv(BaseObject):
         self.domain_randomizer: BaseDomainRandomizer = domain_randomizer
 
     @abstractmethod
-    def construct(self) -> None:
-        super().construct()
+    def pre_build(self) -> None:
+        super().pre_build()
 
     @abstractmethod
-    def post_construct(self) -> None:
-        super().post_construct()
+    def post_build(self) -> None:
+        super().post_build()
 
     @abstractmethod
     def step(
@@ -46,7 +46,7 @@ class BaseEnv(BaseObject):
         actions: Actions,
     ) -> None:
         assert (
-            self._is_post_constructed
+            self.is_built
         ), f"{self.__class__.__name__} not constructed: tried to step!"
 
         self._universe.step()
@@ -54,7 +54,7 @@ class BaseEnv(BaseObject):
     @abstractmethod
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
         assert (
-            self._is_post_constructed
+            self.is_built
         ), f"{self.__class__.__name__} not constructed: tried to reset!"
 
         return {}
@@ -62,7 +62,7 @@ class BaseEnv(BaseObject):
     @abstractmethod
     def get_observations(self) -> EnvObservations:
         assert (
-            self._is_post_constructed
+            self.is_built
         ), f"{self.__class__.__name__} not constructed: tried to get observations!"
 
         return {}

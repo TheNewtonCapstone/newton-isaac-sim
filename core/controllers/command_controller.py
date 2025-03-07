@@ -58,7 +58,7 @@ class CommandController(BaseObject):
 
         return normalized_action
 
-    def build(self) -> None:
+    def post_build(self) -> None:
         # first connected gamepad and keyboard
         self._gamepad = self._app_window.get_gamepad(0)
         self._keyboard = self._app_window.get_keyboard()

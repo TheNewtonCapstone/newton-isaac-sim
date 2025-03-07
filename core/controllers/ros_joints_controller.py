@@ -44,8 +44,8 @@ class ROSVecJointsController(BaseVecJointsController, BaseSimRealNode):
         )
 
     def build(self, robot: RigidEntity) -> None:
-        BaseVecJointsController.build(self, robot)
-        BaseSimRealNode.construct(self)
+        BaseVecJointsController.post_build(self, robot)
+        BaseSimRealNode.post_build(self)
 
     def step(self, joint_actions: Tensor) -> None:
         BaseVecJointsController.step(self, joint_actions)

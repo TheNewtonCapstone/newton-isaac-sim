@@ -43,13 +43,39 @@ class NewtonBaseEnv(BaseEnv):
 
         self._inverse_control_frequency = inverse_control_frequency
 
-    @abstractmethod
-    def construct(self) -> None:
-        super().construct()
+    def pre_build(self) -> None:
+        super().pre_build()
 
-    @abstractmethod
-    def post_construct(self):
-        super().post_construct()
+        self.terrain.register_self()
+        self.agent.register_self()
+
+        self.domain_randomizer.register_self()
+        self.domain_randomizer.set_initial_orientations(self.reset_newton_orientations)
+
+        Logger.info(f"NewtonTerrainEnv constructed with {self.num_envs} environments")
+
+        self._is_constructed = True
+
+    def post_build(self):
+        super().post_build()
+
+        self._sub_terrain_origins = th.from_numpy(self.terrain.sub_terrain_origins).to(
+            self._universe.device,
+            dtype=th.float32,
+        )
+
+        # Convert to the correct device
+        self.reset_newton_positions = self._compute_agent_reset_positions(
+            th.ones((self.num_envs,)) * self.agent.transformed_position[2]
+        )
+
+        self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
+
+        Logger.info(
+            "NewtonTerrainEnv post-constructed and generated starting positions"
+        )
+
+        self._is_post_constructed = True
 
     @abstractmethod
     def step(self, actions: Actions) -> None:

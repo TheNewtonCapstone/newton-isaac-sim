@@ -30,8 +30,8 @@ class NewtonTerrainEnv(NewtonBaseEnv):
             inverse_control_frequency,
         )
 
-    def construct(self) -> None:
-        super().construct()
+    def pre_build(self) -> None:
+        super().pre_build()
 
         self.terrain.register_self()
         self.agent.register_self()
@@ -43,8 +43,8 @@ class NewtonTerrainEnv(NewtonBaseEnv):
 
         self._is_constructed = True
 
-    def post_construct(self):
-        super().post_construct()
+    def post_build(self):
+        super().post_build()
 
         self._sub_terrain_origins = th.from_numpy(self.terrain.sub_terrain_origins).to(
             self._universe.device,

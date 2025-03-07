@@ -97,7 +97,7 @@ class VecJointsController(BaseObject):
 
         self._actuators: List[BaseActuator] = actuators
 
-    def build(self, robot: RigidEntity) -> None:
+    def post_build(self, robot: RigidEntity) -> None:
         # zero out any fixed joints' limits
         fixed_joint_indices = (
             self._vec_fixed_joints.cpu().nonzero(as_tuple=True)[0].flatten()
