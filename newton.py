@@ -836,7 +836,7 @@ def main():
     # creates a singleton instance of the archiver, to be used throughout the program
     Archiver.create(universe, db_config, secrets["db"])
 
-    from core.envs import NewtonTerrainEnv
+    from core.envs import NewtonBaseEnv
     from core.agents import NewtonBaseAgent
 
     from core.sensors import VecIMU, VecContact
@@ -850,6 +850,7 @@ def main():
 
     imu = VecIMU(
         universe=universe,
+        num_envs=num_envs,
         local_position=torch.zeros((num_envs, 3)),
         local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
         noise_function=lambda x: x,
@@ -874,6 +875,8 @@ def main():
 
     joints_controller = VecJointsController(
         universe=universe,
+        num_envs=num_envs,
+        joint_names=robot_config["joints"]["names"],
         joint_position_limits=robot_config["joints"]["limits"]["positions"],
         joint_velocity_limits=robot_config["joints"]["limits"]["velocities"],
         joint_effort_limits=robot_config["joints"]["limits"]["efforts"],
@@ -982,7 +985,7 @@ def main():
     # --------------- #
 
     if animating:
-        env = NewtonTerrainEnv(
+        env = NewtonBaseEnv(
             universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
@@ -992,15 +995,17 @@ def main():
         )
 
         terrain.register_self(
-            TerrainType.Specific,
-            1,  # num_rows
-            1,  # num_cols
-            SubTerrainType.RandomUniform,
+            pre_kwargs={
+                "terrain_type": TerrainType.Specific,
+                "num_rows": 1,  # num_rows
+                "num_cols": 1,  # num_cols
+                "sub_terrain_type": SubTerrainType.RandomUniform,
+            }
         )  # done manually, since we're changing some default construction parameters
         env.register_self()  # done manually, generally the task would do this
         animation_engine.register_self()  # done manually, generally the task would do this
 
-        universe.construct_registrations()
+        universe.build()
 
         env.reset()  # reset the environment to get correctly position the agent
 
@@ -1034,7 +1039,7 @@ def main():
     # ---------------- #
 
     if physics_only:
-        env = NewtonTerrainEnv(
+        env = NewtonBaseEnv(
             universe=universe,
             agent=newton_agent,
             num_envs=num_envs,
@@ -1044,13 +1049,15 @@ def main():
         )
 
         terrain.register_self(
-            TerrainType.Random,
-            1,  # num_rows
-            1,  # num_cols
+            pre_kwargs={
+                "terrain_type": TerrainType.Random,
+                "num_rows": 1,
+                "num_cols": 1,
+            }
         )  # done manually, since we're changing some default construction parameters
         env.register_self()  # done manually, generally the task would do this
 
-        universe.construct_registrations()
+        universe.build()
 
         env.reset()  # reset the environment to get correctly position the agent
 
@@ -1069,7 +1076,7 @@ def main():
         NewtonLocomotionTask,
     )
 
-    training_env = NewtonTerrainEnv(
+    training_env = NewtonBaseEnv(
         universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
@@ -1078,7 +1085,7 @@ def main():
         inverse_control_frequency=inverse_control_frequency,
     )
 
-    playing_env = NewtonTerrainEnv(
+    playing_env = NewtonBaseEnv(
         universe=universe,
         agent=newton_agent,
         num_envs=num_envs,
@@ -1185,7 +1192,7 @@ def main():
             trainer_config=trainer_config,
         )
 
-        universe.construct_registrations()
+        universe.build()
 
         from core.utils.config import record_configs
         from core.utils.rl import save_gymnasium_space

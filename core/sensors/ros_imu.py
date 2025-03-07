@@ -1,3 +1,4 @@
+from genesis.engine.entities import RigidEntity
 from rclpy.qos import QoSProfile
 
 from newton_sim_ros.msg import SimulationImuMsg
@@ -20,6 +21,7 @@ class ROSVecIMU(BaseVecIMU, BaseSimRealNode):
         BaseVecIMU.__init__(
             self,
             vec_imu._universe,
+            vec_imu._num_envs,
             vec_imu.local_position,
             vec_imu.local_orientation,
             vec_imu._noise_function,
@@ -37,12 +39,13 @@ class ROSVecIMU(BaseVecIMU, BaseSimRealNode):
             pub_qos_profile,
         )
 
-    def construct(
-        self,
-        path_expr: str,
-    ) -> None:
-        BaseVecIMU.construct(self, path_expr)
-        BaseSimRealNode.construct(self)
+    def pre_build(self) -> None:
+        BaseVecIMU.pre_build(self)
+        BaseSimRealNode.pre_build(self)
+
+    def post_build(self, robot: RigidEntity) -> None:
+        BaseVecIMU.post_build(self, robot)
+        BaseSimRealNode.post_build(self)
 
     def publish(self) -> None:
         data = BaseVecIMU.get_data(self)

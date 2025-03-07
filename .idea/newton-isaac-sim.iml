@@ -352,7 +352,7 @@
       <sourceFolder url="file://$MODULE_DIR$/ros/newton_ros/install/newton_ros/lib/python3.10/site-packages" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/_isaac_sim/extscache/omni.appwindow-1.1.8+10a4b5c0.lx64.r.cp310" isTestSource="false" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.12 virtualenv at ~/projects/newton-isaac-sim/.venv" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.10 virtualenv at ~/.pyenv/versions/newton-sim" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="workspace" level="project" />
     <orderEntry type="library" name="ROS" level="project" />

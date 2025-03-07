@@ -100,15 +100,15 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
         self.command_scalers: Optional[CommandScalers] = command_scalers
 
-    def construct(self) -> None:
-        super().construct()
+    def pre_build(self) -> None:
+        super().pre_build()
 
-        self._is_constructed = True
+        self._is_pre_built = True
 
-    def post_construct(self):
-        super().post_construct()
+    def post_build(self):
+        super().post_build()
 
-        self._is_post_constructed = True
+        self._is_post_built = True
 
     def step(self, actions) -> StepReturn:
         super().step(actions * self._action_scaler)

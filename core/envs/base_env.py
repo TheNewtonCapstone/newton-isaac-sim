@@ -44,18 +44,15 @@ class BaseEnv(BaseObject):
     def step(
         self,
         actions: Actions,
+        render: bool = True,
     ) -> None:
-        assert (
-            self.is_built
-        ), f"{self.__class__.__name__} not constructed: tried to step!"
+        assert self.is_built, f"{self.__class__.__name__} not built: tried to step!"
 
-        self._universe.step()
+        self._universe.step(render=render)
 
     @abstractmethod
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
-        assert (
-            self.is_built
-        ), f"{self.__class__.__name__} not constructed: tried to reset!"
+        assert self.is_built, f"{self.__class__.__name__} not built: tried to reset!"
 
         return {}
 
@@ -63,6 +60,6 @@ class BaseEnv(BaseObject):
     def get_observations(self) -> EnvObservations:
         assert (
             self.is_built
-        ), f"{self.__class__.__name__} not constructed: tried to get observations!"
+        ), f"{self.__class__.__name__} not built: tried to get observations!"
 
         return {}

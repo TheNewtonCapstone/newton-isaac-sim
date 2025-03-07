@@ -3,6 +3,8 @@ from typing import List, Optional, Tuple
 import numpy as np
 import torch as th
 
+from core.universe import Universe
+
 
 def add_heightmap_to_world(
     heightmap: np.ndarray | th.Tensor,

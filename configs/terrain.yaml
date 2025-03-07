@@ -1,5 +1,3 @@
-mesh_type: 'trimesh' # "none", "plane", "heightfield" or "trimesh"
-
 generation:
   horizontal_resolution: 0.1 # in meters
   vertical_resolution: 0.005 # in meters

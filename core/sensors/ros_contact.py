@@ -1,7 +1,10 @@
+from genesis.engine.entities import RigidEntity
 from newton_ros.msg import ContactsMsg
 from rclpy.qos import QoSProfile
 
 from newton_sim_ros.msg import SimulationContactsMsg
+from sympy.physics.mechanics import RigidBody
+
 from .contact import VecContact as BaseVecContact
 from ..ros import BaseSimRealNode
 
@@ -35,12 +38,13 @@ class ROSVecContact(BaseVecContact, BaseSimRealNode):
             pub_qos_profile,
         )
 
-    def construct(
-        self,
-        path_expr: str,
-    ) -> None:
-        BaseVecContact.construct(self, path_expr)
-        BaseSimRealNode.construct(self)
+    def pre_build(self) -> None:
+        BaseVecContact.pre_build(self)
+        BaseSimRealNode.pre_build(self)
+
+    def post_build(self, robot: RigidEntity) -> None:
+        BaseVecContact.post_build(self, robot)
+        BaseSimRealNode.post_build(self)
 
     def publish(self) -> None:
         data = BaseVecContact.get_data(self)

@@ -64,11 +64,6 @@ class Terrain(BaseObject):
         self._root_path: str = root_path
         self.curriculum: bool = False
 
-        self._mesh_type: str = self._terrain_config["mesh_type"]
-        if self._mesh_type in ["none", "plane"]:
-            Logger.warning("No terrain mesh will be generated.")
-            return
-
         self._sub_terrain_length: float = self._terrain_config["dimensions"][
             "terrain_length"
         ]
@@ -126,14 +121,14 @@ class Terrain(BaseObject):
     def sub_terrain_length(self) -> float:
         return self._sub_terrain_length
 
-    def construct(
+    def pre_build(
         self,
         terrain_type: TerrainType = TerrainType.Curriculum,
         num_rows: Optional[int] = None,
         num_cols: Optional[int] = None,
         sub_terrain_type: Optional[SubTerrainType] = None,
     ) -> None:
-        super().construct()
+        super().pre_build()
 
         if num_rows is not None:
             self._num_rows = num_rows
@@ -145,31 +140,29 @@ class Terrain(BaseObject):
             self.num_sub_terrains = self._num_rows * self._num_cols
 
         if terrain_type == TerrainType.Random:
-            self._construct_randomized()
+            self._build_randomized()
         elif terrain_type == TerrainType.Specific:
             assert sub_terrain_type is not None, "Sub terrain type must be specified."
 
-            self._construct_selected(terrain_type=sub_terrain_type)
+            self._build_selected(terrain_type=sub_terrain_type)
         elif terrain_type == TerrainType.Curriculum:
-            self._construct_curriculum()
+            self._build_curriculum()
             self.curriculum = True
 
-        if self._mesh_type == "trimesh":
-            add_heightmap_to_world(
-                self._height_field,
-                self._horizontal_resolution,
-                self._vertical_resolution,
-                self._root_path,
-                self._slope_threshold,
-                self._terrain_position.tolist(),
+        import genesis as gs
+
+        self._universe.scene.add_entity(
+            gs.morphs.Terrain(
+                height_field=self._height_field,
             )
+        )
 
-        self._is_constructed = True
+        self._is_pre_built = True
 
-    def post_construct(self) -> None:
-        super().post_construct()
+    def post_build(self) -> None:
+        super().post_build()
 
-        self._is_post_constructed = True
+        self._is_post_built = True
 
     def get_terrain_height_at_position(self, position: np.ndarray) -> float:
         x = position[0] - self._terrain_position[0]
@@ -213,7 +206,7 @@ class Terrain(BaseObject):
             dtype=np.int16,
         )
 
-    def _construct_randomized(self):
+    def _build_randomized(self):
         for k in range(self.num_sub_terrains):
             # Env coordinates in the world
             (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))
@@ -224,7 +217,7 @@ class Terrain(BaseObject):
 
             self._add_sub_terrain(terrain, i, j)
 
-    def _construct_curriculum(self):
+    def _build_curriculum(self):
         for j in range(self._num_cols):
             for i in range(self._num_rows):
                 difficulty = i / self._num_rows
@@ -234,7 +227,7 @@ class Terrain(BaseObject):
 
                 self._add_sub_terrain(terrain, i, j)
 
-    def _construct_selected(self, terrain_type: SubTerrainType, **kwargs):
+    def _build_selected(self, terrain_type: SubTerrainType, **kwargs):
         for k in range(self.num_sub_terrains):
             # Env coordinates in the world
             (i, j) = np.unravel_index(k, (self._num_rows, self._num_cols))

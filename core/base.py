@@ -1,3 +1,6 @@
+from typing import Optional
+
+from core.types import Kwargs
 from core.universe import Universe
 
 
@@ -27,10 +30,18 @@ class BaseObject:
         return self._is_pre_built and self._is_post_built
 
     def pre_build(self, **kwargs) -> None:
-        pass
+        assert not self._is_pre_built, f"{self} is already pre-built"
 
     def post_build(self, **kwargs) -> None:
-        pass
+        assert not self._is_post_built, f"{self} is already post-built"
 
-    def register_self(self, pre_kwargs: Dict[str, Any] = None, Dict[str, Any]) -> None:
-        pass
+    def register_self(
+        self,
+        pre_kwargs: Optional[Kwargs] = None,
+        post_kwargs: Optional[Kwargs] = None,
+    ) -> None:
+        self._universe.register(
+            self,
+            pre_kwargs=pre_kwargs,
+            post_kwargs=post_kwargs,
+        )

@@ -2,7 +2,6 @@ from typing import Optional
 
 import torch
 from genesis.engine.entities import RigidEntity
-from taichi.examples.autodiff.regression import update
 from torch import Tensor
 
 from ..base import BaseObject
@@ -76,11 +75,20 @@ class VecIMU(BaseObject):
             device=self._universe.device,
         )
 
-    def build(self, robot: RigidEntity) -> None:
+    def pre_build(self) -> None:
+        super().pre_build()
+
+        self._is_pre_built = True
+
+    def post_build(self, robot: RigidEntity) -> None:
+        super().post_build()
+
         self._robot = robot
 
         # required to fill the tensors with the correct number of IMUs
         self.reset()
+
+        self._is_post_built = True
 
     def reset(self) -> None:
         from core.utils.math import IDENTITY_QUAT

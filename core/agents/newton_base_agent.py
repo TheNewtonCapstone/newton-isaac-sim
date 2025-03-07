@@ -1,7 +1,9 @@
 from abc import abstractmethod
-from typing import List
+from typing import List, Optional
 
 import genesis as gs
+from genesis.engine.entities import RigidEntity
+
 from . import BaseAgent
 from ..archiver import Archiver
 from ..controllers import VecJointsController
@@ -25,11 +27,10 @@ class NewtonBaseAgent(BaseAgent):
             num_agents=num_agents,
         )
 
+        self.robot: Optional[RigidEntity] = None
         self.imu: VecIMU = imu
         self.joints_controller: VecJointsController = joints_controller
         self.contact_sensor: VecContact = contact_sensor
-
-        self._create()
 
     @abstractmethod
     def step(self, actions: Actions) -> None:
@@ -71,14 +72,23 @@ class NewtonBaseAgent(BaseAgent):
 
         return obs
 
-    def _create(self) -> None:
+    def pre_build(self) -> None:
+        super().pre_build()
+
         urdf_path = "assets/newton/newton.urdf"
-        self._robot = self._universe.scene.add_entity(
+        self.robot = self._universe.scene.add_entity(
             gs.morphs.URDF(
                 file=urdf_path,
             )
         )
 
-        self.imu.build(self._robot)
-        self.joints_controller.build(self._robot)
-        self.contact_sensor.build(self._robot)
+        self.imu.register_self(post_kwargs={"robot": self.robot})
+        self.joints_controller.register_self(post_kwargs={"robot": self.robot})
+        self.contact_sensor.register_self(post_kwargs={"robot": self.robot})
+
+        self._is_pre_built = True
+
+    def post_build(self) -> None:
+        super().post_build()
+
+        self._is_post_built = True

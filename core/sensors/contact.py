@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 import torch
+from genesis.engine.entities import RigidEntity
 from torch import Tensor
 
 from ..base import BaseObject
@@ -22,7 +23,7 @@ class VecContact(BaseObject):
 
         self._path_expr: str = ""
         self._paths: List[List[str]] = []
-        self._robot: Optional = None
+        self._robot: Optional[RigidEntity] = None
 
         self._num_contact_sensors_per_agent: int = num_contact_sensors_per_agent
         self._num_contact_sensors: int = 0
@@ -52,8 +53,15 @@ class VecContact(BaseObject):
     def paths(self) -> List[List[str]]:
         return self._paths
 
-    def build(self, robot) -> None:
-        from core.utils.usd import find_matching_prims_count
+    def pre_build(self) -> None:
+        super().pre_build()
+
+        self._is_pre_built = True
+
+    def post_build(self, robot: RigidEntity) -> None:
+        super().post_build()
+
+        self._robot = robot
 
         num_agents = (
             find_matching_prims_count(self._path_expr)
@@ -72,6 +80,8 @@ class VecContact(BaseObject):
 
         # required to fill the tensors with the correct number of sensors
         self.reset()
+
+        self._is_post_built = True
 
     def reset(self) -> None:
         self._contacts: Tensor = torch.zeros(

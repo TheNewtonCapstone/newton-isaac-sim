@@ -85,8 +85,8 @@ class NewtonBaseTask(BaseTask):
         return self._agent  # noqa
 
     @abstractmethod
-    def construct(self) -> None:
-        super().construct()
+    def pre_build(self) -> None:
+        super().pre_build()
 
         self._env.register_self()
 
@@ -96,12 +96,15 @@ class NewtonBaseTask(BaseTask):
         if self.command_controller:
             self.command_controller.register_self()
 
-    def post_construct(self):
-        super().post_construct()
+    def post_build(self):
+        super().post_build()
 
     @abstractmethod
     def step(self, actions: Actions) -> StepReturn:
         self._episode_length_buf += 1
+
+        # updates inputs
+        self.command_controller.step()
 
         return super().step(actions)
 

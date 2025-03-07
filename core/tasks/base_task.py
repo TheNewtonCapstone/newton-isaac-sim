@@ -4,7 +4,6 @@ from typing import Optional, Tuple
 import gymnasium
 import torch
 from gymnasium.core import RenderFrame
-from skrl.envs.wrappers.torch import Wrapper
 
 from ..agents import BaseAgent
 from ..base import BaseObject
@@ -189,16 +188,16 @@ class BaseTask(BaseObject):
         return 1
 
     @abstractmethod
-    def construct(self) -> None:
-        BaseObject.construct(self)
+    def pre_build(self) -> None:
+        super().pre_build()
 
     @abstractmethod
-    def post_construct(self):
-        BaseObject.post_construct(self)
+    def post_build(self):
+        super().post_build()
 
     @abstractmethod
     def step(self, actions: Actions) -> StepReturn:
-        assert self._is_post_constructed, "Task not constructed: tried to step"
+        assert self.is_built, f"{self.__class__.__name__} not built: tried to step"
 
         self._actions_buf = actions.to(self.device)
 
@@ -212,7 +211,7 @@ class BaseTask(BaseObject):
 
     @abstractmethod
     def reset(self) -> ResetReturn:
-        assert self._is_post_constructed, "Task not constructed: tried to reset"
+        assert self.is_built, f"{self.__class__.__name__} not built: tried to reset"
 
         return self._obs_buf, self._extras
 
@@ -222,6 +221,8 @@ class BaseTask(BaseObject):
 
     def state(self) -> Observations:
         pass
+
+    # generally unused by us, necessary for SKRL
 
     def close(self) -> None:
         pass

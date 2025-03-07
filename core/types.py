@@ -1,5 +1,15 @@
 import argparse
-from typing import Dict, Any, Callable, List, Tuple, TypedDict, Optional, Literal
+from typing import (
+    Dict,
+    Any,
+    Callable,
+    List,
+    Tuple,
+    TypedDict,
+    Optional,
+    Literal,
+    Mapping,
+)
 
 import torch
 
@@ -81,6 +91,7 @@ Config = Dict[str, Any]
 ConfigCollection = Dict[str, Config]
 Indices = torch.Tensor
 Mode = Literal["training", "playing", "animating", "physics-only", "exporting"]
+Kwargs = Mapping[str, Any]
 
 
 class Matter(TypedDict):

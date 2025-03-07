@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from ..agents import BaseAgent
 from ..base import BaseObject
@@ -25,22 +24,20 @@ class BaseDomainRandomizer(BaseObject):
 
         self._time: int = 0
 
-    @abstractmethod
-    def construct(self) -> None:
-        super().construct()
+    def pre_build(self) -> None:
+        super().pre_build()
 
-    @abstractmethod
-    def post_construct(self) -> None:
-        super().post_construct()
+        self._is_pre_built = True
+
+    def post_build(self) -> None:
+        super().post_build()
+
+        self._is_post_built = True
 
     @abstractmethod
     def on_step(self) -> None:
-        assert (
-            self._is_post_constructed
-        ), f"{self.__class__.__name__} not constructed: tried to step!"
+        assert self.is_built, f"{self.__class__.__name__} not built: tried to step!"
 
     @abstractmethod
     def on_reset(self, indices: Indices = None) -> None:
-        assert (
-            self._is_post_constructed
-        ), f"{self.__class__.__name__} not constructed: tried to reset!"
+        assert self.is_built, f"{self.__class__.__name__} not built: tried to reset!"

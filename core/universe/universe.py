@@ -1,9 +1,13 @@
-from typing import Optional
+from typing import Optional, Dict, Tuple
+
+import os
+
+os.environ["PYOPENGL_PLATFORM"] = "glx"
 
 import genesis as gs
 
 from ..logger import Logger
-from ..types import Config, Mode
+from ..types import Config, Mode, Kwargs
 
 
 # TODO: Centralize configuration data into the Universe class
@@ -29,7 +33,7 @@ class Universe:
         self._run_name: Optional[str] = run_name
         self._ros_enabled: bool = ros_enabled
 
-        self._registrations: Dict[BaseObject, Tuple[Dict, Dict]] = {}
+        self._registrations: Dict["BaseObject", Tuple[Kwargs, Kwargs]] = {}
 
         # Device
         selected_backend = gs.gs_backend.cpu
@@ -99,7 +103,12 @@ class Universe:
 
         self._scene.reset()
 
-    def register(self, object: "BaseObject", pre_kwargs: Dict[str, Any], post_kwargs: Dict[str, Any]) -> None:
+    def register(
+        self,
+        object: "BaseObject",
+        pre_kwargs: Optional[Kwargs] = None,
+        post_kwargs: Optional[Kwargs] = None,
+    ) -> None:
         self._registrations[object] = (pre_kwargs, post_kwargs)
 
     def build(self) -> None:
@@ -107,11 +116,7 @@ class Universe:
 
         self._pre_build_registrations()
 
-        self._scene.build(
-            num_envs=self._num_envs,
-            center_envs_at_origin=True,
-            env_spacing=(1.0, 1.0),
-        )
+        self._scene.build(n_envs=self._num_envs)
 
         self._post_build_registrations()
 
@@ -133,62 +138,64 @@ class Universe:
         )
 
     def _pre_build_registrations(self) -> None:
-        Logger.info("Constructing registered objects")
+        Logger.info("Pre-building registrations")
 
         # This is generally the first time the universe is being reset, let's construct all registered objects
 
         registrations = self._registrations.copy()
-        restarted_constructions = False
-        completed_constructions = False
-        completed_post_constructions = False
+        restarted_pre_building = False
+        completed_pre_building = False
 
-        while not (completed_constructions and completed_post_constructions):
-            if not completed_constructions:
-                # Construct all registered objects
-                for obj in registrations:
-                    # skip construction if the object is already constructed
-                    if obj.is_constructed:
-                        continue
-
-                    # we assume that no new registrations have been added during the construction process
-                    restarted_constructions = False
-
-                    # get construction arguments
-                    args, _ = self._registrations[obj]
-
-                    obj.construct(*args)
-
-                    # check if any new registrations have been added during the construction process
-                    if len(registrations) != len(self._registrations):
-                        registrations = self._registrations.copy()
-                        restarted_constructions = True
-                        break
-
-                # if we restarted the construction process, we need to start over
-                completed_constructions = not restarted_constructions
-
-            # start the while loop again, there's been a new registration
-            if restarted_constructions:
-                continue
-
-            # make sure that physics is updated before post-construction
-            self.reset()
-
-            # Post-construct all registered objects, no new registrations should be added during this process
+        while not completed_pre_building:
+            # Construct all registered objects
             for obj in registrations:
-                if obj.is_post_constructed:
+                # skip construction if the object is already constructed
+                if obj.is_pre_built:
                     continue
 
+                # we assume that no new registrations have been added during the construction process
+                restarted_pre_building = False
+
                 # get construction arguments
-                _, kwargs = self._registrations[obj]
+                kwargs, _ = self._registrations[obj]
 
-                obj.post_construct(**kwargs)
+                if kwargs:
+                    obj.pre_build(**kwargs)
+                else:
+                    obj.pre_build()
 
-                assert len(registrations) == len(
-                    self._registrations
-                ), "New registrations cannot be added during post-construction!"
+                # check if any new registrations have been added during the construction process
+                if len(registrations) != len(self._registrations):
+                    registrations = self._registrations.copy()
+                    restarted_pre_building = True
+                    break
 
-            completed_post_constructions = True
+            # if we restarted the construction process, we need to start over
+            completed_pre_building = not restarted_pre_building
+
+            # start the while loop again, there's been a new registration
+            if restarted_pre_building:
+                continue
 
     def _post_build_registrations(self) -> None:
-        pass
+        Logger.info("Post-building registrations")
+
+        # Post-build all registered objects, no new registrations should be added during this process
+
+        registrations = self._registrations.copy()
+
+        for obj in registrations:
+            if obj.is_post_built:
+                continue
+
+            # get construction arguments
+            _, kwargs = self._registrations[obj]
+
+            if kwargs:
+                obj.post_build(**kwargs)
+            else:
+                obj.post_build()
+
+            assert len(registrations) == len(
+                self._registrations
+            ), "New registrations cannot be added during post-building!"

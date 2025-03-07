@@ -7,6 +7,7 @@ from ..agents import NewtonBaseAgent
 from ..archiver import Archiver
 from ..domain_randomizer import NewtonBaseDomainRandomizer
 from .base_env import BaseEnv
+from ..logger import Logger
 from ..terrain.terrain import Terrain
 from ..types import EnvObservations, Actions, Indices
 from ..universe import Universe
@@ -52,9 +53,11 @@ class NewtonBaseEnv(BaseEnv):
         self.domain_randomizer.register_self()
         self.domain_randomizer.set_initial_orientations(self.reset_newton_orientations)
 
-        Logger.info(f"NewtonTerrainEnv constructed with {self.num_envs} environments")
+        Logger.info(
+            f"{self.__class__.__name__} pre-built with {self.num_envs} environments"
+        )
 
-        self._is_constructed = True
+        self._is_pre_built = True
 
     def post_build(self):
         super().post_build()
@@ -66,26 +69,26 @@ class NewtonBaseEnv(BaseEnv):
 
         # Convert to the correct device
         self.reset_newton_positions = self._compute_agent_reset_positions(
-            th.ones((self.num_envs,)) * self.agent.transformed_position[2]
+            th.ones((self.num_envs,)) * 0.0
         )
 
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
 
         Logger.info(
-            "NewtonTerrainEnv post-constructed and generated starting positions"
+            f"{self.__class__.__name__} post-built and generated starting positions"
         )
 
-        self._is_post_constructed = True
+        self._is_post_built = True
 
     @abstractmethod
-    def step(self, actions: Actions) -> None:
+    def step(self, actions: Actions, render: bool = True) -> None:
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
-        for _ in range(self._inverse_control_frequency):
+        for i in range(self._inverse_control_frequency):
             self.agent.step(actions)  # agent runs physic-related computations
 
             self.domain_randomizer.on_step()  # DR should always happen before any physics step
 
-            super().step(actions)  # advances the simulation by one step
+            super().step(actions, i == 0)  # advances the simulation by one step
 
     @abstractmethod
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
@@ -101,20 +104,36 @@ class NewtonBaseEnv(BaseEnv):
     def get_observations(self) -> EnvObservations:
         env_obs = self.agent.get_observations()
 
-        gravity_direction, gravity_magnitude = (
-            self._universe.get_physics_context().get_gravity()
-        )
-
         env_obs["world_gravities"] = (
             th.tensor(
-                gravity_direction,
+                [0.0, 0.0, self._universe.gravity],
                 device=self._universe.device,
             )
         ).repeat(self.num_envs, 1)
 
         Archiver.put(
             "env_obs",
-            {"world_gravity": th.tensor(gravity_direction) * gravity_magnitude},
+            {"world_gravity": th.tensor([0.0, 0.0, self._universe.gravity])},
         )
 
         return env_obs
+
+    def _compute_agent_reset_positions(self, agent_heights: th.Tensor) -> th.Tensor:
+        # Flatten terrain origins
+        flat_origins = self._sub_terrain_origins
+
+        # Spawn the agents in the first subterrain if curriculum
+        if self.terrain.curriculum:
+            agent_origins_indices = th.zeros_like(agent_heights, dtype=th.int32)
+        else:
+            # Randomly sample terrain origins for each agent
+            agent_origins_indices = th.randint(
+                0, flat_origins.shape[0], (self.num_envs,)
+            )
+        agent_origins = flat_origins[agent_origins_indices]
+
+        # Add agent heights to account for the varying agent sizes
+        agent_heights = agent_heights.to(device=agent_origins.device)
+        agent_origins[:, 2] += agent_heights
+
+        return agent_origins

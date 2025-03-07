@@ -85,15 +85,15 @@ class NewtonIdleTask(NewtonBaseTask):
             reward_scalers=reward_scalers,
         )
 
-    def construct(self) -> None:
-        super().construct()
+    def pre_build(self) -> None:
+        super().pre_build()
 
-        self._is_constructed = True
+        self._is_pre_built = True
 
-    def post_construct(self):
-        super().post_construct()
+    def post_build(self):
+        super().post_build()
 
-        self._is_post_constructed = True
+        self._is_post_built = True
 
     def step(self, actions: Actions) -> StepReturn:
         super().step(actions)
