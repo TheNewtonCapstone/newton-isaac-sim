@@ -1,6 +1,7 @@
 from typing import Optional
 
 import torch
+from genesis.engine.entities import RigidEntity
 
 from .base_domain_randomizer import BaseDomainRandomizer
 from ..agents import NewtonBaseAgent
@@ -25,7 +26,7 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         self._agent: NewtonBaseAgent = agent
 
-        self._robot: Optional = None
+        self._robot: Optional[RigidEntity] = None
         self.initial_positions: torch.Tensor = torch.zeros(
             (1, 3), device=self._universe.device
         )
@@ -33,8 +34,15 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
             (1, 4), device=self._universe.device
         )
 
-    def build(self, robot) -> None:
-        pass
+    def pre_build(self) -> None:
+        super().pre_build()
+
+        self._is_pre_built = True
+
+    def post_build(self) -> None:
+        super().post_build()
+
+        self._is_post_built = True
 
     def on_step(self) -> None:
         super().on_step()
@@ -49,20 +57,20 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         num_to_reset = indices.shape[0]
 
-        self._rigid_prim_view.set_world_poses(
-            positions=self.initial_positions[indices],
-            orientations=self.initial_orientations[indices],
-            indices=indices,
-            usd=self._universe.use_usd_physics,
+        self._agent.robot.set_pos(
+            pos=self.initial_positions[indices],
+            envs_idx=indices,
+            zero_velocity=True,
+        )
+
+        self._agent.robot.set_quat(
+            quat=self.initial_orientations[indices],
+            envs_idx=indices,
+            zero_velocity=True,
         )
 
         # using set_velocities instead of individual methods (lin & ang),
         # because it's the only method supported in the GPU pipeline (default pipeline)
-        self._rigid_prim_view.set_velocities(
-            torch.zeros((num_to_reset, 6), dtype=torch.float32),
-            indices,
-        )
-
         joint_positions = torch.zeros((num_to_reset, 12), dtype=torch.float32)
         # (
         #    torch.rand((num_to_reset, 12), dtype=torch.float32) * 2.0 - 1.0

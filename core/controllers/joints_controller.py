@@ -57,7 +57,7 @@ class VecJointsController(BaseObject):
 
         self._joint_names: JointNames = joint_names
         self._joints_dof_idx: List[int] = []
-        self._num_joints: int = len(joint_position_limits)
+        self._num_joints: int = len(joint_names)
 
         self._joint_position_limits: ArtJointsPositionLimits = joint_position_limits
         self._vec_joint_position_limits: VecJointPositionLimits = dict_to_vec_limits(
@@ -169,6 +169,13 @@ class VecJointsController(BaseObject):
         else:
             indices = indices.to(device=self._universe.device)
 
+        dof_indices = torch.arange(
+            self._num_joints + 1,  # plus one for the root joint
+            device=self._universe.device,
+        )[
+            1:
+        ]  # skip the root joint
+
         joint_positions = joint_positions.to(device=self._universe.device)
 
         self._target_joint_positions = self._process_joint_actions(
@@ -177,19 +184,22 @@ class VecJointsController(BaseObject):
         )
 
         self._robot.set_dofs_position(
-            self._target_joint_positions,
-            indices,
+            position=self._target_joint_positions,
+            dofs_idx_local=dof_indices,
+            envs_idx=indices,
             zero_velocity=False,
         )
 
         self._robot.set_dofs_velocity(
-            joint_velocities,
-            indices,
+            velocity=joint_velocities,
+            dofs_idx_local=dof_indices,
+            envs_idx=indices,
         )
 
         self._robot.control_dofs_force(
-            joint_efforts,
-            indices,
+            force=joint_efforts,
+            dofs_idx_local=dof_indices,
+            envs_idx=indices,
         )
 
     def normalize_joint_positions(self, joint_positions: Tensor) -> Tensor:
@@ -203,7 +213,7 @@ class VecJointsController(BaseObject):
         from core.utils.math import map_range
 
         joint_positions_normalized = map_range(
-            joint_positions,
+            joint_positions[self._joints_dof_idx],
             self._vec_joint_position_limits[:, 0].to(
                 joint_positions.device,
             ),
@@ -227,7 +237,7 @@ class VecJointsController(BaseObject):
         from core.utils.math import map_range
 
         joint_velocities_normalized = map_range(
-            joint_velocities,
+            joint_velocities[self._joints_dof_idx],
             -self._vec_joint_velocity_limits.to(
                 joint_velocities.device,
             ).squeeze(-1),
@@ -254,7 +264,7 @@ class VecJointsController(BaseObject):
         from core.utils.math import map_range
 
         joint_efforts_normalized = map_range(
-            joint_efforts,
+            joint_efforts[self._joints_dof_idx],
             -self._vec_joint_effort_limits.to(
                 joint_efforts.device,
             ).squeeze(-1),
@@ -293,16 +303,20 @@ class VecJointsController(BaseObject):
         return torch.rad2deg(self._target_joint_positions)
 
     def get_joint_positions_deg(self) -> Tensor:
-        return torch.rad2deg(self._robot.get_dofs_position())
+        return torch.rad2deg(self.get_joint_positions_rad())
 
     def get_joint_velocities_deg(self) -> Tensor:
-        return torch.rad2deg(self._robot.get_dofs_velocity())
+        return torch.rad2deg(self.get_joint_velocities_rad())
 
     def get_joint_positions_rad(self) -> Tensor:
-        return self._robot.get_dofs_position()
+        return self._robot.get_dofs_position(
+            dofs_idx_local=self._joints_dof_idx,
+        )
 
     def get_joint_velocities_rad(self) -> Tensor:
-        return self._robot.get_dofs_velocity()
+        return self._robot.get_dofs_velocity(
+            dofs_idx_local=self._joints_dof_idx,
+        )
 
     def get_applied_joint_efforts(self) -> Tensor:
         applied_joint_efforts: Tensor = torch.zeros_like(self._target_joint_positions)
@@ -330,7 +344,8 @@ class VecJointsController(BaseObject):
         """
         joint_positions = torch.clamp(
             joint_actions.to(
-                vec_joint_position_limits.device, dtype=vec_joint_position_limits.dtype
+                vec_joint_position_limits.device,
+                dtype=vec_joint_position_limits.dtype,
             ),
             min=-1.0,
             max=1.0,

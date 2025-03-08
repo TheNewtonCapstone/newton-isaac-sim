@@ -1,5 +1,7 @@
 from abc import abstractmethod
 
+from genesis.engine.entities import RigidEntity
+
 from ..agents import BaseAgent
 from ..base import BaseObject
 from ..types import Config, Indices

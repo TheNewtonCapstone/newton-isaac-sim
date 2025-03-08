@@ -63,9 +63,9 @@ class NewtonBaseAgent(BaseAgent):
             obs[key] = value
             first_obs[key] = value[agent_count_median, :]
 
-        for key, value in contact_data_tensor.items():
-            obs[key] = value
-            first_obs[key] = value[agent_count_median, :]
+        # for key, value in contact_data_tensor.items():
+        #    obs[key] = value
+        #    first_obs[key] = value[agent_count_median, :]
 
         # we put only the first agent's observations
         Archiver.put("agent_obs", first_obs)
@@ -84,7 +84,7 @@ class NewtonBaseAgent(BaseAgent):
 
         self.imu.register_self(post_kwargs={"robot": self.robot})
         self.joints_controller.register_self(post_kwargs={"robot": self.robot})
-        self.contact_sensor.register_self(post_kwargs={"robot": self.robot})
+        # self.contact_sensor.register_self(post_kwargs={"robot": self.robot})
 
         self._is_pre_built = True
 

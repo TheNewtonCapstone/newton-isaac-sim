@@ -8,6 +8,7 @@ from ..base import BaseObject
 from ..logger import Logger
 from ..types import IMUData, NoiseFunction
 from ..universe import Universe
+from ..utils.math import quat_mult_t, quat_to_euler_t, quat_rotate_inverse_t
 
 
 class VecIMU(BaseObject):
@@ -165,16 +166,10 @@ class VecIMU(BaseObject):
         linear_velocities = self._robot.get_vel()
         angular_velocities = self._robot.get_ang()
 
-        positions += quat_rotate(orientations, self.local_position)
-        orientations = quat_mul(orientations, self.local_orientation)
+        from core.utils.math import quat_rotate_t
 
-        # if an offset is present of the COM does not agree with the local origin, the linear velocity has to be
-        # transformed taking the angular velocity into account
-        linear_velocities += torch.cross(
-            angular_velocities,
-            quat_rotate(orientations, self.local_position - com_positions),
-            dim=-1,
-        )
+        positions += quat_rotate_t(orientations, self.local_position)
+        orientations = quat_mult_t(orientations, self.local_orientation)
 
         if update_dt == 0:
             return
@@ -187,31 +182,32 @@ class VecIMU(BaseObject):
             angular_velocities - self._last_angular_velocities
         ) / update_dt
 
-        gravity = self._universe.physics_sim_view.get_gravity()
         projected_gravities = torch.tensor(
-            gravity,
+            [0.0, 0.0, self._universe.gravity],
             device=self._universe.device,
         ).repeat(self._num_envs, 1)
 
         # store pose
         self._positions = positions
 
-        rolls, pitches, yaws = get_euler_xyz(orientations, True)
+        rolls, pitches, yaws = quat_to_euler_t(orientations)
         rolls = torch.rad2deg(rolls)
         pitches = torch.rad2deg(pitches)
         yaws = torch.rad2deg(yaws)
         self._rotations = torch.stack([rolls, pitches, yaws], dim=-1)
 
         # store velocities
-        self._linear_velocities = quat_rotate_inverse(orientations, linear_velocities)
-        self._angular_velocities = quat_rotate_inverse(orientations, angular_velocities)
+        self._linear_velocities = quat_rotate_inverse_t(orientations, linear_velocities)
+        self._angular_velocities = quat_rotate_inverse_t(
+            orientations, angular_velocities
+        )
 
         # store accelerations
-        self._linear_accelerations = quat_rotate_inverse(
+        self._linear_accelerations = quat_rotate_inverse_t(
             orientations,
             linear_accelerations,
         )
-        self._angular_accelerations = quat_rotate_inverse(
+        self._angular_accelerations = quat_rotate_inverse_t(
             orientations,
             angular_accelerations,
         )
@@ -219,9 +215,11 @@ class VecIMU(BaseObject):
         self._last_linear_velocities = linear_velocities.clone()
         self._last_angular_velocities = angular_velocities.clone()
 
-        self._projected_gravities = quat_rotate_inverse(
+        self._projected_gravities = quat_rotate_inverse_t(
             orientations, projected_gravities
         )
         self._projected_gravities /= torch.norm(
-            self._projected_gravities, dim=-1, keepdim=True
+            self._projected_gravities,
+            dim=-1,
+            keepdim=True,
         )
