@@ -52,7 +52,7 @@ class ROSCommandController(BaseCommandController, BaseSimRealNode):
         msg = SimulationCommandMsg()
 
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = f"command_frame_{self._universe.current_time_step_index}"
+        msg.header.frame_id = f"command_frame_{self._universe.current_timestep}"
 
         msg.target_velocity.x = last_action[0].item()
         msg.target_velocity.y = last_action[1].item()

@@ -29,6 +29,14 @@ class BaseObject:
     def is_built(self) -> bool:
         return self._is_pre_built and self._is_post_built
 
+    @property
+    def device(self) -> str:
+        return self._universe.device
+
+    @property
+    def num_envs(self) -> int:
+        return self._universe.num_envs
+
     def pre_build(self, **kwargs) -> None:
         assert not self._is_pre_built, f"{self} is already pre-built"
 

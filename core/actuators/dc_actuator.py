@@ -33,28 +33,28 @@ class DCActuator(BaseActuator):
         self._k_p: float = k_p
         self._k_d: float = k_d
 
-    def construct(
+    def pre_build(
         self,
         output_vec_velocity_limits: VecJointVelocityLimits,
         output_vec_effort_limits: VecJointEffortLimits,
         vec_gear_ratios: VecJointGearRatios,
     ) -> None:
-        super().construct(
+        super().pre_build(
             output_vec_velocity_limits,
             output_vec_effort_limits,
             vec_gear_ratios,
         )
 
-        Logger.info("DCActuator constructed.")
+        Logger.info("DCActuator pre-built.")
 
-        self._is_constructed = True
+        self._is_pre_built = True
 
-    def post_construct(self) -> None:
-        super().post_construct()
+    def post_build(self) -> None:
+        super().post_build()
 
-        Logger.info("DCActuator post-constructed.")
+        Logger.info("DCActuator post-build.")
 
-        self._is_post_constructed = True
+        self._is_post_built = True
 
     def step(
         self,

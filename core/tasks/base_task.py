@@ -34,8 +34,6 @@ class BaseTask(BaseObject):
         name: str,
         env: BaseEnv,
         agent: BaseAgent,
-        num_envs: int,
-        device: str,
         playing: bool,
         reset_in_play: bool,
         max_episode_length: int,
@@ -47,18 +45,11 @@ class BaseTask(BaseObject):
         action_scaler: Optional[ActionScaler] = None,
         reward_scalers: Optional[RewardScalers] = None,
     ):
-        BaseObject.__init__(
-            self,
-            universe=universe,
-        )
-
-        # We type hint universe again here to avoid circular imports
-        self._universe: Universe = universe
+        super().__init__(universe=universe)
 
         self.register_self()
 
         self._name: str = name
-        self._device: str = device
         self._playing: bool = playing
         self._reset_in_play: bool = reset_in_play
 
@@ -74,7 +65,6 @@ class BaseTask(BaseObject):
         self._action_scaler: Optional[ActionScaler] = action_scaler
         self._reward_scalers: Optional[RewardScalers] = reward_scalers
 
-        self._num_envs: int = num_envs
         self._max_episode_length: int = max_episode_length
 
         self._num_obs: int = self.observation_space.shape[0]
@@ -174,14 +164,6 @@ class BaseTask(BaseObject):
     @property
     def state_space(self) -> gymnasium.Space | None:
         return self._state_space
-
-    @property
-    def device(self) -> str:
-        return self._device
-
-    @property
-    def num_envs(self) -> int:
-        return self._num_envs
 
     @property
     def num_agents(self) -> int:

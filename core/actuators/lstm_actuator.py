@@ -43,37 +43,37 @@ class LSTMActuator(BaseActuator):
         self._model: LSTMActuatorModel = LSTMActuatorModel(
             hidden_size=model_params["hidden_size"],
             num_layers=model_params["num_layers"],
-        ).to(self._universe.device)
+        ).to(self.device)
 
-    def construct(
+    def pre_build(
         self,
         output_vec_velocity_limits: VecJointVelocityLimits,
         output_vec_effort_limits: VecJointEffortLimits,
         vec_gear_ratios: VecJointGearRatios,
     ) -> None:
-        super().construct(
+        super().pre_build(
             output_vec_velocity_limits,
             output_vec_effort_limits,
             vec_gear_ratios,
         )
 
         self._model.load_state_dict(
-            torch.load(self._model_path, map_location=self._universe.device)
+            torch.load(self._model_path, map_location=self.device)
         )
         self._model.eval()
 
         Logger.info(
-            f"LSTMActuator constructed with model from {self._model_path} running on {self._universe.device}."
+            f"LSTMActuator pre-built with model from {self._model_path} running on {self.device}."
         )
 
-        self._is_constructed = True
+        self._is_pre_built = True
 
-    def post_construct(self) -> None:
-        super().post_construct()
+    def post_build(self) -> None:
+        super().post_build()
 
-        Logger.info("LSTMActuator post-constructed.")
+        Logger.info("LSTMActuator post-built.")
 
-        self._is_post_constructed = True
+        self._is_post_built = True
 
     def step(
         self,

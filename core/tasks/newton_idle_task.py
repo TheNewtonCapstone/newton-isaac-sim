@@ -27,8 +27,6 @@ class NewtonIdleTask(NewtonBaseTask):
         env: NewtonBaseEnv,
         agent: NewtonBaseAgent,
         animation_engine: AnimationEngine,
-        num_envs: int,
-        device: str,
         playing: bool,
         reset_in_play: bool,
         max_episode_length: int,
@@ -72,8 +70,6 @@ class NewtonIdleTask(NewtonBaseTask):
             agent,
             animation_engine,
             None,
-            num_envs,
-            device,
             playing,
             reset_in_play,
             max_episode_length,
@@ -145,10 +141,10 @@ class NewtonIdleTask(NewtonBaseTask):
         self._obs_buf[:, 3:6] = env_obs["linear_velocities"]
         self._obs_buf[:, 6:9] = env_obs["angular_velocities"]
         self._obs_buf[:, 9:21] = (
-            self.agent.joints_controller.get_normalized_joint_positions()
+            self.agent.joints_controller.normalized_joint_positions()
         )
         self._obs_buf[:, 21:33] = (
-            self.agent.joints_controller.get_normalized_joint_velocities()
+            self.agent.joints_controller.normalized_joint_velocities()
         )
 
         # 1st & 2nd set of past actions, we don't care about just-applied actions
@@ -214,14 +210,14 @@ class NewtonIdleTask(NewtonBaseTask):
         base_angular_velocity_z = angular_velocities[:, 2]
 
         joint_positions = (
-            self.agent.joints_controller.get_normalized_joint_positions()
+            self.agent.joints_controller.normalized_joint_positions()
         )  # [-1, 1] unitless
         joint_velocities = (
-            self.agent.joints_controller.get_normalized_joint_velocities()
+            self.agent.joints_controller.normalized_joint_velocities()
         )  # [-1, 1] unitless
         # joint_accelerations
         joint_efforts = (
-            self.agent.joints_controller.get_normalized_joint_efforts()
+            self.agent.joints_controller.normalized_joint_efforts()
         )  # [-1, 1] unitless
 
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(

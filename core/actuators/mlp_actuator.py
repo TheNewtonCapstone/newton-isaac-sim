@@ -60,21 +60,21 @@ class MLPActuator(BaseActuator):
         self._model: MLPActuatorModel = MLPActuatorModel(
             hidden_size=32,
             num_layers=3,
-        ).to(self._universe.device)
+        ).to(self.device)
 
         self._position_errors = torch.zeros(
             (3, self._universe.num_envs),
-            device=self._universe.device,
+            device=self.device,
         )
         self._velocities = torch.zeros_like(self._position_errors)
 
-    def construct(
+    def pre_build(
         self,
         output_vec_velocity_limits: VecJointVelocityLimits,
         output_vec_effort_limits: VecJointEffortLimits,
         vec_gear_ratios: VecJointGearRatios,
     ) -> None:
-        super().construct(
+        super().pre_build(
             output_vec_velocity_limits,
             output_vec_effort_limits,
             vec_gear_ratios,
@@ -89,14 +89,14 @@ class MLPActuator(BaseActuator):
             f"MLPActuator constructed with model from {self._model_path}, running on {self._universe.device}."
         )
 
-        self._is_constructed = True
+        self._is_pre_built = True
 
-    def post_construct(self) -> None:
-        super().post_construct()
+    def post_build(self) -> None:
+        super().post_build()
 
         Logger.info("MLPActuator post-constructed.")
 
-        self._is_post_constructed = True
+        self._is_post_built = True
 
     def step(
         self,

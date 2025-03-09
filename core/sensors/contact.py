@@ -32,10 +32,14 @@ class VecContact(BaseObject):
 
         self._contacts: Tensor = torch.zeros(
             (self._num_contact_sensors, self._num_contact_sensors_per_agent),
-            device=self._universe.device,
             dtype=torch.bool,
+            device=self.device,
         )
-        self._forces: Tensor = torch.zeros_like(self._contacts, dtype=torch.float)
+        self._forces: Tensor = torch.zeros_like(
+            self._contacts,
+            dtype=torch.float,
+            device=self.device,
+        )
 
     @property
     def num_contact_sensors(self) -> int:
@@ -86,7 +90,7 @@ class VecContact(BaseObject):
     def reset(self) -> None:
         self._contacts: Tensor = torch.zeros(
             (self._num_contact_sensors, self._num_contact_sensors_per_agent),
-            device=self._universe.device,
+            device=self.device,
             dtype=torch.bool,
         )
 
@@ -111,6 +115,8 @@ class VecContact(BaseObject):
 
         if physics_dt == 0.0:
             return
+
+        return
 
         net_forces = self._rigid_prim_view.get_net_contact_forces(dt=physics_dt)
         net_forces = net_forces.view(-1, self._num_contact_sensors_per_agent, 3)

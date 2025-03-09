@@ -23,6 +23,7 @@ class ROSVecJointsController(BaseVecJointsController, BaseSimRealNode):
             self,
             vec_joints_controller._universe,
             vec_joints_controller._noise_function,
+            vec_joints_controller._joint_names,
             vec_joints_controller._joint_position_limits,
             vec_joints_controller._joint_velocity_limits,
             vec_joints_controller._joint_effort_limits,
@@ -43,7 +44,7 @@ class ROSVecJointsController(BaseVecJointsController, BaseSimRealNode):
             pub_qos_profile,
         )
 
-    def build(self, robot: RigidEntity) -> None:
+    def post_build(self, robot: RigidEntity) -> None:
         BaseVecJointsController.post_build(self, robot)
         BaseSimRealNode.post_build(self)
 
@@ -52,15 +53,15 @@ class ROSVecJointsController(BaseVecJointsController, BaseSimRealNode):
         BaseSimRealNode.step(self)
 
     def publish(self) -> None:
-        target_positions = BaseVecJointsController.get_target_joint_positions_deg(self)
-        positions = BaseVecJointsController.get_joint_positions_deg(self)
-        velocities = BaseVecJointsController.get_joint_velocities_deg(self)
-        applied_torques = BaseVecJointsController.get_applied_joint_efforts(self)
+        target_positions = super().target_joint_positions_deg
+        positions = super().joint_positions_deg
+        velocities = super().joint_velocities_deg
+        applied_torques = super().applied_joint_efforts
 
         msg = SimulationJointsMsg()
 
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = f"joints_frame_{self._universe.current_time_step_index}"
+        msg.header.frame_id = f"joints_frame_{self._universe.current_timestep}"
 
         msg.target_positions = target_positions[0].tolist()
         msg.positions = positions[0].tolist()

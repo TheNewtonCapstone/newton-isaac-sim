@@ -46,6 +46,7 @@ class CommandController(BaseObject):
         return normalized_action
 
     def step(self):
+        return
         events = get_gamepad()
 
         for event in events:

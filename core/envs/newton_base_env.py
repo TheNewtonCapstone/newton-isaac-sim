@@ -18,7 +18,6 @@ class NewtonBaseEnv(BaseEnv):
         self,
         universe: Universe,
         agent: NewtonBaseAgent,
-        num_envs: int,
         terrain: Terrain,
         domain_randomizer: NewtonBaseDomainRandomizer,
         inverse_control_frequency: int,
@@ -26,7 +25,6 @@ class NewtonBaseEnv(BaseEnv):
         super().__init__(
             universe,
             agent,
-            num_envs,
             terrain,
             domain_randomizer,
         )
@@ -69,7 +67,7 @@ class NewtonBaseEnv(BaseEnv):
 
         # Convert to the correct device
         self.reset_newton_positions = self._compute_agent_reset_positions(
-            th.ones((self.num_envs,)) * 0.0
+            th.ones((self.num_envs,)) * 0.4
         )
 
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
@@ -80,17 +78,14 @@ class NewtonBaseEnv(BaseEnv):
 
         self._is_post_built = True
 
-    @abstractmethod
-    def step(self, actions: Actions, render: bool = True) -> None:
+    def step(self, actions: Actions) -> None:
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
         for i in range(self._inverse_control_frequency):
+            self.domain_randomizer.on_step()  # DR should always happen before any physics step
             self.agent.step(actions)  # agent runs physic-related computations
 
-            self.domain_randomizer.on_step()  # DR should always happen before any physics step
+            super().step(actions)  # advances the simulation by one step
 
-            super().step(actions, i == 0)  # advances the simulation by one step
-
-    @abstractmethod
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
         self.domain_randomizer.on_reset(
             indices
@@ -100,7 +95,6 @@ class NewtonBaseEnv(BaseEnv):
 
         return self.get_observations()
 
-    @abstractmethod
     def get_observations(self) -> EnvObservations:
         env_obs = self.agent.get_observations()
 
@@ -109,7 +103,7 @@ class NewtonBaseEnv(BaseEnv):
                 [0.0, 0.0, self._universe.gravity],
                 device=self._universe.device,
             )
-        ).repeat(self.num_envs, 1)
+        ).repeat(self.num_envs, 1) / abs(self._universe.gravity)
 
         Archiver.put(
             "env_obs",
@@ -128,7 +122,9 @@ class NewtonBaseEnv(BaseEnv):
         else:
             # Randomly sample terrain origins for each agent
             agent_origins_indices = th.randint(
-                0, flat_origins.shape[0], (self.num_envs,)
+                0,
+                flat_origins.shape[0],
+                (self.num_envs,),
             )
         agent_origins = flat_origins[agent_origins_indices]
 

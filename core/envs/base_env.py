@@ -14,7 +14,6 @@ class BaseEnv(BaseObject):
         self,
         universe: Universe,
         agent: BaseAgent,
-        num_envs: int,
         terrain: Terrain,
         domain_randomizer: BaseDomainRandomizer,
     ) -> None:
@@ -26,10 +25,7 @@ class BaseEnv(BaseObject):
         self._universe: Universe = universe
 
         self.agent: BaseAgent = agent
-        self.num_envs: int = num_envs
-
         self.terrain: Terrain = terrain
-
         self.domain_randomizer: BaseDomainRandomizer = domain_randomizer
 
     @abstractmethod
@@ -41,14 +37,10 @@ class BaseEnv(BaseObject):
         super().post_build()
 
     @abstractmethod
-    def step(
-        self,
-        actions: Actions,
-        render: bool = True,
-    ) -> None:
+    def step(self, actions: Actions) -> None:
         assert self.is_built, f"{self.__class__.__name__} not built: tried to step!"
 
-        self._universe.step(render=render)
+        self._universe.step()
 
     @abstractmethod
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:

@@ -46,8 +46,8 @@ class BaseSimRealNode(BaseNode):
         self._pub_sim_topic: str = pub_sim_topic
 
     @abstractmethod
-    def construct(self) -> None:
-        super().construct()
+    def post_build(self) -> None:
+        super().post_build()
 
     @abstractmethod
     def publish(self) -> None:

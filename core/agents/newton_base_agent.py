@@ -17,15 +17,11 @@ class NewtonBaseAgent(BaseAgent):
     def __init__(
         self,
         universe: Universe,
-        num_agents: int,
         imu: VecIMU,
         joints_controller: VecJointsController,
         contact_sensor: VecContact,
     ) -> None:
-        super().__init__(
-            universe=universe,
-            num_agents=num_agents,
-        )
+        super().__init__(universe=universe)
 
         self.robot: Optional[RigidEntity] = None
         self.imu: VecIMU = imu
@@ -57,7 +53,7 @@ class NewtonBaseAgent(BaseAgent):
         obs = {}
         first_obs = {}
 
-        agent_count_median = self.num_agents // 2
+        agent_count_median = self.num_envs // 2
 
         for key, value in imu_data_tensor.items():
             obs[key] = value
@@ -76,11 +72,7 @@ class NewtonBaseAgent(BaseAgent):
         super().pre_build()
 
         urdf_path = "assets/newton/newton.urdf"
-        self.robot = self._universe.scene.add_entity(
-            gs.morphs.URDF(
-                file=urdf_path,
-            )
-        )
+        self.robot = self._universe.scene.add_entity(gs.morphs.URDF(file=urdf_path))
 
         self.imu.register_self(post_kwargs={"robot": self.robot})
         self.joints_controller.register_self(post_kwargs={"robot": self.robot})

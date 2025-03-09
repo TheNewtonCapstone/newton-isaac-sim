@@ -15,7 +15,6 @@ class VecIMU(BaseObject):
     def __init__(
         self,
         universe: Universe,
-        num_envs: int,
         local_position: Tensor,
         local_orientation: Tensor,
         noise_function: NoiseFunction,
@@ -25,9 +24,8 @@ class VecIMU(BaseObject):
         # We type hint universe again here to avoid circular imports
         self._universe: Universe = universe
 
-        self.local_position: Tensor = local_position.to(self._universe.device)
-        self.local_orientation: Tensor = local_orientation.to(self._universe.device)
-        self._num_envs: int = num_envs
+        self.local_position: Tensor = local_position.to(self.device)
+        self.local_orientation: Tensor = local_orientation.to(self.device)
 
         self._robot: Optional[RigidEntity] = None
         self._last_update_time: float = 0.0
@@ -37,43 +35,41 @@ class VecIMU(BaseObject):
         from core.utils.math import IDENTITY_QUAT
 
         self._positions: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
-        self._rotations: Tensor = IDENTITY_QUAT.repeat(self._num_envs, 1).to(
-            self._universe.device
-        )
+        self._rotations: Tensor = IDENTITY_QUAT.repeat(self.num_envs, 1).to(self.device)
 
         self._linear_accelerations: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
         self._linear_velocities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
 
         self._angular_accelerations: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
         self._angular_velocities = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
 
         self._last_linear_velocities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
         self._last_angular_velocities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
 
         self._projected_gravities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
 
     def pre_build(self) -> None:
@@ -94,43 +90,39 @@ class VecIMU(BaseObject):
     def reset(self) -> None:
         from core.utils.math import IDENTITY_QUAT
 
-        self._positions: Tensor = torch.zeros(
-            (self._num_envs, 3), device=self._universe.device
-        )
-        self._rotations: Tensor = IDENTITY_QUAT.repeat(self._num_envs, 1).to(
-            self._universe.device
-        )
+        self._positions: Tensor = torch.zeros((self.num_envs, 3), device=self.device)
+        self._rotations: Tensor = IDENTITY_QUAT.repeat(self.num_envs, 1).to(self.device)
 
         self._linear_accelerations: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
         self._linear_velocities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
 
         self._angular_accelerations: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
         self._angular_velocities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
 
         self._last_linear_velocities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
         self._last_angular_velocities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
 
         self._projected_gravities: Tensor = torch.zeros(
-            (self._num_envs, 3),
-            device=self._universe.device,
+            (self.num_envs, 3),
+            device=self.device,
         )
 
     def get_data(self) -> IMUData:
@@ -184,17 +176,12 @@ class VecIMU(BaseObject):
 
         projected_gravities = torch.tensor(
             [0.0, 0.0, self._universe.gravity],
-            device=self._universe.device,
-        ).repeat(self._num_envs, 1)
+            device=self.device,
+        ).repeat(self.num_envs, 1)
 
         # store pose
         self._positions = positions
-
-        rolls, pitches, yaws = quat_to_euler_t(orientations)
-        rolls = torch.rad2deg(rolls)
-        pitches = torch.rad2deg(pitches)
-        yaws = torch.rad2deg(yaws)
-        self._rotations = torch.stack([rolls, pitches, yaws], dim=-1)
+        self._rotations = quat_to_euler_t(orientations)
 
         # store velocities
         self._linear_velocities = quat_rotate_inverse_t(orientations, linear_velocities)

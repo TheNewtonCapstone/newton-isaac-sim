@@ -54,13 +54,11 @@ class Terrain(BaseObject):
         self,
         universe: Universe,
         terrain_config: Config,
-        num_robots: int,
         root_path: str = "/Terrains",
     ):
         super().__init__(universe=universe)
 
         self._terrain_config: Config = terrain_config
-        self._num_robots: int = num_robots
         self._root_path: str = root_path
         self.curriculum: bool = False
 
@@ -153,6 +151,8 @@ class Terrain(BaseObject):
 
         self._universe.scene.add_entity(
             gs.morphs.Terrain(
+                horizontal_scale=self._horizontal_resolution,
+                vertical_scale=self._vertical_resolution,
                 height_field=self._height_field,
             )
         )
@@ -174,19 +174,7 @@ class Terrain(BaseObject):
         i = int(x // self._horizontal_resolution)
         j = int(y // self._horizontal_resolution)
 
-        return self._height_field[i, j] * self._vertical_resolution
-
-    def get_terrain_heights_at_positions(
-        self,
-        position: np.ndarray,
-    ) -> np.ndarray[float]:
-        x = position[:, 0] - self._terrain_position[0]
-        y = position[:, 1] - self._terrain_position[1]
-
-        i = (x // self._horizontal_resolution).astype(int)
-        j = (y // self._horizontal_resolution).astype(int)
-
-        return self._height_field[i, j] * self._vertical_resolution
+        return self._height_field[i, j].item() * self._vertical_resolution
 
     def _update_rows_cols_dependents(self) -> None:
         self.num_sub_terrains = self._num_rows * self._num_cols

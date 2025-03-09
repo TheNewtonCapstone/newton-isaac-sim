@@ -21,7 +21,6 @@ class ROSVecIMU(BaseVecIMU, BaseSimRealNode):
         BaseVecIMU.__init__(
             self,
             vec_imu._universe,
-            vec_imu._num_envs,
             vec_imu.local_position,
             vec_imu.local_orientation,
             vec_imu._noise_function,

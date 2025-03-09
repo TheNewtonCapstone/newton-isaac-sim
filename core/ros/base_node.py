@@ -51,7 +51,7 @@ class BaseNode(Node):
         return self._time
 
     @abstractmethod
-    def construct(self) -> None:
+    def post_build(self) -> None:
         assert (
             not self._is_node_constructed
         ), f"BaseNode (from {self.__class__.__name__}) is already constructed: tried to construct!"

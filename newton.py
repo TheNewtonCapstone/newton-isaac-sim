@@ -2,6 +2,8 @@ import argparse
 import os
 from typing import List, Optional, Tuple, get_args
 
+import torch
+
 from core.logger import Logger
 from core.types import Matter, Config, ConfigCollection, Mode
 
@@ -618,7 +620,7 @@ def setup() -> Optional[Matter]:
     enable_db = db_config["enabled"]
 
     # override some config with CLI num_envs, if specified (or when not training/playing, we default to 1)
-    num_envs = current_task_config["n_envs"] if is_rl else 1
+    num_envs = current_task_config["num_envs"] if is_rl else 1
     if cli_args.num_envs != -1:
         num_envs = cli_args.num_envs
 
@@ -670,6 +672,7 @@ def setup() -> Optional[Matter]:
         "enable_ros": enable_ros,
         "enable_db": enable_db,
         "num_envs": num_envs,
+        "device": torch.device(universe_config["sim_options"]["device"]),
         "control_step_dt": control_step_dt,
         "inverse_control_frequency": inverse_control_frequency,
     }
@@ -787,6 +790,7 @@ def main():
     enable_ros = base_matter["enable_ros"]
     enable_db = base_matter["enable_db"]
     num_envs = base_matter["num_envs"]
+    device = base_matter["device"]
     control_step_dt = base_matter["control_step_dt"]
     inverse_control_frequency = base_matter["inverse_control_frequency"]
 
@@ -795,15 +799,15 @@ def main():
 
     if is_rl:
         Logger.info(
-            f"Running with {num_envs} environments, {current_task_config['ppo']['n_steps']} steps per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
+            f"Running with {num_envs} environments, {current_task_config['ppo']['rollouts']} rollouts per environment, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
             f"{mode_name}{(' (with checkpoint ' + current_checkpoint_path + ')') if current_checkpoint_path is not None else ''}.\n"
-            f"Using {current_task_config['device']} as the RL device and {universe_config['sim_options']['device']} as the physics device.",
+            f"Using {device} as the RL & physics device.",
         )
     else:
         Logger.info(
             f"Running with {num_envs} environments, ROS {'enabled' if enable_ros else 'disabled'} and {'headless' if headless else 'GUI'} mode.\n"
             f"{mode_name}.\n"
-            f"Using {universe_config['sim_options']['device']} as the physics device.",
+            f"Using {device} as the physics device.",
         )
 
     import torch
@@ -850,7 +854,6 @@ def main():
 
     imu = VecIMU(
         universe=universe,
-        num_envs=num_envs,
         local_position=torch.zeros((num_envs, 3)),
         local_orientation=IDENTITY_QUAT.repeat(num_envs, 1),
         noise_function=lambda x: x,
@@ -866,8 +869,8 @@ def main():
     for i in range(12):
         actuator = DCActuator(
             universe=universe,
-            k_p=1.0,
-            k_d=0.001,
+            k_p=10.0,
+            k_d=0.0,
             effort_saturation=120.0,
         )
 
@@ -875,7 +878,6 @@ def main():
 
     joints_controller = VecJointsController(
         universe=universe,
-        num_envs=num_envs,
         joint_names=robot_config["joints"]["names"],
         joint_position_limits=robot_config["joints"]["limits"]["positions"],
         joint_velocity_limits=robot_config["joints"]["limits"]["velocities"],
@@ -959,7 +961,6 @@ def main():
 
     newton_agent = NewtonBaseAgent(
         universe=universe,
-        num_agents=num_envs,
         imu=imu,
         joints_controller=joints_controller,
         contact_sensor=contact_sensor,
@@ -978,7 +979,7 @@ def main():
         randomizer_settings=randomization_config,
     )
 
-    terrain = Terrain(universe, terrain_config, num_envs)
+    terrain = Terrain(universe, terrain_config)
 
     # --------------- #
     #    ANIMATING    #
@@ -988,7 +989,6 @@ def main():
         env = NewtonBaseEnv(
             universe=universe,
             agent=newton_agent,
-            num_envs=num_envs,
             terrain=terrain,
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
@@ -1013,7 +1013,7 @@ def main():
 
         # this is very specific to Newton, because we know that it takes joint positions and the animation engine
         # provides that exactly; a different robot or different control mode would probably require a different approach
-        while universe.is_playing:
+        while True:
             joint_data = animation_engine.get_multiple_clip_data_at_seconds(
                 torch.tensor([universe.current_time]),
                 ordered_dof_names,
@@ -1021,18 +1021,12 @@ def main():
 
             # index 7 is the joint position (angle in degrees)
             joint_positions = joint_data[0, :, 7]
-
-            # TODO: Investigate if there's a way to simplify joint_normalization
-            #   since the system expects a [-1, 1] range, we normalize the joint positions to their limits; it is
-            #   redundant since we'll undo the normalization later in the controller, so it might warrant a change
             joint_actions = newton_agent.joints_controller.normalize_joint_positions(
                 joint_positions
             )
 
             # we need to make it 2D, since the controller expects a batch of actions
             env.step(joint_actions.unsqueeze(0))
-
-        return
 
     # ---------------- #
     #   PHYSICS ONLY   #
@@ -1042,7 +1036,6 @@ def main():
         env = NewtonBaseEnv(
             universe=universe,
             agent=newton_agent,
-            num_envs=num_envs,
             terrain=terrain,
             domain_randomizer=domain_randomizer,
             inverse_control_frequency=inverse_control_frequency,
@@ -1061,10 +1054,8 @@ def main():
 
         env.reset()  # reset the environment to get correctly position the agent
 
-        while universe.is_playing:
+        while True:
             env.step(torch.zeros((num_envs, 12)))
-
-        exit(1)
 
     # ----------- #
     #     RL      #
@@ -1079,7 +1070,6 @@ def main():
     training_env = NewtonBaseEnv(
         universe=universe,
         agent=newton_agent,
-        num_envs=num_envs,
         terrain=terrain,
         domain_randomizer=domain_randomizer,
         inverse_control_frequency=inverse_control_frequency,
@@ -1088,7 +1078,6 @@ def main():
     playing_env = NewtonBaseEnv(
         universe=universe,
         agent=newton_agent,
-        num_envs=num_envs,
         terrain=terrain,
         domain_randomizer=domain_randomizer,
         inverse_control_frequency=inverse_control_frequency,
@@ -1103,8 +1092,6 @@ def main():
             env=playing_env if playing else training_env,
             agent=newton_agent,
             animation_engine=animation_engine,
-            device=current_task_config["device"],
-            num_envs=num_envs,
             playing=playing,
             reset_in_play=current_task_config["reset_in_play"],
             max_episode_length=current_task_config["episode_length"],
@@ -1119,8 +1106,6 @@ def main():
             agent=newton_agent,
             animation_engine=animation_engine,
             command_controller=command_controller,
-            device=current_task_config["device"],
-            num_envs=num_envs,
             playing=playing,
             reset_in_play=current_task_config["reset_in_play"],
             max_episode_length=current_task_config["episode_length"],
@@ -1175,7 +1160,7 @@ def main():
 
         random_memory = create_random_memory(
             task=task,
-            memory_size=current_task_config["ppo"]["n_steps"],
+            memory_size=ppo_config["rollouts"],
         )
 
         algo = create_ppo(
@@ -1206,7 +1191,11 @@ def main():
                 "observation_space.pkl",
             ),
             "action_space_path": os.path.join(
-                runs_dir, current_run_name, "records", "pickles", "action_space.pkl"
+                runs_dir,
+                current_run_name,
+                "records",
+                "pickles",
+                "action_space.pkl",
             ),
         }
 

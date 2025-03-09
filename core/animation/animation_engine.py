@@ -19,8 +19,8 @@ class AnimationEngine(BaseObject):
         self.clip_config: Config = current_clip_config
         self.clip: Optional[AnimationClip] = None
 
-    def construct(self) -> None:
-        super().construct()
+    def pre_build(self) -> None:
+        super().pre_build()
 
         frame_dt = 1 / self.clip_config["framerate"]
 
@@ -75,31 +75,31 @@ class AnimationEngine(BaseObject):
             keyframes=keyframes,
         )
 
-        self._is_constructed = True
+        self._is_pre_built = True
 
-    def post_construct(self):
-        super().post_construct()
+    def post_build(self):
+        super().post_build()
 
-        self._is_post_constructed = True
+        self._is_post_built = True
 
     def get_multiple_clip_data_at_seconds(
         self,
         seconds: EpisodeLength,
-        joints_order: List[str],
+        joints_names: List[str],
         interpolate: bool = True,
     ) -> torch.Tensor:
         """
         Get the armature data for the current clip at the given progress. Optionally interpolates between keyframes.
         Args:
             seconds: The progress of the current episode, in seconds, for every vectorized agent.
-            joints_order: List of joint names in the order they should be returned.
+            joints_names: List of joint names in the order they should be returned.
             interpolate: Whether to interpolate between keyframes (continuous result, assuming animation is continuous).
 
         Returns:
             A tensor with shape (num_agents, num_bones, 9) containing the joint positions, orientations, relative angles and relative angle velocities for each agent.
         """
         assert (
-            self.is_fully_constructed
+            self.is_built
         ), "AnimationEngine not constructed: tried to get multiple clip data!"
 
         clip_datas = self.get_clip_data_at_seconds(
@@ -113,7 +113,7 @@ class AnimationEngine(BaseObject):
         result = torch.zeros((num_agents, num_bones, 9))
 
         for i, clip_data in enumerate(clip_datas):
-            for j, bone_name in enumerate(joints_order):
+            for j, bone_name in enumerate(joints_names):
                 if bone_name not in clip_data:
                     continue
 
@@ -144,7 +144,7 @@ class AnimationEngine(BaseObject):
             A list of armature data for each agent.
         """
         assert (
-            self.is_fully_constructed
+            self.is_built
         ), "AnimationEngine not constructed: tried to get clip data at seconds!"
 
         frames = second.cpu() * self.clip.framerate
@@ -171,7 +171,7 @@ class AnimationEngine(BaseObject):
             Armature data for the given clip.
         """
         assert (
-            self.is_fully_constructed
+            self.is_built
         ), "AnimationEngine not constructed: tried to get clip data at frame!"
 
         keyframes = self.clip.keyframes

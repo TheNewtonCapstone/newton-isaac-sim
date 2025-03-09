@@ -1,9 +1,8 @@
 name: "newton_idle"
-device: "cuda"
 policy: "MlpPolicy"
 seed: 14321
 
-n_envs: 2048
+num_envs: 2048
 timesteps: 100_000
 episode_length: 2000 # 20 seconds of real time (2000 * 0.01 = 20)
 reset_in_play: False
@@ -39,9 +38,9 @@ scalers:
   action: 1.0
 
 ppo:
-  n_steps: 24 # 0.48 seconds of real time (24 * 0.02 = 0.48)
-  n_epochs: 5
-  n_minibatches: 4
+  rollouts: 24 # 0.48 seconds of real time (24 * 0.02 = 0.48)
+  learning_epochs: 5
+  mini_batches: 4
 
   discount_factor: 0.99
   lambda: 0.95

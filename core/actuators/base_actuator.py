@@ -25,7 +25,7 @@ class BaseActuator(BaseObject):
 
         self._vec_velocity_limits: VecJointVelocityLimits = torch.zeros(
             (num_envs,),
-            device=self._universe.device,
+            device=self.device,
         )
         self._vec_effort_limits: VecJointEffortLimits = torch.zeros_like(
             self._vec_velocity_limits,
@@ -56,17 +56,23 @@ class BaseActuator(BaseObject):
         return self._applied_output_efforts
 
     @abstractmethod
-    def build(
+    def pre_build(
         self,
         output_vec_velocity_limits: VecJointVelocityLimits,
         output_vec_effort_limits: VecJointEffortLimits,
         vec_gear_ratios: VecJointVelocityLimits,
     ) -> None:
+        super().pre_build()
+
         # limits of the input, in rad/s and Nm
         self._vec_velocity_limits = output_vec_velocity_limits * vec_gear_ratios
         self._vec_effort_limits = output_vec_effort_limits / vec_gear_ratios
 
         self._vec_gear_ratios = vec_gear_ratios
+
+    @abstractmethod
+    def post_build(self) -> None:
+        super().post_build()
 
     @abstractmethod
     def step(

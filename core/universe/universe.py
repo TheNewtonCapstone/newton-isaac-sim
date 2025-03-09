@@ -95,13 +95,15 @@ class Universe:
     def scene(self) -> gs.Scene:
         return self._scene
 
-    def step(self, render: bool = False) -> None:
-        self._scene.step(render and not self.headless)
+    def step(self) -> None:
+        self._scene.step(not self.headless)
 
     def reset(self) -> None:
         Logger.info("Resetting universe")
 
         self._scene.reset()
+
+        self.step()
 
     def register(
         self,
@@ -112,13 +114,15 @@ class Universe:
         self._registrations[object] = (pre_kwargs, post_kwargs)
 
     def build(self) -> None:
-        Logger.info(f"Building universe with {self.num_envs} environments")
+        Logger.info(f"Building universe with {self._num_envs} environments")
 
         self._pre_build_registrations()
 
         self._scene.build(n_envs=self._num_envs)
 
         self._post_build_registrations()
+
+        self.reset()
 
     def _create_scene(self) -> None:
         sim_options = gs.options.SimOptions(

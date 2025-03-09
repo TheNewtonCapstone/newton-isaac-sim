@@ -131,6 +131,7 @@ class Matter(TypedDict):
     enable_ros: bool
     enable_db: bool
     num_envs: int
+    device: torch.device
     control_step_dt: float
     inverse_control_frequency: int
 

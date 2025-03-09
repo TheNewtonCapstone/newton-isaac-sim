@@ -32,8 +32,6 @@ class NewtonBaseTask(BaseTask):
         agent: NewtonBaseAgent,
         animation_engine: Optional[AnimationEngine],
         command_controller: Optional[CommandController],
-        num_envs: int,
-        device: str,
         playing: bool,
         reset_in_play: bool,
         max_episode_length: int,
@@ -50,8 +48,6 @@ class NewtonBaseTask(BaseTask):
             name,
             env,
             agent,
-            num_envs,
-            device,
             playing,
             reset_in_play,
             max_episode_length,
@@ -101,12 +97,18 @@ class NewtonBaseTask(BaseTask):
 
     @abstractmethod
     def step(self, actions: Actions) -> StepReturn:
+        transformed_actions = th.clamp(
+            actions,
+            th.from_numpy(self.action_space.low).to(self.device),
+            th.from_numpy(self.action_space.high).to(self.device),
+        )
+        transformed_actions *= self._action_scaler
+
         self._episode_length_buf += 1
 
-        # updates inputs
-        self.command_controller.step()
+        self.command_controller.step()  # updates inputs
 
-        return super().step(actions)
+        return super().step(transformed_actions)
 
     @abstractmethod
     def reset(self, indices: Optional[Indices] = None) -> ResetReturn:

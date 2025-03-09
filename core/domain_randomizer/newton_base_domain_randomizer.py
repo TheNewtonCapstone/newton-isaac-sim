@@ -28,10 +28,12 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         self._robot: Optional[RigidEntity] = None
         self.initial_positions: torch.Tensor = torch.zeros(
-            (1, 3), device=self._universe.device
+            (self.num_envs, 3),
+            device=self.device,
         )
         self.initial_orientations: torch.Tensor = torch.zeros(
-            (1, 4), device=self._universe.device
+            (self.num_envs, 4),
+            device=self.device,
         )
 
     def pre_build(self) -> None:
@@ -51,9 +53,9 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         super().on_reset(indices)
 
         if indices is None:
-            indices = torch.arange(self._agent.num_agents)
+            indices = torch.arange(self.num_envs)
         else:
-            indices = indices.to(device=self._universe.device)
+            indices = indices.to(device=self.device)
 
         num_to_reset = indices.shape[0]
 
@@ -69,9 +71,11 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
             zero_velocity=True,
         )
 
-        # using set_velocities instead of individual methods (lin & ang),
-        # because it's the only method supported in the GPU pipeline (default pipeline)
-        joint_positions = torch.zeros((num_to_reset, 12), dtype=torch.float32)
+        joint_positions = torch.zeros(
+            (num_to_reset, 12),
+            dtype=torch.float32,
+            device=self.device,
+        )
         # (
         #    torch.rand((num_to_reset, 12), dtype=torch.float32) * 2.0 - 1.0
         # )  # [-1, 1]
@@ -86,13 +90,17 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
             indices,
         )
 
-    def set_initial_positions(self, positions: torch.Tensor) -> None:
-        self.initial_positions = positions.to(self._universe.device)
+    def set_initial_positions(
+        self,
+        positions: torch.Tensor,
+        indices: torch.Tensor = None,
+    ) -> None:
+        if indices is None:
+            indices = torch.arange(self.num_envs, device=self.device)
+        else:
+            indices = indices.to(self.device)
+
+        self.initial_positions[indices] = positions.to(self.device)
 
     def set_initial_orientations(self, orientations: torch.Tensor) -> None:
-        self.initial_orientations = orientations.to(self._universe.device)
-
-    def set_initial_position(
-        self, indices: torch.Tensor, positions: torch.Tensor
-    ) -> None:
-        self.initial_positions[indices] = positions.to(self._universe.device)
+        self.initial_orientations = orientations.to(self.device)

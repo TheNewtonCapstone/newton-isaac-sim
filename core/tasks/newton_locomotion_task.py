@@ -2,6 +2,7 @@ import math
 from typing import Optional
 
 import numpy as np
+import torch
 import torch as th
 from gymnasium.spaces import Box
 
@@ -31,8 +32,6 @@ class NewtonLocomotionTask(NewtonBaseTask):
         agent: NewtonBaseAgent,
         animation_engine: AnimationEngine,
         command_controller: CommandController,
-        num_envs: int,
-        device: str,
         playing: bool,
         reset_in_play: bool,
         max_episode_length: int,
@@ -71,8 +70,6 @@ class NewtonLocomotionTask(NewtonBaseTask):
             agent,
             animation_engine,
             command_controller,
-            num_envs,
-            device,
             playing,
             reset_in_play,
             max_episode_length,
@@ -96,7 +93,9 @@ class NewtonLocomotionTask(NewtonBaseTask):
             device=self.device,
         )
 
-        self.curriculum_levels = th.zeros(num_envs, dtype=th.int16, device=self.device)
+        self.curriculum_levels = th.zeros(
+            self.num_envs, dtype=th.int16, device=self.device
+        )
 
         self.command_scalers: Optional[CommandScalers] = command_scalers
 
@@ -111,7 +110,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         self._is_post_built = True
 
     def step(self, actions) -> StepReturn:
-        super().step(actions * self._action_scaler)
+        super().step(actions)
 
         self.env.step(self._actions_buf)
 
@@ -173,10 +172,8 @@ class NewtonLocomotionTask(NewtonBaseTask):
         self._obs_buf[:, 3:6] = env_obs["linear_velocities"]
         self._obs_buf[:, 6:9] = env_obs["angular_velocities"]
 
-        self._obs_buf[:, 9:21] = self.agent.joints_controller.get_joint_positions_rad()
-        self._obs_buf[:, 21:33] = (
-            self.agent.joints_controller.get_joint_velocities_rad()
-        )
+        self._obs_buf[:, 9:21] = self.agent.joints_controller.joint_positions_rad
+        self._obs_buf[:, 21:33] = self.agent.joints_controller.joint_velocities_rad
 
         # 1st & 2nd set of past actions, we don't care about just-applied actions
         self._obs_buf[:, 33:45] = self.last_actions_buf.clone()
@@ -198,16 +195,10 @@ class NewtonLocomotionTask(NewtonBaseTask):
         angular_velocities = obs["angular_velocities"]
         linear_velocities = obs["linear_velocities"]
         world_gravities = obs["world_gravities"]
-        world_gravities_norm = world_gravities / world_gravities.norm(
-            dim=1,
-            keepdim=True,
-        )
+        world_gravities_norm = world_gravities
         projected_gravities = obs["projected_gravities"]
-        projected_gravities_norm = projected_gravities / projected_gravities.norm(
-            dim=1,
-            keepdim=True,
-        )
-        in_contact_with_ground = obs["in_contacts"]
+        projected_gravities_norm = projected_gravities
+        # in_contact_with_ground = obs["in_contacts"]
 
         has_flipped = projected_gravities_norm[:, 2] > 0.0
 
@@ -224,11 +215,11 @@ class NewtonLocomotionTask(NewtonBaseTask):
             )
         ) > math.radians(20)
 
-        self.air_time = th.where(
-            in_contact_with_ground,
-            0.0,
-            self.air_time + ~in_contact_with_ground * self._universe.control_dt,
-        )
+        # self.air_time = th.where(
+        #    in_contact_with_ground,
+        #    0.0,
+        #    self.air_time + ~in_contact_with_ground * self._universe.control_dt,
+        # )
 
         terminated_by_long_airtime = th.logical_and(
             # less than half a second of overall airtime (all paws)
@@ -248,19 +239,16 @@ class NewtonLocomotionTask(NewtonBaseTask):
         base_angular_velocity_z = angular_velocities[:, 2]
 
         joint_positions = (
-            self.agent.joints_controller.get_joint_positions_deg()
+            self.agent.joints_controller.joint_positions_deg
         )  # [-1, 1] unitless
 
-        dof_ordered_names = self.agent.joints_controller.art_view.dof_names
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
             self._episode_length_buf * self._universe.control_dt,
-            dof_ordered_names,
+            self.agent.joints_controller.joint_names,
         )
         # we use the joint controller here, because it contains all the required information
-        animation_joint_positions = (
-            # self.agent.joints_controller.normalize_joint_positions(
-            animation_joint_data[:, :, 7].to(self.device)
-            # ).to(device=self.device)
+        animation_joint_positions = animation_joint_data[:, :, 7].to(
+            self.device
         )  # [-1, 1] unitless
 
         # DONES
@@ -383,7 +371,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             return
 
         obs = self.env.get_observations()
-        agent_heights = self.agent.transformed_position[2]
+        agent_heights = 0.4
         flat_origins = th.tensor(
             self.env.terrain.sub_terrain_origins,
             dtype=th.float32,
@@ -418,4 +406,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         new_spawn_positions = flat_origins[level_indices, :]
 
         # Update the initial positions in the environment
-        self.env.domain_randomizer.set_initial_position(indices, new_spawn_positions)
+        self.env.domain_randomizer.set_initial_positions(
+            new_spawn_positions,
+            indices=indices,
+        )
