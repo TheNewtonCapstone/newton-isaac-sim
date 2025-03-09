@@ -128,7 +128,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         # creates a new np array with only the indices of the environments that are done
         resets: th.Tensor = (self.dones_buf & self.should_reset).nonzero().squeeze(1)
         if len(resets) > 0:
-            self._update_terrain_curriculumn(resets)
+            self._update_curriculum_levels(resets)
             self.env.reset(resets)
 
         # clears the last 2 observations, the progress & the predicted positions if any Newton is reset
@@ -154,6 +154,8 @@ class NewtonLocomotionTask(NewtonBaseTask):
 
     def reset(self, indices: Optional[Indices] = None) -> ResetReturn:
         super().reset()
+
+        self._update_starting_joint_positions()
 
         self.env.reset()
 
@@ -200,8 +202,6 @@ class NewtonLocomotionTask(NewtonBaseTask):
         projected_gravities_norm = projected_gravities
         # in_contact_with_ground = obs["in_contacts"]
 
-        has_flipped = projected_gravities_norm[:, 2] > 0.0
-
         # based on the projected gravity, we can determine if Newton
         # is tilted by more than x degrees
         is_tilted = th.acos(
@@ -238,25 +238,19 @@ class NewtonLocomotionTask(NewtonBaseTask):
         base_angular_velocity_xy = angular_velocities[:, :2]
         base_angular_velocity_z = angular_velocities[:, 2]
 
-        joint_positions = (
-            self.agent.joints_controller.joint_positions_deg
-        )  # [-1, 1] unitless
+        joint_positions = self.agent.joints_controller.joint_positions_rad  # rad
 
         animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
             self._episode_length_buf * self._universe.control_dt,
             self.agent.joints_controller.joint_names,
         )
         # we use the joint controller here, because it contains all the required information
-        animation_joint_positions = animation_joint_data[:, :, 7].to(
-            self.device
-        )  # [-1, 1] unitless
+        animation_joint_positions = th.deg2rad(animation_joint_data[:, :, 7])  # rads
 
         # DONES
 
         # terminated agents (i.e. they failed)
-        self._terminated_buf = (
-            has_flipped  # has_flipped | is_tilted | terminated_by_long_airtime
-        )
+        self._terminated_buf = is_tilted
 
         # truncated agents (i.e. they reached the max episode length)
         self._truncated_buf = (self._episode_length_buf >= self._max_episode_length).to(
@@ -357,6 +351,39 @@ class NewtonLocomotionTask(NewtonBaseTask):
             "truncated": self.truncated_buf.sum(),
         }
 
+    def _update_starting_joint_positions(
+        self,
+        indices: Optional[th.Tensor] = None,
+    ) -> None:
+        """
+        Reset the joint positions to the animation data at the start of the episode.
+
+        Notes:
+            This function should be called before resetting an or all environments.
+
+        Args:
+            indices: The indices of the environments to reset the joint positions for.
+
+        Returns:
+            None
+        """
+        if indices is None:
+            indices = th.arange(self.num_envs, device=self.device)
+
+        animation_joint_data = self.animation_engine.get_multiple_clip_data_at_seconds(
+            th.zeros((self.num_envs,), device=self.device),
+            self.agent.joints_controller.joint_names,
+        )
+        animation_joint_positions = animation_joint_data[:, :, 7]  # degrees
+        joint_positions = self.agent.joints_controller.normalize_joint_positions(
+            animation_joint_positions
+        )
+
+        self.env.domain_randomizer.set_initial_joint_positions(
+            joint_positions=joint_positions[indices],
+            indices=indices,
+        )
+
     def _update_velocity_commands(self, indices: Optional[th.Tensor] = None) -> None:
         if indices is None:
             indices = th.arange(self.num_envs, device=self.device)
@@ -366,12 +393,12 @@ class NewtonLocomotionTask(NewtonBaseTask):
                 self.command_controller.get_random_action()
             ) * self.command_scalers["linear_velocity_xy"]
 
-    def _update_terrain_curriculumn(self, indices: Optional[th.Tensor] = None) -> None:
+    def _update_curriculum_levels(self, indices: Optional[th.Tensor] = None) -> None:
         if indices is None:
             return
 
         obs = self.env.get_observations()
-        agent_heights = 0.4
+        agent_heights = 0.3
         flat_origins = th.tensor(
             self.env.terrain.sub_terrain_origins,
             dtype=th.float32,

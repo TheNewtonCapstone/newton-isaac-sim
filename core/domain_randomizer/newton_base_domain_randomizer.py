@@ -36,6 +36,11 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
             device=self.device,
         )
 
+        self.initial_joint_positions: torch.Tensor = torch.zeros(
+            (self.num_envs, 12),
+            device=self.device,
+        )  # radians
+
     def pre_build(self) -> None:
         super().pre_build()
 
@@ -50,14 +55,21 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         super().on_step()
 
     def on_reset(self, indices: Indices = None) -> None:
+        """
+        Reset the domain randomizer and default state of the agent (pose and joints).
+        Args:
+            indices: Indices of the environments to reset. If None, reset all environments.
+
+        Returns:
+            None
+
+        """
         super().on_reset(indices)
 
         if indices is None:
             indices = torch.arange(self.num_envs)
         else:
             indices = indices.to(device=self.device)
-
-        num_to_reset = indices.shape[0]
 
         self._agent.robot.set_pos(
             pos=self.initial_positions[indices],
@@ -71,29 +83,15 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
             zero_velocity=True,
         )
 
-        joint_positions = torch.zeros(
-            (num_to_reset, 12),
-            dtype=torch.float32,
-            device=self.device,
-        )
-        # (
-        #    torch.rand((num_to_reset, 12), dtype=torch.float32) * 2.0 - 1.0
-        # )  # [-1, 1]
-
-        joint_velocities = torch.zeros_like(joint_positions)
-        joint_efforts = torch.zeros_like(joint_positions)
-
         self._agent.joints_controller.reset(
-            joint_positions,
-            joint_velocities,
-            joint_efforts,
-            indices,
+            joint_positions=self.initial_joint_positions[indices],
+            indices=indices,
         )
 
     def set_initial_positions(
         self,
         positions: torch.Tensor,
-        indices: torch.Tensor = None,
+        indices: Optional[Indices] = None,
     ) -> None:
         if indices is None:
             indices = torch.arange(self.num_envs, device=self.device)
@@ -102,5 +100,36 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
 
         self.initial_positions[indices] = positions.to(self.device)
 
-    def set_initial_orientations(self, orientations: torch.Tensor) -> None:
-        self.initial_orientations = orientations.to(self.device)
+    def set_initial_orientations(
+        self,
+        orientations: torch.Tensor,
+        indices: Optional[Indices] = None,
+    ) -> None:
+        if indices is None:
+            indices = torch.arange(self.num_envs, device=self.device)
+        else:
+            indices = indices.to(self.device)
+
+        self.initial_orientations[indices] = orientations.to(self.device)
+
+    def set_initial_joint_positions(
+        self,
+        joint_positions: torch.Tensor,
+        indices: Optional[Indices] = None,
+    ) -> None:
+        """
+        Set the initial joint positions for the agent.
+        Args:
+            joint_positions: The joint positions (normalized) to set.
+            indices: Indices of the environments to set the joint positions. If None, set all environments.
+
+        Returns:
+            None
+
+        """
+        if indices is None:
+            indices = torch.arange(self.num_envs, device=self.device)
+        else:
+            indices = indices.to(self.device)
+
+        self.initial_joint_positions[indices] = joint_positions.to(self.device)

@@ -61,13 +61,13 @@ class NewtonBaseEnv(BaseEnv):
         super().post_build()
 
         self._sub_terrain_origins = th.from_numpy(self.terrain.sub_terrain_origins).to(
-            self._universe.device,
+            self.device,
             dtype=th.float32,
         )
 
         # Convert to the correct device
         self.reset_newton_positions = self._compute_agent_reset_positions(
-            th.ones((self.num_envs,)) * 0.4
+            th.ones((self.num_envs,)) * 0.3
         )
 
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
@@ -101,7 +101,7 @@ class NewtonBaseEnv(BaseEnv):
         env_obs["world_gravities"] = (
             th.tensor(
                 [0.0, 0.0, self._universe.gravity],
-                device=self._universe.device,
+                device=self.device,
             )
         ).repeat(self.num_envs, 1) / abs(self._universe.gravity)
 

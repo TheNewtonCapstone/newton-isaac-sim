@@ -219,44 +219,56 @@ class VecJointsController(BaseObject):
 
     def reset(
         self,
-        joint_positions: Tensor,
-        joint_velocities: Tensor,
-        joint_efforts: Tensor,
+        joint_positions: Optional[Tensor] = None,
+        joint_velocities: Optional[Tensor] = None,
+        joint_efforts: Optional[Tensor] = None,
         indices: Optional[Indices] = None,
     ) -> None:
+        """
+        Reset the joint positions, velocities and efforts. If any of the arguments are None, they are not reset.
+        Args:
+            joint_positions: Positions to reset the joints to (normalized).
+            joint_velocities: Velocities to reset the joints to (in radians/second).
+            joint_efforts: Efforts to reset the joints to.
+            indices: Indices of the environments to reset. If None, reset all environments.
+
+        Returns:
+            None
+
+        """
         if indices is None:
-            indices = torch.arange(
-                self.num_envs,
-                device=self.device,
-            )
+            indices = torch.arange(self.num_envs, device=self.device)
         else:
             indices = indices.to(device=self.device)
 
-        joint_positions = joint_positions.to(device=self.device)
+        if joint_positions is not None:
+            joint_positions = joint_positions.to(device=self.device)
 
-        self._target_joint_positions = self._process_joint_actions(
-            joint_positions,
-            apply_noise_function=False,
-        )
+            self._target_joint_positions = self._process_joint_actions(
+                joint_positions,
+                apply_noise_function=False,
+            )
 
-        self._robot.set_dofs_position(
-            position=self._target_joint_positions,
-            dofs_idx_local=self._joints_dof_idx,
-            envs_idx=indices,
-            zero_velocity=False,
-        )
+            self._robot.set_dofs_position(
+                position=self._target_joint_positions,
+                dofs_idx_local=self._joints_dof_idx,
+                envs_idx=indices,
+                zero_velocity=False,
+            )
 
-        self._robot.set_dofs_velocity(
-            velocity=joint_velocities,
-            dofs_idx_local=self._joints_dof_idx,
-            envs_idx=indices,
-        )
+        if joint_velocities is not None:
+            self._robot.set_dofs_velocity(
+                velocity=joint_velocities,
+                dofs_idx_local=self._joints_dof_idx,
+                envs_idx=indices,
+            )
 
-        self._robot.control_dofs_force(
-            force=joint_efforts,
-            dofs_idx_local=self._joints_dof_idx,
-            envs_idx=indices,
-        )
+        if joint_efforts is not None:
+            self._robot.control_dofs_force(
+                force=joint_efforts,
+                dofs_idx_local=self._joints_dof_idx,
+                envs_idx=indices,
+            )
 
     def normalize_joint_positions(self, joint_positions: Tensor) -> Tensor:
         """
@@ -306,9 +318,6 @@ class VecJointsController(BaseObject):
 
         return joint_velocities_normalized
 
-    # TODO: Improve naming of `JointsController` methods
-    #   They are too long and too descriptive, which makes them hard to read.
-
     def normalize_joint_efforts(self, joint_efforts: Tensor) -> Tensor:
         """
         Args:
@@ -339,13 +348,13 @@ class VecJointsController(BaseObject):
         apply_noise_function: bool = True,
     ) -> Tensor:
         """
-        Joint actions are processed by mapping them to the joint constraints (any unit) and applying noise.
+        Joint actions are processed by mapping them to the joint constraints and applying noise.
         Args:
             joint_actions: The joint actions to be processed [-1, 1].
             apply_noise_function: Whether to apply the noise function to the joint positions.
 
         Returns:
-            The processed joint positions (in degrees).
+            The processed joint positions (in radians).
         """
         joint_positions = torch.clamp(
             joint_actions.to(
@@ -357,8 +366,8 @@ class VecJointsController(BaseObject):
         )
 
         joint_positions = torch.lerp(
-            self._vec_joint_position_limits[:, 0],
-            self._vec_joint_position_limits[:, 1],
+            self._vec_joint_position_limits_rad[:, 0],
+            self._vec_joint_position_limits_rad[:, 1],
             (joint_positions + 1) / 2,
         )
 

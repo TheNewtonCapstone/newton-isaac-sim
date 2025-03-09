@@ -1,9 +1,24 @@
 import math
+import os
+import subprocess
 
 import bpy
 import argparse
 import sys
-import yaml
+
+
+def install_pyyaml_in_blender():
+    # Get Blender's Python executable path
+    python_exe = sys.executable
+
+    # Get Blender's Python scripts path (where pip should install to)
+    py_scripts_path = os.path.dirname(python_exe)
+
+    print(f"Blender Python executable: {python_exe}")
+    print(f"Installing PyYAML...")
+
+    # Use subprocess to run pip
+    subprocess.check_call([python_exe, "-m", "pip", "install", "pyyaml"])
 
 
 def extract_keyframes_from_scene(
@@ -132,6 +147,8 @@ def keyframes_to_yaml(
     framerate: int,
     name: str,
 ) -> str:
+    import yaml
+
     return yaml.dump(
         {
             "name": name,
@@ -205,4 +222,11 @@ def main():
 
 # Ensure the script only runs when executed directly
 if __name__ == "__main__":
-    main()
+    try:
+        import yaml
+    except ImportError:
+        install_pyyaml_in_blender()
+
+        print("Please run the script again (after closing any Blender instances).")
+    else:
+        main()

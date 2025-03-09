@@ -110,7 +110,7 @@ class AnimationEngine(BaseObject):
         num_agents = len(clip_datas)
         num_bones = len(clip_datas[0])
 
-        result = torch.zeros((num_agents, num_bones, 9))
+        result = torch.zeros((num_agents, num_bones, 9), device=self.device)
 
         for i, clip_data in enumerate(clip_datas):
             for j, bone_name in enumerate(joints_names):
