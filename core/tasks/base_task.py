@@ -100,7 +100,10 @@ class BaseTask(BaseObject):
             dtype=torch.float32,
             device=self.device,
         )
-        self._extras: Extras = {"episode": {}, "time_outs": torch.zeros(self.num_envs)}
+        self._extras: Extras = {
+            "episode": {},
+            "time_outs": torch.zeros(self.num_envs, dtype=torch.float32),
+        }
 
     def __repr__(self):
         return f"BaseTask: {self.num_envs} environments, {self._num_obs} observations, {self._num_actions} actions"

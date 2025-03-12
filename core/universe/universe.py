@@ -1,18 +1,13 @@
-from typing import Optional, Dict, Tuple
-
 import os
 
-os.environ["PYOPENGL_PLATFORM"] = "glx"
+os.environ["PYOPENGL_PLATFORM"] = "glx"  # noqa
+
+from typing import Optional, Dict, Tuple
 
 import genesis as gs
 
 from ..logger import Logger
 from ..types import Config, Mode, Kwargs
-
-
-# TODO: Centralize configuration data into the Universe class
-#   We should have a single source of truth for all configuration, including the simulation app settings, world settings,
-#   and any other settings that are used in the simulation. This will make it easier to manage and query the settings.
 
 
 class Universe:
@@ -130,8 +125,21 @@ class Universe:
             substeps=self._universe_config["sim_options"]["substeps"],
             gravity=(0, 0, self.gravity),
         )
-        viewer_options = gs.options.ViewerOptions()
-        vis_options = gs.options.VisOptions()
+        viewer_options = gs.options.ViewerOptions(
+            camera_pos=(0.0, 0.0, 3.5),
+            camera_lookat=(4.0, 4.0, 0.5),
+            camera_fov=60,
+            max_FPS=int(0.5 / self.physics_dt),  # 2x physics rate
+        )
+        vis_options = gs.options.VisOptions(
+            n_rendered_envs=4,
+        )
+        rigid_options = gs.options.RigidOptions(
+            dt=self.physics_dt,
+            constraint_solver=gs.constraint_solver.Newton,
+            enable_collision=True,
+            enable_joint_limit=True,
+        )
 
         self._scene = gs.Scene(
             show_FPS=False,
@@ -139,6 +147,7 @@ class Universe:
             sim_options=sim_options,
             viewer_options=viewer_options,
             vis_options=vis_options,
+            rigid_options=rigid_options,
         )
 
     def _pre_build_registrations(self) -> None:

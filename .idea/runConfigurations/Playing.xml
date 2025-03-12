@@ -8,14 +8,13 @@
       <env name="PYTHONUNBUFFERED" value="1" />
     </envs>
     <option name="SDK_HOME" value="" />
-    <option name="SDK_NAME" value="isaac-sim" />
     <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
-    <option name="IS_MODULE_SDK" value="false" />
+    <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$ProjectFileDir$/newton.py" />
-    <option name="PARAMETERS" value="--checkpoint-path runs/newton_locomotion_102/checkpoints/best_agent.pt --play --animation-name newton_locomotion --rl-config configs/tasks/newton_locomotion_task.yaml" />
+    <option name="PARAMETERS" value="--play --run-name newton_locomotion_024 --num-envs 1" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

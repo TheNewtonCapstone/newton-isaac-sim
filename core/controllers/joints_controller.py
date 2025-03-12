@@ -187,6 +187,15 @@ class VecJointsController(BaseObject):
             self._robot.get_joint(name).dof_idx_local for name in self._joint_names
         ]
 
+        self._robot.set_dofs_kp(
+            [20.0] * self._num_joints,
+            dofs_idx_local=self._joints_dof_idx,
+        )
+        self._robot.set_dofs_kv(
+            [0.5] * self._num_joints,
+            dofs_idx_local=self._joints_dof_idx,
+        )
+
         self._is_post_built = True
 
     def step(self, joint_actions: Tensor) -> None:
@@ -194,11 +203,15 @@ class VecJointsController(BaseObject):
 
         efforts_to_apply: Tensor = torch.zeros_like(self._target_joint_positions)
 
+        # cache, to avoid multiple expensive calls in the loop
+        joint_positions_rad = self.joint_positions_rad
+        joint_velocities_rad = self.joint_velocities_rad
+
         for i, actuator in enumerate(self._actuators):
             efforts = actuator.step(
-                self.joint_positions_rad[:, i],
+                joint_positions_rad[:, i],
                 self._target_joint_positions[:, i],
-                self.joint_velocities_rad[:, i],
+                joint_velocities_rad[:, i],
             )
             efforts_to_apply[:, i] = efforts
 
@@ -207,15 +220,21 @@ class VecJointsController(BaseObject):
             dofs_idx_local=self._joints_dof_idx,
         )
 
-        joints_obs_archive = {
-            "joint_positions_norm": self.normalized_joint_positions,
-            "joint_positions": self.joint_positions_deg,
-            "joint_velocities_norm_median": self.normalized_joint_velocities.median(),
-            "joint_velocities_median": self.joint_velocities_deg.median(),
-            "joint_efforts_median": self.applied_joint_efforts.median(),
-            "joint_efforts": self.applied_joint_efforts,
-        }
-        Archiver.put("joints_obs", joints_obs_archive)
+        # self._robot.control_dofs_position(
+        #    position=self._target_joint_positions,
+        #    dofs_idx_local=self._joints_dof_idx,
+        # )
+
+        if Archiver.enabled:
+            joints_obs_archive = {
+                "joint_positions_norm": self.normalized_joint_positions,
+                "joint_positions": self.joint_positions_deg,
+                "joint_velocities_norm_median": self.normalized_joint_velocities.median(),
+                "joint_velocities_median": self.joint_velocities_deg.median(),
+                "joint_efforts_median": self.applied_joint_efforts.median(),
+                "joint_efforts": self.applied_joint_efforts,
+            }
+            Archiver.put("joints_obs", joints_obs_archive)
 
     def reset(
         self,
@@ -358,8 +377,8 @@ class VecJointsController(BaseObject):
         """
         joint_positions = torch.clamp(
             joint_actions.to(
-                self._vec_joint_position_limits.device,
-                dtype=self._vec_joint_position_limits.dtype,
+                self._vec_joint_position_limits_rad.device,
+                dtype=self._vec_joint_position_limits_rad.dtype,
             ),
             min=-1.0,
             max=1.0,

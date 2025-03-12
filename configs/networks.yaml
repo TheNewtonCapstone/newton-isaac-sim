@@ -23,3 +23,7 @@ networks:
     name: AutoEncoderMedium
     net_arch: [512, 256, 128]
     activation_fn: ReLU
+  autoencoder_medium_elu:
+    name: AutoEncoderMediumELU
+    net_arch: [512, 256, 128]
+    activation_fn: ELU

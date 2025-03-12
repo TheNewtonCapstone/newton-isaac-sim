@@ -38,6 +38,175 @@ def create_random_memory(task: BaseTask, memory_size: int) -> Memory:
     )
 
 
+def create_policy_model(
+    observation_space: Optional[Space[int]] = None,
+    action_space: Optional[Space[int]] = None,
+    device: Optional[torch.device] = None,
+    task: Optional[BaseTask] = None,
+    arch: Sequence[int] = (512, 256, 128),
+    activation: Type = ReLU,
+) -> Model:
+    """Create a policy model.
+
+    Args:
+        observation_space: The observation space of the task, if task is not provided.
+        action_space: The action space of the task, if task is not provided.
+        device: The device to run the model on, if task is not provided.
+        task: The task to create the model for, must be provided if observation_space, action_space and device are not.
+        arch: The architecture of the model (number of parameters per linear layer).
+        activation: The activation function to use (any of torch's).
+
+    Returns:
+
+    """
+    assert task is not None or (
+        observation_space is not None
+        and action_space is not None
+        and device is not None
+    ), "Task or observation space, action space and device must be provided"
+
+    if task is not None:
+        observation_space = task.observation_space
+        action_space = task.action_space
+        device = task.device
+
+    from skrl.models.torch import GaussianMixin
+
+    class Policy(GaussianMixin, Model):
+        def __init__(self):
+            Model.__init__(
+                self,
+                observation_space=observation_space,
+                action_space=action_space,
+                device=device,
+            )
+            GaussianMixin.__init__(
+                self,
+                clip_actions=False,
+            )
+
+            import torch as th
+            from torch import nn
+
+            layers: OrderedDict[str, nn.Module] = OrderedDict[str, nn.Module]()
+
+            # initial layer from the observation space to the first hidden layer
+            layers["linear0"] = nn.Linear(observation_space.shape[0], arch[0])
+            layers["act0"] = activation()
+
+            for i in range(len(arch) - 1):
+                layers["linear" + str(i + 1)] = nn.Linear(arch[i], arch[i + 1])
+                layers["act" + str(i + 1)] = activation()
+
+            self.net = nn.Sequential(layers)
+            self.action_layer = nn.Linear(arch[-1], self.num_actions)
+            self.log_std_parameter = nn.Parameter(th.zeros(self.num_actions))
+
+        def compute(
+            self,
+            inputs: Mapping[str, Union[torch.Tensor, Any]],
+            role: str = "",
+        ) -> Tuple:
+            net_output = self.net(inputs["states"])
+
+            return (
+                self.action_layer(net_output),
+                self.log_std_parameter,
+                {},
+            )
+
+    Logger.info(
+        f"Creating policy model with task: {task}, architecture: {arch} and activation: {activation}"
+    )
+    Logger.debug(f" Observation space: {observation_space}")
+    Logger.debug(f" Action space: {action_space}")
+
+    return Policy()
+
+
+def create_value_model(
+    observation_space: Optional[Space[int]] = None,
+    action_space: Optional[Space[int]] = None,
+    device: Optional[torch.device] = None,
+    task: Optional[BaseTask] = None,
+    arch: Sequence[int] = (512, 256, 128),
+    activation: Type = ReLU,
+    is_deterministic: bool = True,
+) -> Model:
+    """Create a value model.
+
+    Args:
+        observation_space: The observation space of the task, if task is not provided.
+        action_space: The action space of the task, if task is not provided.
+        device: The device to run the model on, if task is not provided.
+        task: The task to create the model for, must be provided if observation_space, action_space and device are not.
+        arch: The architecture of the model (number of parameters per linear layer).
+        activation: The activation function to use (any of torch's).
+        is_deterministic: Whether the value network is deterministic or stochastic.
+
+    Returns:
+
+    """
+    assert task is not None or (
+        observation_space is not None
+        and action_space is not None
+        and device is not None
+    ), "Task or observation space, action space and device must be provided"
+
+    if task is not None:
+        observation_space = task.observation_space
+        action_space = task.action_space
+        device = task.device
+
+    from skrl.models.torch import GaussianMixin, DeterministicMixin
+
+    VALUE_MIXIN = DeterministicMixin if is_deterministic else GaussianMixin
+
+    class Value(VALUE_MIXIN, Model):
+        def __init__(self):
+            Model.__init__(
+                self,
+                observation_space=observation_space,
+                action_space=action_space,
+                device=device,
+            )
+            VALUE_MIXIN.__init__(self, clip_actions=False)
+
+            from torch import nn
+
+            layers: OrderedDict[str, nn.Module] = OrderedDict[str, nn.Module]()
+
+            # initial layer from the observation space to the first hidden layer
+            layers["linear0"] = nn.Linear(observation_space.shape[0], arch[0])
+            layers["act0"] = activation()
+
+            for i in range(len(arch) - 1):
+                layers["linear" + str(i + 1)] = nn.Linear(arch[i], arch[i + 1])
+                layers["act" + str(i + 1)] = activation()
+
+            self.net = nn.Sequential(layers)
+            self.value_layer = nn.Linear(arch[-1], 1)
+
+        def compute(
+            self,
+            inputs: Mapping[str, Union[torch.Tensor, Any]],
+            role: str = "",
+        ) -> Tuple:
+            net_output = self.net(inputs["states"])
+
+            return self.value_layer(net_output), {}
+
+    Logger.info(
+        f"Creating value model with task: {task}, architecture: {arch} and activation: {activation}"
+    )
+    Logger.debug(f" Is deterministic: {is_deterministic}")
+    Logger.debug(f" Observation space: {observation_space}")
+    Logger.debug(f" Action space: {action_space}")
+    Logger.debug(f" Value mixin: {VALUE_MIXIN}")
+
+    return Value()
+
+
 def create_shared_model(
     observation_space: Optional[Space[int]] = None,
     action_space: Optional[Space[int]] = None,
@@ -218,10 +387,16 @@ def populate_skrl_config(config: Config) -> Config:
 
     for key, value in config.items():
         if key.endswith("_scheduler"):
+            if value is None:
+                config[key] = None
+                continue
             config[key] = getattr(skrl.resources.schedulers.torch, value)
             continue
 
         if key.endswith("_preprocessor"):
+            if value is None:
+                config[key] = None
+                continue
             config[key] = getattr(skrl.resources.preprocessors.torch, value)
             continue
 

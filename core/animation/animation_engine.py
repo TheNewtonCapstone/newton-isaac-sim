@@ -99,8 +99,8 @@ class AnimationEngine(BaseObject):
             A tensor with shape (num_agents, num_bones, 9) containing the joint positions, orientations, relative angles and relative angle velocities for each agent.
         """
         assert (
-            self.is_built
-        ), "AnimationEngine not constructed: tried to get multiple clip data!"
+            self._is_pre_built
+        ), "AnimationEngine not pre-built: tried to get multiple clip data!"
 
         clip_datas = self.get_clip_data_at_seconds(
             seconds,
@@ -144,8 +144,8 @@ class AnimationEngine(BaseObject):
             A list of armature data for each agent.
         """
         assert (
-            self.is_built
-        ), "AnimationEngine not constructed: tried to get clip data at seconds!"
+            self._is_pre_built
+        ), "AnimationEngine not pre-built: tried to get clip data at seconds!"
 
         frames = second.cpu() * self.clip.framerate
 
@@ -171,8 +171,8 @@ class AnimationEngine(BaseObject):
             Armature data for the given clip.
         """
         assert (
-            self.is_built
-        ), "AnimationEngine not constructed: tried to get clip data at frame!"
+            self._is_pre_built
+        ), "AnimationEngine not pre-built: tried to get clip data at frame!"
 
         keyframes = self.clip.keyframes
 

@@ -1,6 +1,5 @@
 from rclpy.qos import QoSProfile
 
-from carb.input import GamepadEvent, KeyboardEvent
 from newton_ros.msg import CommandMsg
 from newton_sim_ros.msg import SimulationCommandMsg
 from .command_controller import CommandController as BaseCommandController

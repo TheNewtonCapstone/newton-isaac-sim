@@ -5,10 +5,8 @@ from genesis.engine.entities import RigidEntity
 from torch import Tensor
 
 from ..base import BaseObject
-from ..logger import Logger
-from ..types import IMUData, NoiseFunction
+from ..types import IMUData, NoiseFunction, Indices
 from ..universe import Universe
-from ..utils.math import quat_mult_t, quat_to_euler_t, quat_rotate_inverse_t
 
 
 class VecIMU(BaseObject):
@@ -149,16 +147,22 @@ class VecIMU(BaseObject):
     def _update_data(self) -> None:
         # from: https://github.com/isaac-sim/IsaacLab/pull/619/files#diff-44fe42c247de7301a3ce18a10d2b8c9045d58d42fc8440a7221b458d0712e83d
 
+        from core.utils.math import (
+            quat_rotate_t,
+            quat_mult_t,
+            quat_to_euler_t,
+            quat_inverse_t,
+        )
+
         update_dt = self._universe.current_time - self._last_update_time
         self._last_update_time = self._universe.current_time
 
         positions = self._robot.get_pos()
         orientations = self._robot.get_quat()
+        inv_orientations = quat_inverse_t(orientations)
 
         linear_velocities = self._robot.get_vel()
         angular_velocities = self._robot.get_ang()
-
-        from core.utils.math import quat_rotate_t
 
         positions += quat_rotate_t(orientations, self.local_position)
         orientations = quat_mult_t(orientations, self.local_orientation)
@@ -184,27 +188,23 @@ class VecIMU(BaseObject):
         self._rotations = quat_to_euler_t(orientations)
 
         # store velocities
-        self._linear_velocities = quat_rotate_inverse_t(orientations, linear_velocities)
-        self._angular_velocities = quat_rotate_inverse_t(
-            orientations, angular_velocities
-        )
+        self._linear_velocities = quat_rotate_t(inv_orientations, linear_velocities)
+        self._angular_velocities = quat_rotate_t(inv_orientations, angular_velocities)
 
         # store accelerations
-        self._linear_accelerations = quat_rotate_inverse_t(
-            orientations,
+        self._linear_accelerations = quat_rotate_t(
+            inv_orientations,
             linear_accelerations,
         )
-        self._angular_accelerations = quat_rotate_inverse_t(
-            orientations,
+        self._angular_accelerations = quat_rotate_t(
+            inv_orientations,
             angular_accelerations,
         )
 
         self._last_linear_velocities = linear_velocities.clone()
         self._last_angular_velocities = angular_velocities.clone()
 
-        self._projected_gravities = quat_rotate_inverse_t(
-            orientations, projected_gravities
-        )
+        self._projected_gravities = quat_rotate_t(orientations, projected_gravities)
         self._projected_gravities /= torch.norm(
             self._projected_gravities,
             dim=-1,

@@ -35,15 +35,11 @@ class CommandController(BaseObject):
         )
         return [int(trigger) for trigger in combined_triggers]
 
-    @staticmethod
-    def get_random_action() -> th.Tensor:
-        # Generate random action, with a random direction and magnitude of 1
-        random_action = th.rand(2) * 2 - 1
+    def get_random_action(self) -> th.Tensor:
+        return th.rand(2, device=self.device) * 2 - 1
 
-        # Normalize the action
-        normalized_action = th.nn.functional.normalize(random_action, p=2, dim=0)
-
-        return normalized_action
+    def get_random_actions(self, num_actions: int) -> th.Tensor:
+        return th.rand((num_actions, 2), device=self.device) * 2 - 1
 
     def step(self):
         return

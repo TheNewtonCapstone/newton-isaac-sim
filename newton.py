@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 from typing import List, Optional, Tuple, get_args
 
@@ -627,9 +628,6 @@ def setup() -> Optional[Matter]:
     if exporting:
         headless = True
 
-    if interactive:
-        universe_config["sim_params"]["enable_scene_query_support"] = True
-
     control_step_dt = universe_config["sim_options"]["control_dt"]
     inverse_control_frequency = int(
         control_step_dt / universe_config["sim_options"]["physics_dt"]
@@ -869,8 +867,8 @@ def main():
     for i in range(12):
         actuator = DCActuator(
             universe=universe,
-            k_p=10.0,
-            k_d=0.0,
+            k_p=20.0,
+            k_d=0.5,
             effort_saturation=120.0,
         )
 
@@ -994,14 +992,14 @@ def main():
             inverse_control_frequency=inverse_control_frequency,
         )
 
-        terrain.register_self(
-            pre_kwargs={
-                "terrain_type": TerrainType.Specific,
-                "num_rows": 1,  # num_rows
-                "num_cols": 1,  # num_cols
-                "sub_terrain_type": SubTerrainType.RandomUniform,
-            }
-        )  # done manually, since we're changing some default construction parameters
+        # terrain.register_self(
+        #    pre_kwargs={
+        #        "terrain_type": TerrainType.Specific,
+        #        "num_rows": 1,  # num_rows
+        #        "num_cols": 1,  # num_cols
+        #        "sub_terrain_type": SubTerrainType.RandomUniform,
+        #    }
+        # )  # done manually, since we're changing some default construction parameters
         env.register_self()  # done manually, generally the task would do this
         animation_engine.register_self()  # done manually, generally the task would do this
 
@@ -1009,7 +1007,7 @@ def main():
 
         env.reset()  # reset the environment to get correctly position the agent
 
-        ordered_dof_names = joints_controller.art_view.dof_names
+        ordered_dof_names = joints_controller.joint_names
 
         # this is very specific to Newton, because we know that it takes joint positions and the animation engine
         # provides that exactly; a different robot or different control mode would probably require a different approach
@@ -1118,7 +1116,7 @@ def main():
         Logger.error(f"Task {current_task_name} not recognized.")
         return
 
-    if training or playing or exporting:
+    if training or playing:
         from skrl.utils import set_seed
 
         set_seed()
@@ -1147,12 +1145,26 @@ def main():
 
         from core.utils.rl.skrl import (
             create_shared_model,
+            create_policy_model,
+            create_value_model,
             create_ppo,
             create_random_memory,
             create_sequential_trainer,
         )
 
         model = create_shared_model(
+            task=task,
+            arch=current_network_config["net_arch"],
+            activation=current_network_config["activation_fn"],
+        )
+
+        policy_model = create_policy_model(
+            task=task,
+            arch=current_network_config["net_arch"],
+            activation=current_network_config["activation_fn"],
+        )
+
+        value_model = create_value_model(
             task=task,
             arch=current_network_config["net_arch"],
             activation=current_network_config["activation_fn"],
@@ -1171,13 +1183,36 @@ def main():
             checkpoint_path=current_checkpoint_path,
         )
 
+        if current_checkpoint_path is not None:
+            algo.load(current_checkpoint_path)
+
+        universe.build()
+
+        if playing:
+            obs, extras = task.reset()
+
+            while True:  # Number of steps to run
+                # Get actions from policy
+                with torch.no_grad():
+                    actions = model.act({"states": obs}, role="policy")[0]
+
+                # Step the environment
+                next_obs, rewards, terminated, truncated, infos = task.step(actions)
+
+                # Update states
+                obs = next_obs
+
+                from time import sleep
+
+                sleep(universe.physics_dt)
+
+            return
+
         trainer = create_sequential_trainer(
             task=task,
             algorithm=algo,
             trainer_config=trainer_config,
         )
-
-        universe.build()
 
         from core.utils.config import record_configs
         from core.utils.rl import save_gymnasium_space
@@ -1219,11 +1254,7 @@ def main():
         }
         record_configs(record_directory, configs_to_record)
 
-        if training:
-            trainer.train()
-            return
-
-        trainer.eval()
+        trainer.train()
 
         return
 

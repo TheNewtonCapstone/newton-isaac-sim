@@ -45,7 +45,15 @@ class NewtonBaseEnv(BaseEnv):
     def pre_build(self) -> None:
         super().pre_build()
 
-        self.terrain.register_self()
+        # self.terrain.register_self()
+        import genesis as gs
+
+        self._universe.scene.add_entity(
+            gs.morphs.URDF(
+                file="urdf/plane/plane.urdf",
+                fixed=True,
+            )
+        )
         self.agent.register_self()
 
         self.domain_randomizer.register_self()
@@ -65,7 +73,6 @@ class NewtonBaseEnv(BaseEnv):
             dtype=th.float32,
         )
 
-        # Convert to the correct device
         self.reset_newton_positions = self._compute_agent_reset_positions(
             th.ones((self.num_envs,)) * 0.3
         )
@@ -88,7 +95,7 @@ class NewtonBaseEnv(BaseEnv):
 
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
         self.domain_randomizer.on_reset(
-            indices
+            indices=indices
         )  # DR should always happen before any physics reset
 
         super().reset(indices)

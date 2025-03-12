@@ -3,15 +3,9 @@ policy: "MlpPolicy"
 seed: 75129
 
 num_envs: 4096
-timesteps: 25_000
-episode_length: 2000 # 20 seconds of real time (2000 * 0.01 = 20)
-reset_in_play: False
-
-delay:
-  enabled: False
-  obs_delay_range: [1, 8] # sample range of time steps to delay the observations by
-  act_delay_range: [1, 2] # sample range of time steps to delay the actions by
-  instant_rewards: False # should the rewards be calculated on the brain or remote actor?
+timesteps: 100_000
+episode_length: 1000 # 20 seconds of real time (2000 * 0.01 = 20)
+reset_in_play: True
 
 scalers:
   observations:
@@ -25,13 +19,13 @@ scalers:
 
   rewards:
     position: 0.5
-    height: 2.0
+    height: 50.0
     base_stability: 2.0
     base_linear_velocity_xy: 1.0
     base_linear_velocity_z: 1.0
     base_angular_velocity_z: 0.5
-    joint_positions: 2.0
-    joint_action_rate: 0.05
+    joint_positions: 0.1
+    joint_action_rate: 0.005
     air_time: 0.5
     survival: 5.0
 
@@ -49,17 +43,17 @@ ppo:
   discount_factor: 0.99
   lambda: 0.95
 
-  learning_rate: 3e-4
+  learning_rate: 1e-3
   learning_rate_scheduler: "KLAdaptiveRL"
   learning_rate_scheduler_kwargs:
-    kl_threshold: 0.008
+    kl_threshold: 0.01
 
   grad_norm_clip: 1.0
   ratio_clip: 0.2
   value_clip: 0.2
   clip_predicted_values: True
 
-  entropy_loss_coefficient: 0.0
+  entropy_loss_coefficient: 0.01
   value_loss_coefficient: 1.0
 
   stopping_kl_threshold: 0.0
@@ -73,5 +67,5 @@ ppo:
   value_preprocessor_kwargs: None
 
   experiment:
-    write_interval: "auto"
+    write_interval: 100
     checkpoint_interval: "auto"
