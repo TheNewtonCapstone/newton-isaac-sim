@@ -14,7 +14,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$ProjectFileDir$/newton.py" />
-    <option name="PARAMETERS" value="--play --run-name newton_locomotion_024 --num-envs 1" />
+    <option name="PARAMETERS" value="--play --run-name newton_locomotion_107 --num-envs 1" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

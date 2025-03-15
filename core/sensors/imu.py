@@ -179,7 +179,7 @@ class VecIMU(BaseObject):
         ) / update_dt
 
         projected_gravities = torch.tensor(
-            [0.0, 0.0, self._universe.gravity],
+            [0.0, 0.0, -1.0],
             device=self.device,
         ).repeat(self.num_envs, 1)
 
@@ -205,8 +205,3 @@ class VecIMU(BaseObject):
         self._last_angular_velocities = angular_velocities.clone()
 
         self._projected_gravities = quat_rotate_t(orientations, projected_gravities)
-        self._projected_gravities /= torch.norm(
-            self._projected_gravities,
-            dim=-1,
-            keepdim=True,
-        )

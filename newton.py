@@ -5,8 +5,11 @@ from typing import List, Optional, Tuple, get_args
 
 import torch
 
+from core.envs import BaseEnv
 from core.logger import Logger
+from core.tasks import BaseTask, NewtonBaseTask
 from core.types import Matter, Config, ConfigCollection, Mode
+from core.universe import Universe
 
 
 def setup_argparser() -> argparse.ArgumentParser:
@@ -739,6 +742,64 @@ def export_onnx(
     Logger.info(f"ONNX model is valid!")
 
 
+def play_onnx(universe: Universe, task: NewtonBaseTask):
+    import onnxruntime as ort
+
+    ort_session = ort.InferenceSession("model.onnx")
+
+    universe.build()
+
+    obs, extras = task.reset()
+
+    # save one csv file with observations and actions
+    import csv
+    with open('observations.csv', mode='w') as observations_file:
+        observations_writer = csv.writer(observations_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        title_row = task.agent.joints_controller.joint_names
+        title_row.insert(0, "time")
+        observations_writer.writerow(title_row)
+
+        while True:  # Number of steps to run
+            # Get actions from policy
+            ort_inputs = {
+                "observation": obs.cpu().numpy(),
+            }
+
+            ort_outputs = ort_session.run(None, ort_inputs)
+
+            actions = torch.from_numpy(ort_outputs[0]).to(task.device)
+            ordered_actions = torch.zeros_like(actions)
+            ordered_actions[:, 0] = actions[:, 3]
+            ordered_actions[:, 1] = actions[:, 0]
+            ordered_actions[:, 2] = actions[:, 9]
+            ordered_actions[:, 3] = actions[:, 6]
+            ordered_actions[:, 4] = actions[:, 4]
+            ordered_actions[:, 5] = actions[:, 1]
+            ordered_actions[:, 6] = actions[:, 10]
+            ordered_actions[:, 7] = actions[:, 7]
+            ordered_actions[:, 8] = actions[:, 5]
+            ordered_actions[:, 9] = actions[:, 2]
+            ordered_actions[:, 10] = actions[:, 11]
+            ordered_actions[:, 11] = actions[:, 8]
+
+            csv_row = task.agent.joints_controller._target_joint_positions[0].cpu().tolist()
+            csv_row = [str(i) for i in csv_row]
+            csv_row.insert(0, str(universe.current_time))
+            observations_writer.writerow(csv_row)
+
+            # Step the environment
+            next_obs, rewards, terminated, truncated, infos = task.step(ordered_actions)
+            next_obs[:, 6] = 1.0
+            next_obs[:, 7] = 0.0
+
+            # Update states
+            obs = next_obs
+
+            from time import sleep
+
+            sleep(universe.physics_dt)
+
+
 def main():
     setup_logging()
 
@@ -867,7 +928,7 @@ def main():
     for i in range(12):
         actuator = DCActuator(
             universe=universe,
-            k_p=20.0,
+            k_p=8.0,
             k_d=0.5,
             effort_saturation=120.0,
         )
@@ -1018,13 +1079,10 @@ def main():
             )
 
             # index 7 is the joint position (angle in degrees)
-            joint_positions = joint_data[0, :, 7]
-            joint_actions = newton_agent.joints_controller.normalize_joint_positions(
-                joint_positions
-            )
+            joint_positions = torch.deg2rad(joint_data[0, :, 7])
 
             # we need to make it 2D, since the controller expects a batch of actions
-            env.step(joint_actions.unsqueeze(0))
+            env.step(joint_positions.unsqueeze(0))
 
     # ---------------- #
     #   PHYSICS ONLY   #
@@ -1092,6 +1150,7 @@ def main():
             animation_engine=animation_engine,
             playing=playing,
             reset_in_play=current_task_config["reset_in_play"],
+            simulate_action_latency=current_task_config["simulate_action_latency"],
             max_episode_length=current_task_config["episode_length"],
             observation_scalers=current_task_config["scalers"]["observations"],
             action_scaler=current_task_config["scalers"]["action"],
@@ -1106,6 +1165,7 @@ def main():
             command_controller=command_controller,
             playing=playing,
             reset_in_play=current_task_config["reset_in_play"],
+            simulate_action_latency=current_task_config["simulate_action_latency"],
             max_episode_length=current_task_config["episode_length"],
             observation_scalers=current_task_config["scalers"]["observations"],
             action_scaler=current_task_config["scalers"]["action"],
@@ -1116,10 +1176,13 @@ def main():
         Logger.error(f"Task {current_task_name} not recognized.")
         return
 
+    if False:
+        play_onnx(universe, task)
+
     if training or playing:
         from skrl.utils import set_seed
 
-        set_seed()
+        Logger.info(f"SKRL seed: {set_seed()}")
 
         from skrl.agents.torch.ppo import PPO_DEFAULT_CONFIG
         from skrl.trainers.torch.sequential import SEQUENTIAL_TRAINER_DEFAULT_CONFIG

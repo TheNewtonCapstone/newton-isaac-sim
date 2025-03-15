@@ -83,6 +83,7 @@ def create_policy_model(
             GaussianMixin.__init__(
                 self,
                 clip_actions=False,
+                clip_log_std=False,
             )
 
             import torch as th
@@ -254,7 +255,12 @@ def create_shared_model(
                 action_space=action_space,
                 device=device,
             )
-            POLICY_MIXIN.__init__(self, clip_actions=False)
+            POLICY_MIXIN.__init__(
+                self,
+                clip_actions=False,
+                min_log_std=-20,
+                max_log_std=20,
+            )
             VALUE_MIXIN.__init__(self, clip_actions=False)
 
             import torch as th
@@ -381,6 +387,7 @@ def create_sequential_trainer(
 def populate_skrl_config(config: Config) -> Config:
     import skrl.resources.preprocessors.torch
     import skrl.resources.schedulers.torch
+    import core.utils.rl.schedulers
 
     Logger.info(f"Populating SKRL config")
     Logger.debug(f" Config: {config}")
@@ -390,14 +397,25 @@ def populate_skrl_config(config: Config) -> Config:
             if value is None:
                 config[key] = None
                 continue
-            config[key] = getattr(skrl.resources.schedulers.torch, value)
+
+            config[key] = getattr(skrl.resources.schedulers.torch, value, None)
+
+            if config[key] is None:
+                config[key] = getattr(core.utils.rl.schedulers, value, None)
+
+            if config[key] is None:
+                Logger.error(f"Unknown scheduler: {value}")
+                continue
+
             continue
 
         if key.endswith("_preprocessor"):
             if value is None:
                 config[key] = None
                 continue
+
             config[key] = getattr(skrl.resources.preprocessors.torch, value)
+
             continue
 
         if key.endswith("_kwargs") and value is None:

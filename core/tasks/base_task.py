@@ -36,6 +36,7 @@ class BaseTask(BaseObject):
         agent: BaseAgent,
         playing: bool,
         reset_in_play: bool,
+        simulate_action_latency: bool,
         max_episode_length: int,
         observation_space: gymnasium.spaces.Space,
         action_space: gymnasium.spaces.Box,
@@ -65,6 +66,7 @@ class BaseTask(BaseObject):
         self._action_scaler: Optional[ActionScaler] = action_scaler
         self._reward_scalers: Optional[RewardScalers] = reward_scalers
 
+        self._simulate_action_latency: bool = simulate_action_latency
         self._max_episode_length: int = max_episode_length
 
         self._num_obs: int = self.observation_space.shape[0]
@@ -183,8 +185,6 @@ class BaseTask(BaseObject):
     @abstractmethod
     def step(self, actions: Actions) -> StepReturn:
         assert self.is_built, f"{self.__class__.__name__} not built: tried to step"
-
-        self._actions_buf = actions.to(self.device)
 
         return (
             self._obs_buf,

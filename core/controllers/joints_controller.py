@@ -97,31 +97,6 @@ class VecJointsController(BaseObject):
         return self._joint_names
 
     @property
-    def normalized_joint_positions(self) -> Tensor:
-        """
-        Returns:
-            The joint positions normalized to the joint constraints [-1, 1].
-        """
-        return self.normalize_joint_positions(self.joint_positions_deg)
-
-    @property
-    def normalized_joint_velocities(self) -> Tensor:
-        """
-        Returns:
-            The joint velocities normalized to the joint constraints [-1, 1].
-        """
-
-        return self.normalize_joint_velocities(self.joint_velocities_deg)
-
-    @property
-    def normalized_joint_efforts(self) -> Tensor:
-        """
-        Returns:
-            The joint efforts normalized to the joint constraints [-1, 1].
-        """
-        return self.normalize_joint_efforts(self.applied_joint_efforts)
-
-    @property
     def target_joint_positions_deg(self) -> Tensor:
         return torch.rad2deg(self._target_joint_positions)
 
@@ -188,7 +163,7 @@ class VecJointsController(BaseObject):
         ]
 
         self._robot.set_dofs_kp(
-            [20.0] * self._num_joints,
+            [8.0] * self._num_joints,
             dofs_idx_local=self._joints_dof_idx,
         )
         self._robot.set_dofs_kv(
@@ -199,7 +174,10 @@ class VecJointsController(BaseObject):
         self._is_post_built = True
 
     def step(self, joint_actions: Tensor) -> None:
-        self._target_joint_positions = self._process_joint_actions(joint_actions)
+        if self._noise_function is not None:
+            joint_actions = self._noise_function(joint_actions)
+
+        self._target_joint_positions = joint_actions.to(self.device)
 
         efforts_to_apply: Tensor = torch.zeros_like(self._target_joint_positions)
 
@@ -215,21 +193,19 @@ class VecJointsController(BaseObject):
             )
             efforts_to_apply[:, i] = efforts
 
-        self._robot.control_dofs_force(
-            efforts_to_apply,
-            dofs_idx_local=self._joints_dof_idx,
-        )
-
-        # self._robot.control_dofs_position(
-        #    position=self._target_joint_positions,
+        # self._robot.control_dofs_force(
+        #    efforts_to_apply,
         #    dofs_idx_local=self._joints_dof_idx,
         # )
 
+        self._robot.control_dofs_position(
+            position=self._target_joint_positions,
+            dofs_idx_local=self._joints_dof_idx,
+        )
+
         if Archiver.enabled:
             joints_obs_archive = {
-                "joint_positions_norm": self.normalized_joint_positions,
                 "joint_positions": self.joint_positions_deg,
-                "joint_velocities_norm_median": self.normalized_joint_velocities.median(),
                 "joint_velocities_median": self.joint_velocities_deg.median(),
                 "joint_efforts_median": self.applied_joint_efforts.median(),
                 "joint_efforts": self.applied_joint_efforts,
@@ -246,7 +222,7 @@ class VecJointsController(BaseObject):
         """
         Reset the joint positions, velocities and efforts. If any of the arguments are None, they are not reset.
         Args:
-            joint_positions: Positions to reset the joints to (normalized).
+            joint_positions: Positions to reset the joints to (radians).
             joint_velocities: Velocities to reset the joints to (in radians/second).
             joint_efforts: Efforts to reset the joints to.
             indices: Indices of the environments to reset. If None, reset all environments.
@@ -261,18 +237,13 @@ class VecJointsController(BaseObject):
             indices = indices.to(device=self.device)
 
         if joint_positions is not None:
-            joint_positions = joint_positions.to(device=self.device)
-
-            self._target_joint_positions = self._process_joint_actions(
-                joint_positions,
-                apply_noise_function=False,
-            )
+            self._target_joint_positions = joint_positions.to(self.device)
 
             self._robot.set_dofs_position(
                 position=self._target_joint_positions,
                 dofs_idx_local=self._joints_dof_idx,
                 envs_idx=indices,
-                zero_velocity=False,
+                zero_velocity=True,
             )
 
         if joint_velocities is not None:
@@ -288,109 +259,3 @@ class VecJointsController(BaseObject):
                 dofs_idx_local=self._joints_dof_idx,
                 envs_idx=indices,
             )
-
-    def normalize_joint_positions(self, joint_positions: Tensor) -> Tensor:
-        """
-        Args:
-            joint_positions: The joint positions to be normalized (in degrees).
-
-        Returns:
-            The normalized joint positions.
-        """
-        from core.utils.math import map_range
-
-        vec_joint_position_limits = self._vec_joint_position_limits.to(
-            joint_positions.device,
-        )
-
-        joint_positions_normalized = map_range(
-            joint_positions,
-            vec_joint_position_limits[:, 0],
-            vec_joint_position_limits[:, 1],
-            -1.0,
-            1.0,
-        )
-
-        return joint_positions_normalized
-
-    def normalize_joint_velocities(self, joint_velocities: Tensor) -> Tensor:
-        """
-        Args:
-            joint_velocities: The joint velocities to be normalized (in degrees).
-
-        Returns:
-            The normalized joint velocities.
-        """
-        from core.utils.math import map_range
-
-        vec_joint_velocity_limits = self._vec_joint_velocity_limits.to(
-            joint_velocities.device,
-        ).squeeze(-1)
-
-        joint_velocities_normalized = map_range(
-            joint_velocities,
-            -vec_joint_velocity_limits,
-            vec_joint_velocity_limits,
-            -1.0,
-            1.0,
-        )
-
-        return joint_velocities_normalized
-
-    def normalize_joint_efforts(self, joint_efforts: Tensor) -> Tensor:
-        """
-        Args:
-            joint_efforts: The joint efforts to be normalized.
-
-        Returns:
-            The normalized joint efforts.
-        """
-        from core.utils.math import map_range
-
-        vec_joint_effort_limits = self._vec_joint_effort_limits.to(
-            joint_efforts.device,
-        ).squeeze(-1)
-
-        joint_efforts_normalized = map_range(
-            joint_efforts,
-            -vec_joint_effort_limits,
-            vec_joint_effort_limits,
-            -1.0,
-            1.0,
-        )
-
-        return joint_efforts_normalized
-
-    def _process_joint_actions(
-        self,
-        joint_actions: Tensor,
-        apply_noise_function: bool = True,
-    ) -> Tensor:
-        """
-        Joint actions are processed by mapping them to the joint constraints and applying noise.
-        Args:
-            joint_actions: The joint actions to be processed [-1, 1].
-            apply_noise_function: Whether to apply the noise function to the joint positions.
-
-        Returns:
-            The processed joint positions (in radians).
-        """
-        joint_positions = torch.clamp(
-            joint_actions.to(
-                self._vec_joint_position_limits_rad.device,
-                dtype=self._vec_joint_position_limits_rad.dtype,
-            ),
-            min=-1.0,
-            max=1.0,
-        )
-
-        joint_positions = torch.lerp(
-            self._vec_joint_position_limits_rad[:, 0],
-            self._vec_joint_position_limits_rad[:, 1],
-            (joint_positions + 1) / 2,
-        )
-
-        if apply_noise_function and self._noise_function is not None:
-            joint_positions = self._noise_function(joint_positions)
-
-        return joint_positions

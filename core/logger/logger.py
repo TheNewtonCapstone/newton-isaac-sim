@@ -26,9 +26,12 @@ class Logger:
 
             self._log_file = open(log_file_path, "w")
 
-        self._file_log_level: LogLevel = log_level_from_config(logger_config["levels"], "file")
-        self._console_log_level: LogLevel = log_level_from_config(logger_config["levels"], "console")
-
+        self._file_log_level: LogLevel = log_level_from_config(
+            logger_config["levels"], "file"
+        )
+        self._console_log_level: LogLevel = log_level_from_config(
+            logger_config["levels"], "console"
+        )
 
     def __del__(self):
         if self._log_file is not None:
@@ -133,10 +136,14 @@ class Logger:
         src = f"{caller_info['modulename']}.{caller_info['funcname']}():{caller_info['lineno']}"
         msg = self._format(msg, src, level)
 
-        if _logger.output() & LogOutput.Console and should_log(level, self._console_log_level):
+        if _logger.output() & LogOutput.Console and should_log(
+            level, self._console_log_level
+        ):
             self._log_to_console(msg)
 
-        if _logger.output() & LogOutput.File and should_log(level, self._file_log_level):
+        if _logger.output() & LogOutput.File and should_log(
+            level, self._file_log_level
+        ):
             _logger._log_to_file(msg)
 
     def _format(self, msg: Any, src: str, level: LogLevel) -> str:
@@ -165,7 +172,7 @@ class Logger:
         if print_src:
             format_msg += f"[{src}]"
 
-        format_msg += f" {msg}\n"
+        format_msg += f" {msg}"
 
         return format_msg
 
@@ -173,8 +180,8 @@ class Logger:
         if self._log_file is None:
             return
 
-        self._log_file.write(msg)
+        self._log_file.write(msg + "\n")
         self._log_file.flush()  # ensure all data is written to the file
 
-    def _log_to_console(self, msg: str) -> None: # noqa
+    def _log_to_console(self, msg: str) -> None:  # noqa
         print(msg)

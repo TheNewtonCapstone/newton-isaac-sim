@@ -2,6 +2,29 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/doc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/EASTL" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/EASTL/packages/EABase" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/EASTL/packages/mimalloc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/glfw" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/imgui" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/magic_enum" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/marl" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/pybind11" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/reproc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/spdlog" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/stb/stb" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/compute/src/ext/xxHash" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/ext/assimp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/ext/cxxopts" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/ext/fast_float" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/ext/json" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/ext/tinyexr" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/LuisaRender/src/ext/tinyexr/deps/ZFP" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/lib/genesis/genesis/ext/ParticleMesher" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/ros/pkgs/newton_ros" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/ros/pkgs/newton_sim_ros" vcs="Git" />
   </component>

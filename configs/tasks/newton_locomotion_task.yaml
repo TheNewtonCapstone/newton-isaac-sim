@@ -6,6 +6,7 @@ num_envs: 4096
 timesteps: 100_000
 episode_length: 1000 # 20 seconds of real time (2000 * 0.01 = 20)
 reset_in_play: True
+simulate_action_latency: True
 
 scalers:
   observations:
@@ -23,13 +24,13 @@ scalers:
     base_stability: 2.0
     base_linear_velocity_xy: 1.0
     base_linear_velocity_z: 1.0
-    base_angular_velocity_z: 0.5
+    base_angular_velocity_z: 0.2
     joint_positions: 0.1
     joint_action_rate: 0.005
     air_time: 0.5
     survival: 5.0
 
-  action: 1.0
+  action: 0.25
 
   commands:
     linear_velocity_xy: 1.0
@@ -44,14 +45,21 @@ ppo:
   lambda: 0.95
 
   learning_rate: 1e-3
-  learning_rate_scheduler: "KLAdaptiveRL"
+  learning_rate_scheduler: "KLAdaptiveLRCustom"
   learning_rate_scheduler_kwargs:
     kl_threshold: 0.01
+    min_lr: 1e-5
+    max_lr: 1e-2
+    kl_factor: 2.0
+    lr_factor: 1.5
 
   grad_norm_clip: 1.0
   ratio_clip: 0.2
   value_clip: 0.2
   clip_predicted_values: True
+
+  random_timesteps: 0
+  learning_starts: 0
 
   entropy_loss_coefficient: 0.01
   value_loss_coefficient: 1.0

@@ -126,13 +126,14 @@ class Universe:
             gravity=(0, 0, self.gravity),
         )
         viewer_options = gs.options.ViewerOptions(
-            camera_pos=(0.0, 0.0, 3.5),
-            camera_lookat=(4.0, 4.0, 0.5),
-            camera_fov=60,
-            max_FPS=int(0.5 / self.physics_dt),  # 2x physics rate
+            camera_pos=(2.0, 2.0, 2.5),
+            camera_lookat=(0.0, 0.0, 0.5),
+            camera_fov=90,
+            max_FPS=int(0.5 / self.physics_dt),  # half physics rate
         )
         vis_options = gs.options.VisOptions(
-            n_rendered_envs=4,
+            n_rendered_envs=1,
+            shadow=False,
         )
         rigid_options = gs.options.RigidOptions(
             dt=self.physics_dt,

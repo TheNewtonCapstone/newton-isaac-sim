@@ -74,13 +74,17 @@ class NewtonBaseDomainRandomizer(BaseDomainRandomizer):
         self._agent.robot.set_pos(
             pos=self.initial_positions[indices],
             envs_idx=indices,
-            zero_velocity=True,
+            zero_velocity=False,
         )
 
         self._agent.robot.set_quat(
             quat=self.initial_orientations[indices],
             envs_idx=indices,
-            zero_velocity=True,
+            zero_velocity=False,
+        )
+
+        self._agent.robot.zero_all_dofs_velocity(
+            envs_idx=indices,
         )
 
         self._agent.joints_controller.reset(

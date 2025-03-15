@@ -29,6 +29,7 @@ class NewtonIdleTask(NewtonBaseTask):
         animation_engine: AnimationEngine,
         playing: bool,
         reset_in_play: bool,
+        simulate_action_latency: bool,
         max_episode_length: int,
         observation_scalers: Optional[ObservationScalers] = None,
         action_scaler: Optional[ActionScaler] = None,
@@ -72,6 +73,7 @@ class NewtonIdleTask(NewtonBaseTask):
             None,
             playing,
             reset_in_play,
+            simulate_action_latency,
             max_episode_length,
             observation_space,
             action_space,
@@ -189,7 +191,7 @@ class NewtonIdleTask(NewtonBaseTask):
         dof_ordered_names = self.agent.joints_controller.art_view.dof_names
         has_flipped = projected_gravities_norm[:, 2] > 0.0
 
-        self.air_time += torch.where(
+        self._air_time += torch.where(
             in_contact_with_ground,
             0.0,
             ~in_contact_with_ground * self._universe.control_dt,
@@ -197,7 +199,7 @@ class NewtonIdleTask(NewtonBaseTask):
 
         terminated_by_long_airtime = torch.logical_and(
             # less than half a second of overall airtime (all paws)
-            torch.sum(self.air_time, dim=1) > 5.0,
+            torch.sum(self._air_time, dim=1) > 5.0,
             # ensures that the agent has time to stabilize (0.5s)
             (self._episode_length_buf > 0.5 // self._universe.control_dt).to(
                 self.device
@@ -252,7 +254,7 @@ class NewtonIdleTask(NewtonBaseTask):
             squared_norm,
             exp_squared,
             exp_squared_norm,
-            exp_one_minus_squared_dot,
+            exp_one_minus_dot,
             fd_first_order_squared_norm,
         )
 
@@ -261,7 +263,7 @@ class NewtonIdleTask(NewtonBaseTask):
             mult=-0.5,
             weight=self._reward_scalers["position"],
         )
-        base_orientation_reward = exp_one_minus_squared_dot(
+        base_orientation_reward = exp_one_minus_dot(
             projected_gravities_norm,
             world_gravities_norm,
             mult=-20.0,
@@ -311,7 +313,7 @@ class NewtonIdleTask(NewtonBaseTask):
             self.last_actions_buf,
             weight=-self._reward_scalers["joint_action_acceleration"],
         )
-        air_time_penalty = -torch.sum(self.air_time - 0.5, dim=1) * 2.0
+        air_time_penalty = -torch.sum(self._air_time - 0.5, dim=1) * 2.0
         survival_reward = torch.where(
             self.dones_buf,
             0.0,
