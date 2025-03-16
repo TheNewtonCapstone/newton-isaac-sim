@@ -83,8 +83,8 @@ class NewtonLocomotionTask(NewtonBaseTask):
             reward_scalers,
         )
 
-        self._current_velocity_commands_xy: th.Tensor = th.zeros(
-            (self.num_envs, 2),
+        self._current_velocity_commands: th.Tensor = th.zeros(
+            (self.num_envs, 3),
             dtype=th.float32,
             device=self.device,
         )
@@ -99,7 +99,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
             device=self.device,
         )
 
-        self.command_scalers: Optional[CommandScalers] = command_scalers
+        self._command_scalers: Optional[CommandScalers] = command_scalers
 
     def pre_build(self) -> None:
         super().pre_build()
@@ -116,13 +116,20 @@ class NewtonLocomotionTask(NewtonBaseTask):
     def step(self, actions) -> StepReturn:
         super().step(actions)
 
-        self._update_observations_and_extras()
-        self._update_rewards_and_dones()
-
-        # re-compute where the agents are supposed to be, based on the current command velocities
-        self._predicted_base_positions_xy += (
-            self._current_velocity_commands_xy * self._universe.control_dt
+        step_actions = (
+            self._last_actions_buf if self._simulate_action_latency else actions
         )
+        step_actions = self._transform_actions(step_actions)
+
+        # store last actions, but not transformed actions
+        self._last_actions_buf[:] = self.actions_buf[:]
+        self.actions_buf[:] = actions[:]
+
+        # self.command_controller.step()  # updates inputs
+        self.env.step(step_actions)
+        self._episode_length_buf += 1
+
+        self._update_rewards_and_dones()
 
         # creates a new np array with only the indices of the environments that are done
         resets: th.Tensor = (self.dones_buf & self.should_reset).nonzero().squeeze(1)
@@ -131,15 +138,24 @@ class NewtonLocomotionTask(NewtonBaseTask):
             self.env.reset(resets)
 
         # clears the last 2 observations, the progress & the predicted positions of any Newton that is reset
-        self.obs_buf[resets, :] = 0.0
+        self._obs_buf[resets, :] = 0.0
         self._episode_length_buf[resets] = 0
         self._last_actions_buf[resets, :] = 0.0
+
+        # re-compute where the agents are supposed to be, based on the current command velocities
         self._predicted_base_positions_xy[resets, :] = self.env.reset_newton_positions[
             resets, :2
         ]
+        self._predicted_base_positions_xy += (
+            self._current_velocity_commands[:, :2] * self._universe.control_dt
+        )
 
         command_resets = (self._episode_length_buf % 200 == 0).nonzero().squeeze(1)
-        self._update_velocity_commands(th.concat([command_resets, resets], dim=0))
+        self._update_velocity_commands(
+            indices=th.concat([command_resets, resets], dim=0),
+        )
+
+        self._update_observations_and_extras()
 
         return (
             self.obs_buf,
@@ -169,11 +185,10 @@ class NewtonLocomotionTask(NewtonBaseTask):
         )
         self._obs_buf[:, 3:6] = env_obs["projected_gravities"]
 
-        self._obs_buf[:, 6:8] = (
-            self._current_velocity_commands_xy
+        self._obs_buf[:, 6:9] = (
+            self._current_velocity_commands
             * self._observation_scalers["velocity_commands"]
         )
-        self.obs_buf[:, 9] = 0.0
 
         self._obs_buf[:, 9:21] = (
             self.agent.joints_controller.joint_positions_rad
@@ -187,12 +202,6 @@ class NewtonLocomotionTask(NewtonBaseTask):
         # 1st & 2nd set of past actions, we don't care about just-applied actions
         self._obs_buf[:, 33:45] = (
             self._last_actions_buf.clone() * self._observation_scalers["last_actions"]
-        )
-
-        self._obs_buf = th.clip(
-            self._obs_buf,
-            th.from_numpy(self.observation_space.low).to(self.device),
-            th.from_numpy(self.observation_space.high).to(self.device),
         )
 
         self._extras["time_outs"][:] = 0.0
@@ -281,7 +290,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         #    weight=self._reward_scalers["base_stability"],
         # )
         base_linear_velocity_xy_reward = exp_fd_first_order_dot(
-            self._current_velocity_commands_xy,
+            self._current_velocity_commands[:, :2],
             base_linear_velocity_xy,
             mult=-4.0,
             weight=self._reward_scalers["base_linear_velocity_xy"],
@@ -377,29 +386,34 @@ class NewtonLocomotionTask(NewtonBaseTask):
             indices=indices,
         )
 
-    def _update_velocity_commands(self, indices: Optional[th.Tensor] = None) -> None:
+    def _update_velocity_commands(
+        self,
+        indices: Optional[th.Tensor] = None,
+    ) -> None:
         if indices is None:
             indices = th.arange(self.num_envs, device=self.device)
 
-        self._current_velocity_commands_xy[indices, :2] = (
+        self._current_velocity_commands[indices, :2] = (
             self.command_controller.get_random_actions(len(indices))
-            * self.command_scalers["linear_velocity_xy"]
+            * self._command_scalers["linear_velocity_xy"]
         )
+        self._current_velocity_commands[indices, 2] = 0.0
 
     def _update_curriculum_levels(self, indices: Optional[th.Tensor] = None) -> None:
         if indices is None:
             return
 
         obs = self.env.get_observations()
-        agent_heights = 0.3
+        agent_heights = self.agent.base_initial_position[2]
+
         flat_origins = th.tensor(
             self.env.terrain.sub_terrain_origins,
             dtype=th.float32,
             device=self.device,
         )
         flat_origins[:, 2] += agent_heights
-        sub_terrain_length = self.env.terrain.sub_terrain_length
 
+        sub_terrain_length = self.env.terrain.sub_terrain_length
         level_indices = self._curriculum_levels[indices].long()
 
         # The level is updated based on the distance traversed by the agent

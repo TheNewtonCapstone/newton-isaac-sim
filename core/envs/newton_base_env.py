@@ -74,7 +74,7 @@ class NewtonBaseEnv(BaseEnv):
         )
 
         self.reset_newton_positions = self._compute_agent_reset_positions(
-            th.ones((self.num_envs,)) * 0.3
+            th.ones((self.num_envs,)) * self.agent.base_initial_position[2]
         )
 
         self.domain_randomizer.set_initial_positions(self.reset_newton_positions)
@@ -86,19 +86,21 @@ class NewtonBaseEnv(BaseEnv):
         self._is_post_built = True
 
     def step(self, actions: Actions) -> None:
+        super().step(actions)
+
         # in some cases, we want the simulation to have a higher resolution than the agent's control frequency
         for i in range(self._inverse_control_frequency):
             self.domain_randomizer.on_step()  # DR should always happen before any physics step
             self.agent.step(actions)  # agent runs physic-related computations
 
-            super().step(actions)  # advances the simulation by one step
+            self._universe.step()
 
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
-        self.domain_randomizer.on_reset(
-            indices=indices
-        )  # DR should always happen before any physics reset
-
         super().reset(indices)
+
+        # DR should always happen before any physics reset
+        self.domain_randomizer.on_reset(indices=indices)
+        self.agent.imu.reset(indices=indices)
 
         return self.get_observations()
 
@@ -107,10 +109,10 @@ class NewtonBaseEnv(BaseEnv):
 
         env_obs["world_gravities"] = (
             th.tensor(
-                [0.0, 0.0, self._universe.gravity],
+                [0.0, 0.0, -1],
                 device=self.device,
             )
-        ).repeat(self.num_envs, 1) / abs(self._universe.gravity)
+        ).repeat(self.num_envs, 1)
 
         Archiver.put(
             "env_obs",

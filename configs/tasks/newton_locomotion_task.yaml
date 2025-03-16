@@ -33,7 +33,7 @@ scalers:
   action: 0.25
 
   commands:
-    linear_velocity_xy: 1.0
+    linear_velocity_xy: 0.5
     angular_velocity_z: 1.0
 
 ppo:

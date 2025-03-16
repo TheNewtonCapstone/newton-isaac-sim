@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Iterable, Tuple
 
 import genesis as gs
 from genesis.engine.entities import RigidEntity
@@ -20,10 +20,16 @@ class NewtonBaseAgent(BaseAgent):
         imu: VecIMU,
         joints_controller: VecJointsController,
         contact_sensor: VecContact,
+        base_initial_position: Tuple[float] = (0.0, 0.0, 0.0),
+        base_initial_rotation: Tuple[float] = (0.0, 0.0, 0.0),
     ) -> None:
         super().__init__(universe=universe)
 
         self.robot: Optional[RigidEntity] = None
+
+        self.base_initial_position: Tuple[float] = base_initial_position
+        self.base_initial_rotation: Tuple[float] = base_initial_rotation
+
         self.imu: VecIMU = imu
         self.joints_controller: VecJointsController = joints_controller
         self.contact_sensor: VecContact = contact_sensor
@@ -72,7 +78,13 @@ class NewtonBaseAgent(BaseAgent):
         super().pre_build()
 
         urdf_path = "assets/newton/newton.urdf"
-        self.robot = self._universe.scene.add_entity(gs.morphs.URDF(file=urdf_path))
+        self.robot = self._universe.scene.add_entity(
+            gs.morphs.URDF(
+                file=urdf_path,
+                pos=self.base_initial_position,
+                euler=self.base_initial_rotation,
+            )
+        )
 
         self.imu.register_self(post_kwargs={"robot": self.robot})
         self.joints_controller.register_self(post_kwargs={"robot": self.robot})

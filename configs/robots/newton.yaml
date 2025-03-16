@@ -1,6 +1,11 @@
 robot_name: newton
 robot_type: quadruped
 
+# Base
+base:
+  position: [0.0, 0.0, 0.3] # m
+  rotation: [0.0, 0.0, 0.0] # rad
+
 # Actuators
 actuators:
   lstm: # of the input (i.e. the motor; before applying any gear ratio)
@@ -15,140 +20,140 @@ actuators:
 
   dc: # of the input (i.e. the motor; before applying any gear ratio)
     effort_saturation:
-      FL_HAA: 0.25
       FR_HAA: 0.25
-      HL_HAA: 0.25
-      HR_HAA: 0.25
-      FL_HFE: 0.25
       FR_HFE: 0.25
-      HL_HFE: 0.25
-      HR_HFE: 0.25
-      FL_KFE: 0.25
       FR_KFE: 0.25
-      HL_KFE: 0.25
+      FL_HAA: 0.25
+      FL_HFE: 0.25
+      FL_KFE: 0.25
+      HR_HAA: 0.25
+      HR_HFE: 0.25
       HR_KFE: 0.25
+      HL_HAA: 0.25
+      HL_HFE: 0.25
+      HL_KFE: 0.25
 
     gains:
-      FL_HAA:
-        p: 2.0
-        d: 0.5
       FR_HAA:
         p: 2.0
         d: 0.5
-      HL_HAA:
+      FR_HFE:
         p: 2.0
-        d: 0.5
-      HR_HAA:
+        d: 0.2
+      FR_KFE:
+        p: 0.09
+        d: 0.05
+      FL_HAA:
         p: 2.0
         d: 0.5
       FL_HFE:
         p: 2.0
         d: 0.2
-      FR_HFE:
-        p: 2.0
-        d: 0.2
-      HL_HFE:
-        p: 2.0
-        d: 0.2
-      HR_HFE:
-        p: 2.0
-        d: 0.2
       FL_KFE:
         p: 0.09
         d: 0.05
-      FR_KFE:
-        p: 0.09
-        d: 0.05
-      HL_KFE:
-        p: 0.09
-        d: 0.05
+      HR_HAA:
+        p: 2.0
+        d: 0.5
+      HR_HFE:
+        p: 2.0
+        d: 0.2
       HR_KFE:
+        p: 0.09
+        d: 0.05
+      HL_HAA:
+        p: 2.0
+        d: 0.5
+      HL_HFE:
+        p: 2.0
+        d: 0.2
+      HL_KFE:
         p: 0.09
         d: 0.05
 
 # Kinematics
 joints:
   names:
-   - FL_HAA
    - FR_HAA
-   - HL_HAA
-   - HR_HAA
-   - FL_HFE
    - FR_HFE
-   - HL_HFE
-   - HR_HFE
-   - FL_KFE
    - FR_KFE
-   - HL_KFE
+   - FL_HAA
+   - FL_HFE
+   - FL_KFE
+   - HR_HAA
+   - HR_HFE
    - HR_KFE
+   - HL_HAA
+   - HL_HFE
+   - HL_KFE
 
   fixed:
-    FL_HAA: False
     FR_HAA: False
-    HL_HAA: False
-    HR_HAA: False
-    FL_HFE: False
     FR_HFE: False
-    HL_HFE: False
-    HR_HFE: False
-    FL_KFE: False
     FR_KFE: False
-    HL_KFE: False
+    FL_HAA: False
+    FL_HFE: False
+    FL_KFE: False
+    HR_HAA: False
+    HR_HFE: False
     HR_KFE: False
+    HL_HAA: False
+    HL_HFE: False
+    HL_KFE: False
 
   gear_ratios:
-    FL_HAA: 9
     FR_HAA: 9
-    HL_HAA: 9
-    HR_HAA: 9
-    FL_HFE: 9
     FR_HFE: 9
-    HL_HFE: 9
-    HR_HFE: 9
-    FL_KFE: 9
     FR_KFE: 9
-    HL_KFE: 9
+    FL_HAA: 9
+    FL_HFE: 9
+    FL_KFE: 9
+    HR_HAA: 9
+    HR_HFE: 9
     HR_KFE: 9
+    HL_HAA: 9
+    HL_HFE: 9
+    HL_KFE: 9
 
   limits: # of the output (i.e. the joint itself, after applying any gear ratio)
     positions: # deg
-      FL_HAA: [-45, 45]
       FR_HAA: [-45, 45]
-      HL_HAA: [-45, 45]
-      HR_HAA: [-45, 45]
-      FL_HFE: [-90, 90]
       FR_HFE: [-90, 90]
-      HL_HFE: [-90, 90]
-      HR_HFE: [-90, 90]
-      FL_KFE: [-175, 175]
       FR_KFE: [-175, 175]
-      HL_KFE: [-175, 175]
+      FL_HAA: [-45, 45]
+      FL_HFE: [-90, 90]
+      FL_KFE: [-175, 175]
+      HR_HAA: [-45, 45]
+      HR_HFE: [-90, 90]
       HR_KFE: [-175, 175]
+      HL_HAA: [-45, 45]
+      HL_HFE: [-90, 90]
+      HL_KFE: [-175, 175]
 
     velocities: # deg/s
-      FL_HAA: 5440
       FR_HAA: 5440
-      HL_HAA: 5440
-      HR_HAA: 5440
-      FL_HFE: 5440
       FR_HFE: 5440
-      HL_HFE: 5440
-      HR_HFE: 5440
-      FL_KFE: 5440
       FR_KFE: 5440
-      HL_KFE: 5440
+      FL_HAA: 5440
+      FL_HFE: 5440
+      FL_KFE: 5440
+      HR_HAA: 5440
+      HR_HFE: 5440
       HR_KFE: 5440
+      HL_HAA: 5440
+      HL_HFE: 5440
+      HL_KFE: 5440
 
     efforts: # Nm
-      FL_HAA: 4.4
       FR_HAA: 4.4
-      HL_HAA: 4.4
-      HR_HAA: 4.4
-      FL_HFE: 4.4
       FR_HFE: 4.4
-      HL_HFE: 4.4
-      HR_HFE: 4.4
-      FL_KFE: 4.4
       FR_KFE: 4.4
-      HL_KFE: 4.4
+      FL_HAA: 4.4
+      FL_HFE: 4.4
+      FL_KFE: 4.4
+      HR_HAA: 4.4
+      HR_HFE: 4.4
       HR_KFE: 4.4
+      HL_HAA: 4.4
+      HL_HFE: 4.4
+      HL_KFE: 4.4

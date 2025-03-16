@@ -40,8 +40,6 @@ class BaseEnv(BaseObject):
     def step(self, actions: Actions) -> None:
         assert self.is_built, f"{self.__class__.__name__} not built: tried to step!"
 
-        self._universe.step()
-
     @abstractmethod
     def reset(self, indices: Optional[Indices] = None) -> EnvObservations:
         assert self.is_built, f"{self.__class__.__name__} not built: tried to reset!"

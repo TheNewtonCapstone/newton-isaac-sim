@@ -242,8 +242,8 @@ class VecJointsController(BaseObject):
             self._robot.set_dofs_position(
                 position=self._target_joint_positions,
                 dofs_idx_local=self._joints_dof_idx,
-                envs_idx=indices,
                 zero_velocity=True,
+                envs_idx=indices,
             )
 
         if joint_velocities is not None:

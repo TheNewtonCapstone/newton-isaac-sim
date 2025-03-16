@@ -768,19 +768,6 @@ def play_onnx(universe: Universe, task: NewtonBaseTask):
             ort_outputs = ort_session.run(None, ort_inputs)
 
             actions = torch.from_numpy(ort_outputs[0]).to(task.device)
-            ordered_actions = torch.zeros_like(actions)
-            ordered_actions[:, 0] = actions[:, 3]
-            ordered_actions[:, 1] = actions[:, 0]
-            ordered_actions[:, 2] = actions[:, 9]
-            ordered_actions[:, 3] = actions[:, 6]
-            ordered_actions[:, 4] = actions[:, 4]
-            ordered_actions[:, 5] = actions[:, 1]
-            ordered_actions[:, 6] = actions[:, 10]
-            ordered_actions[:, 7] = actions[:, 7]
-            ordered_actions[:, 8] = actions[:, 5]
-            ordered_actions[:, 9] = actions[:, 2]
-            ordered_actions[:, 10] = actions[:, 11]
-            ordered_actions[:, 11] = actions[:, 8]
 
             csv_row = task.agent.joints_controller._target_joint_positions[0].cpu().tolist()
             csv_row = [str(i) for i in csv_row]
@@ -788,9 +775,9 @@ def play_onnx(universe: Universe, task: NewtonBaseTask):
             observations_writer.writerow(csv_row)
 
             # Step the environment
-            next_obs, rewards, terminated, truncated, infos = task.step(ordered_actions)
+            next_obs, rewards, terminated, truncated, infos = task.step(actions)
             next_obs[:, 6] = 1.0
-            next_obs[:, 7] = 0.0
+            next_obs[:, 7] = 1.0
 
             # Update states
             obs = next_obs
@@ -1020,6 +1007,8 @@ def main():
 
     newton_agent = NewtonBaseAgent(
         universe=universe,
+        base_initial_position=tuple(robot_config["base"]["position"]),
+        base_initial_rotation=robot_config["base"]["rotation"],
         imu=imu,
         joints_controller=joints_controller,
         contact_sensor=contact_sensor,

@@ -98,8 +98,6 @@ class Universe:
 
         self._scene.reset()
 
-        self.step()
-
     def register(
         self,
         object: "BaseObject",
@@ -117,8 +115,6 @@ class Universe:
 
         self._post_build_registrations()
 
-        self.reset()
-
     def _create_scene(self) -> None:
         sim_options = gs.options.SimOptions(
             dt=self.physics_dt,
@@ -132,7 +128,7 @@ class Universe:
             max_FPS=int(0.5 / self.physics_dt),  # half physics rate
         )
         vis_options = gs.options.VisOptions(
-            n_rendered_envs=1,
+            n_rendered_envs=4,
             shadow=False,
         )
         rigid_options = gs.options.RigidOptions(

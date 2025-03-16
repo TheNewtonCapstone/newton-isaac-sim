@@ -82,8 +82,7 @@ def create_policy_model(
             )
             GaussianMixin.__init__(
                 self,
-                clip_actions=False,
-                clip_log_std=False,
+                clip_actions=True,
             )
 
             import torch as th
@@ -257,9 +256,7 @@ def create_shared_model(
             )
             POLICY_MIXIN.__init__(
                 self,
-                clip_actions=False,
-                min_log_std=-20,
-                max_log_std=20,
+                clip_actions=True,
             )
             VALUE_MIXIN.__init__(self, clip_actions=False)
 
