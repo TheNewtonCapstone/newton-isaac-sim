@@ -109,7 +109,7 @@ class NewtonBaseEnv(BaseEnv):
 
         env_obs["world_gravities"] = (
             th.tensor(
-                [0.0, 0.0, -1],
+                [0.0, 0.0, -1.0],
                 device=self.device,
             )
         ).repeat(self.num_envs, 1)

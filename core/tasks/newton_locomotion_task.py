@@ -174,7 +174,7 @@ class NewtonLocomotionTask(NewtonBaseTask):
         self._update_velocity_commands()
         self._update_observations_and_extras()
 
-        return self.get_observations()
+        return self._obs_buf, self._extras
 
     def _update_observations_and_extras(self) -> None:
         env_obs = self.env.get_observations()
