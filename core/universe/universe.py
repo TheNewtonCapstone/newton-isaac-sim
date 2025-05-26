@@ -128,7 +128,7 @@ class Universe:
             max_FPS=int(0.5 / self.physics_dt),  # half physics rate
         )
         vis_options = gs.options.VisOptions(
-            n_rendered_envs=4,
+            n_rendered_envs= self._num_envs if self._num_envs <= 4 else 4,
             shadow=False,
         )
         rigid_options = gs.options.RigidOptions(

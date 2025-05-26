@@ -1,8 +1,7 @@
 from typing import Dict, List
 
 import torch
-from attr import dataclass
-
+from dataclasses import dataclass, field
 
 @dataclass
 class BoneData:
